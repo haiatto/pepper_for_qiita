@@ -1,39 +1,57 @@
 <html>
 <head>
+  <title>Pepperりもこん</title>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link type="text/css" rel="stylesheet" href="css/styles.css" />
+  <link type="text/css" rel="stylesheet" href="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.css">
   <script type='text/javascript' src='libs/jquery-2.1.3.min.js'></script>
+  <script type='text/javascript' src="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.js"></script>
   <script type='text/javascript' src='libs/knockout-3.2.0.debug.js'></script>
   <script type='text/javascript' src="libs/qimessaging/1.0/qimessaging.js"></script>
   <script type='text/javascript' src="js/main.js"></script>
 </head>
 <body>
-  <div>
-    <div data-bind="text:$root.nowState"></div>
-  </div>
-  <div>
-    IP:
-    <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ipXXX_000_000_000" />
-    <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_XXX_000_000" />
-    <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_XXX_000" />
-    <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_000_XXX" />
-    <button data-bind="click: $root.connect">接続</button>
-  </div>
-  <div>
-    <input type="text" data-bind="value: $root.textTalkValue" />
-    <button data-bind="click: $root.talk($root.textTalkValue())">会話</button>
-  </div>
-  <div>
-    <canvas class="capBox" id="capImg"></canvas>
-    <button data-bind="click: $root.cap()">キャプ</button>
-  </div>
-  <div>
-     <div>あたま上下/あたま左右</div>
-     <div id="headCtrlPad" class="ctrlPad" data-bind="click:$root.clickHeadCtrlPad">
-       <div id="headCtrlPadPoint" class="ctrlPadPoint">
+  <script type="text/html" id="controlPadTmpl">
+    <div data-bind="attr:{id:id}">
+       <div data-bind="text:name"></div>
+       <div id="ctrlPad" class="ctrlPad" data-bind="{click:click, style:{background:color}}">
+         <div id="ctrlPadPoint" class="ctrlPadPoint">
+         </div>
        </div>
-     </div>
-  </div>
+    </div>
+  </script>
 
+  <div data-role="page"> 
+    <div data-role="header">
+      <h1>ペッパーリモコン</h1>
+    </div><!-- /header -->
+    <div data-role="content">
+        <div>
+          <div data-bind="text:$root.nowState"></div>
+        </div>
+        <div class="ipAddrInput">
+          IP:
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ipXXX_000_000_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_XXX_000_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_XXX_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_000_XXX" />
+          <button data-bind="click: $root.connect">接続</button>
+        </div>
+        <div>
+          <input type="text" data-bind="value: $root.textTalkValue" />
+          <button data-bind="click: $root.talk($root.textTalkValue())">会話</button>
+        </div>
+        <div>
+          <canvas class="capBox" id="capImg"></canvas>
+          <button data-bind="click: $root.cap()">キャプ</button>
+        </div>
+        <div data-bind="template: { name:'controlPadTmpl', data:$root.ctrlObjHead }"></div>
+        <div data-bind="template: { name:'controlPadTmpl', data:$root.ctrlObjBody }"></div>
+    </div><!-- /content -->
+    <div data-role="footer">
+      <h4>My Footer</h4>
+    </div><!-- /footer -->
+  </div><!-- /page -->
 </body>
 </html>

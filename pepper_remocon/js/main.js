@@ -135,30 +135,57 @@ $(function(){
             }
         }
 
-        //-- -- 
-        self.clickHeadCtrlPad = function(data, event)
+        //-- 操作パネル -- 
+        var genCtrlPad = function(id,name,color,callback)
         {
-            var padElm = $('#headCtrlPad');
-            if(event.target == padElm[0])
-            {
-                if(self.alMotion)
+            return {
+                id:   id,
+                name: name,
+                click:function(data,event)
                 {
-                    $('#headCtrlPadPoint').css({
-                        top: event.offsetY-5,
-                        left:event.offsetX-5
-                    });
-                    var ratio_x = event.offsetX/padElm.width();
-                    var ratio_y = event.offsetY/padElm.height();
-                    var name  = ['HeadYaw','HeadPitch'];
-                    var angle = [(ratio_x-0.5)*3.14*2,(ratio_y-0.5)*3.14*2];
-                    self.alMotion.angleInterpolationWithSpeed(name, angle, 0.4)
-                      .fail(function(err){
-                          console.log(err);
-                      });
-                }
+                    var padElm = $('#ctrlPad',$("#"+id));
+                    if ( event.target == padElm[0] )
+                    {
+                        var ratio_x = event.offsetX/padElm.width();
+                        var ratio_y = event.offsetY/padElm.height();
+                        if(callback(ratio_x,ratio_y))
+                        {
+                            $('#ctrlPadPoint',$("#"+id)).css({
+                                top: event.offsetY-5,
+                                left:event.offsetX-5
+                            });
+                        }
+                    }
+                },
+                color:color,
+            };
+        };        
+        self.ctrlObjHead = genCtrlPad("headCtrl","あたま上下/左右","gray",function(ratio_x, ratio_y){
+            if(self.alMotion)
+            {            
+                var name  = ['HeadYaw','HeadPitch'];
+                var angle = [(ratio_x-0.5)*3.14*2,(ratio_y-0.5)*3.14*2];
+                self.alMotion.angleInterpolationWithSpeed(name, angle, 0.4)
+                  .fail(function(err){
+                      console.log(err);
+                  });
+                return true;
             }
-        }
-
+            return false;
+        });
+        self.ctrlObjBody = genCtrlPad("bodyCtrl","からだ前後/左右","gray",function(ratio_x, ratio_y){
+            if(self.alMotion)
+            {            
+                var name  = ['HeadYaw','HeadPitch'];
+                var angle = [(ratio_x-0.5)*3.14*2,(ratio_y-0.5)*3.14*2];
+                self.alMotion.angleInterpolationWithSpeed(name, angle, 0.4)
+                  .fail(function(err){
+                      console.log(err);
+                  });
+                return true;
+            }
+            return false;
+        });
     };
 
     ko.applyBindings(new MyModel());

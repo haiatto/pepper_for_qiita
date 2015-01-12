@@ -1,17 +1,23 @@
+.ipAddrInput{   
+}
+.ipAddrInput >.ui-input-text{
+    display:inline-block;
+    width:20%;
+ }
+
 .ctrlPad{
-    width: 100px;    
-    height: 100px;
+    width: 200px;    
+    height: 200px;
     background: deepskyblue;
     position: relative;
 }
-
 .ctrlPadPoint{
     width: 10px;    
     height: 10px;
     background: red;    
     position: absolute;
-    top: 45px;
-    left: 45px;
+    top: 95px;
+    left: 95px;
 }
 
 .capBox{
