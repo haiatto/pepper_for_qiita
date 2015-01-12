@@ -1,0 +1,23 @@
+.ctrlPad{
+    width: 100px;    
+    height: 100px;
+    background: deepskyblue;
+    position: relative;
+}
+
+.ctrlPadPoint{
+    width: 10px;    
+    height: 10px;
+    background: red;    
+    position: absolute;
+    top: 45px;
+    left: 45px;
+}
+
+.capBox{
+    width: 320px;    
+    height: 240px;
+    background: gray;
+    border-style: solid;
+    display: block;
+}
