@@ -29,7 +29,7 @@ function Camera(alVideoDevice) {
             "pepper_remocon_cam", 
             0, // nao_top
             1, // 320x240 
-            3, // Rgb
+            11,// Rgb
             5  // frame_rate
         ).done(function(nameId){
             self.nameId=nameId;
@@ -69,6 +69,12 @@ $(function(){
             self.qims.service("ALTextToSpeech").done(function(ins){
               self.alTextToSpeech = ins;
             });
+            self.qims.service("ALAudioDevice").done(function(ins){
+              self.alAudioDevice = ins;
+              self.alAudioDevice.getOutputVolume().done(function(val){
+                  self.nowVolume(val);
+              });
+            });
             self.qims.service("ALMotion").done(function(ins){
               self.alMotion = ins;
             });
@@ -102,8 +108,20 @@ $(function(){
               self.nowState("切断");
             });
         };
+        // -- 音量 --
+        self.nowVolume = ko.observable("？");
+        self.volumeAdd = function(diff){
+            if(self.alAudioDevice)
+            {
+                var val = self.nowVolume() + diff;
+                if(val>100)val=100;
+                if(val<0  )val=0;
+                self.nowVolume( val );
+                self.alAudioDevice.setOutputVolume(val);
+            }
+        };
 
-        // --  --
+        // -- 会話 --
         self.textTalkValue = ko.observable();
         self.talk = function(text) 
         {
@@ -113,7 +131,7 @@ $(function(){
             }
         }
 
-        // --  --
+        // -- キャプチャ --
         self.cap = function(text) 
         {
             if(self.cameraIns)
@@ -136,7 +154,7 @@ $(function(){
         }
 
         //-- 操作パネル -- 
-        var genCtrlPad = function(id,name,color,callback)
+        var genCtrlPad = function(id,name,color,callback,reset)
         {
             return {
                 id:   id,
@@ -158,13 +176,51 @@ $(function(){
                     }
                 },
                 color:color,
+                reset:function(){
+                    if(reset)
+                    {
+                        var padElm = $('#ctrlPad',$("#"+id));
+                        if(reset()){
+                            $('#ctrlPadPoint',$("#"+id)).css({
+                                top: padElm.height()/2-5,
+                                left:padElm.width() /2-5,
+                            });
+                        }
+                    }
+                },
             };
-        };        
+        };
+        var genCtrlSlider = function(id,name,callback,reset)
+        {
+            var value = ko.observable();
+            value.subscribe(function(data){
+                var ratio = data/100.0;
+                callback(ratio);
+            });
+            return {
+                id:   id,
+                name: name,
+                value:value,
+                reset:function(){
+                    if(reset)
+                    {
+                        var padElm = $('#ctrlPad',$("#"+id));
+                        if(reset()){
+                            value(50);
+                        }
+                    }
+                },
+            };
+        };
+                
         self.ctrlObjHead = genCtrlPad("headCtrl","あたま上下/左右","gray",function(ratio_x, ratio_y){
             if(self.alMotion)
-            {            
+            {
+                var angYaw   = (2.0857 - -2.0857)*ratio_x + -2.0857;
+                var angPitch = (0.6371 - -0.7068)*ratio_y + -0.7068;
+                
                 var name  = ['HeadYaw','HeadPitch'];
-                var angle = [(ratio_x-0.5)*3.14*2,(ratio_y-0.5)*3.14*2];
+                var angle = [angYaw, angPitch];
                 self.alMotion.angleInterpolationWithSpeed(name, angle, 0.4)
                   .fail(function(err){
                       console.log(err);
@@ -172,16 +228,74 @@ $(function(){
                 return true;
             }
             return false;
+        },
+        function(){
+            if(self.alMotion){
+                self.alMotion.angleInterpolationWithSpeed(['HeadYaw','HeadPitch'], [0,0], 0.4);
+            }
         });
+
         self.ctrlObjBody = genCtrlPad("bodyCtrl","からだ前後/左右","gray",function(ratio_x, ratio_y){
             if(self.alMotion)
-            {            
-                var name  = ['HeadYaw','HeadPitch'];
-                var angle = [(ratio_x-0.5)*3.14*2,(ratio_y-0.5)*3.14*2];
+            {
+                var angRoll   = (0.5149 - -0.5149)*ratio_x + -0.5149;
+                var angPitch = (1.0385 - -1.0385)*ratio_y + -1.0385;
+
+                var name  = ['HipRoll','HipPitch'];
+                var angle = [angRoll,angPitch];
                 self.alMotion.angleInterpolationWithSpeed(name, angle, 0.4)
                   .fail(function(err){
                       console.log(err);
                   });
+                return true;
+            }
+            return false;
+        },
+        function(){
+            if(self.alMotion){
+                self.alMotion.angleInterpolationWithSpeed(['HipRoll','HipPitch'], [0,0], 0.4);
+            }
+        });
+        var mvLastX = 0;
+        var mvLastY = 0;
+        var mvLastTheta = 0;
+        self.ctrlObjMove = genCtrlPad("moveCtrl","移動","gray",function(ratio_x, ratio_y){
+            if(self.alMotion)
+            {
+                mvLastX=-(ratio_y-0.5)*2;
+                mvLastY=-(ratio_x-0.5)*2;
+                self.alMotion.moveToward(mvLastX, mvLastY, mvLastTheta).fail(function(err){
+                    console.log(err);
+                });
+                return true;
+            }
+            return false;
+        },
+        function(){
+            if(self.alMotion)
+            {
+                mvLastX=0;
+                mvLastY=0;
+                self.alMotion.moveToward(mvLastX, mvLastY, mvLastTheta).fail(function(err){
+                    console.log(err);
+                });
+                return true;
+            }
+        });
+        self.ctrlObjMoveRot = genCtrlSlider("moveRotCtrl","回転",function(ratio){
+            if(self.alMotion)
+            {
+                mvLastTheta = (ratio-0.5)*2;
+                self.alMotion.moveToward(mvLastX, mvLastY, mvLastTheta);
+                return true;
+            }
+            return false;
+        },
+        function(){
+            if(self.alMotion)
+            {
+                mvLastTheta=0;
+                self.alMotion.moveToward(mvLastX, mvLastY, mvLastTheta);
                 return true;
             }
             return false;
