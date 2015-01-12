@@ -1,0 +1,60 @@
+<html>
+
+<head>
+<meta charset="UTF-8">
+<script src="libs/qimessaging/1.0/qimessaging.js"></script>
+</head>
+
+<body>
+<script>
+
+function error(err)
+{
+  console.error(err);
+}
+
+function escapeUnicode(str) {
+  return str.replace(/[^ -~]|\\/g, function(m0) {
+    var code = m0.charCodeAt(0);
+    return '\\u' + ((code < 0x10)? '000' : 
+                    (code < 0x100)? '00' :
+                    (code < 0x1000)? '0' : '') + code.toString(16);
+  });
+}
+
+var session = new QiSession("192.168.11.17");
+
+session.socket()
+ .on('connect', function () {
+  console.log('QiSession connected!');
+  // now you can start using your QiSession
+})
+ .on('disconnect', function () {
+  console.log('QiSession disconnected!');
+});
+
+session.service("ALTextToSpeech")
+.done(function (tts) {
+  // tts is a proxy to the ALTextToSpeech service
+
+  tts.say("あうーあうーあう")
+    .done(function (lang) {
+       console.log("I speak " + lang);
+    })
+    .fail(function (error) {
+       console.log("An error occurred: " + error);
+    });
+})
+.fail(function (error) {
+  console.log("An error occurred:", error);
+});
+
+
+</script>
+
+
+<p>http://doc.aldebaran.com/2-1/dev/js/index.html</p>
+
+</body>
+
+</html>
