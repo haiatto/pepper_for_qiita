@@ -1,0 +1,166 @@
+<html>
+<head>
+  <title>ペッパーＢＬＯＣＫ</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link type="text/css" rel="stylesheet" href="css/styles.css" />
+  <link type="text/css" rel="stylesheet" href="libs/jquery-ui-1.11.2/jquery-ui.css">
+  <link type="text/css" rel="stylesheet" href="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.css">
+  <script type='text/javascript' src='libs/jquery-2.1.3.min.js'></script>
+  <script type='text/javascript' src='libs/jquery-ui-1.11.2/jquery-ui.js'></script>
+  <script type='text/javascript' src="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.js"></script>
+  <script type='text/javascript' src="libs/jquery.ui.touch-punch.js"></script>
+  <script type='text/javascript' src='libs/knockout-3.2.0.debug.js'></script>
+  <script type='text/javascript' src="libs/qimessaging/1.0/qimessaging.js"></script>
+  <script type='text/javascript' src="js/main.js"></script>
+</head>
+<body>
+  <script type="text/html" id="block-space-start-template">
+      <svg class="head_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0em" y="0.0em" width="5em" height="1.0em" fill="red" stroke="green" />
+        <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()+'em'}" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-in-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green" />
+        <rect x="1.0em" y="0.4em" width="1.0em" height="0.1em" fill="red" stroke="green" />
+        <rect x="2.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-out-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" />
+        <rect x="1.0em" y="0.0em" width="1.0em" height="0.4em" fill="red" stroke="green" />
+        <rect x="2.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-top-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-bottom-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-scope-top-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
+        <rect x="2.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
+      </svg>
+  </script>
+  <script type="text/html" id="block-space-scope-bottom-template">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+        <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
+      </svg>
+  </script>
+
+  <script type="text/html" id="block-template">
+      <div class="block" 
+           data-bind="with:$data,blockSetup:$data,
+                      style:{left:$data.posX()+'em',
+                            top: $data.posY()+'em',},">
+        <!-- ko if:$data.blockTemplate.blockOpt.head=='start' -->
+          <!-- ko template:'block-space-start-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.head=='in' -->
+          <!-- ko template:'block-space-in-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+
+        <div data-bind="foreach:$data.blockTemplate.blockContents">
+          <div data-bind="if:$data.expressions">
+            <div class="expressions">
+              <div data-bind="foreach:$data.expressions.expContents">
+                <!-- ko if: $data.label -->
+                  <div class="label" data-bind="text:$data.label"></div>
+                <!-- /ko -->
+                <!-- ko if: $data.string -->
+                  <div class="string" data-bind="editableText:$parents[1].blockDataTbl[$data.string.dataName], autosizeInput:"></div>
+                <!-- /ko -->
+                <!-- ko if: $data.number -->
+                  <input class="number"  data-bind="">
+                <!-- /ko -->
+                <!-- ko if: $data.bool -->
+                  <div class="bool">ブール</div>
+                <!-- /ko -->
+                <!-- ko if: $data.options -->
+                  <select class="options"></select>
+                <!-- /ko -->
+              </div>
+            </div>
+          </div>
+          <div data-bind="if:$data.scope">
+            <!-- ko template:'block-space-scope-top-template',data:$data -->
+            <!-- /ko -->
+            <svg class="scope">
+              <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
+            </svg>
+            <!-- ko template:'block-space-scope-bottom-template',data:$data -->
+            <!-- /ko -->
+          </div>
+          <div data-bind="if:$data.space">
+            <div class="space">
+            </div>
+          </div>
+        </div>
+
+        <!-- ko if:$data.blockTemplate.blockOpt.tail=='end' -->
+          <!-- ko template:'block-space-bottom-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.tail=='out' -->
+          <!-- ko template:'block-space-out-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+      </div>
+  </script>
+
+
+  <div data-role="page"> 
+    <div data-role="header">
+      <h1>ペッパーＢＬＯＣＫ</h1>
+    </div><!-- /header -->
+    <div data-role="content">
+        <div>
+          <div data-bind="text:$root.nowState"></div>
+        </div>
+        <div class="ipAddrInput">
+          IP:
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ipXXX_000_000_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_XXX_000_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_XXX_000" />
+          <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_000_XXX" />
+          <button data-bind="click: $root.connect">接続</button>
+        </div>
+        <div class="blockBox">
+          <div id="pix2em" class="pix2em"></div>
+
+          <div class="materialBox">
+              そざい
+              <div data-bind="foreach:$root.materialList">
+                <div data-bind="template:'block-template',data:$data"></div>
+              </div>
+          </div>
+          <div class="toyBox">
+              とい
+              <div data-bind="foreach:$root.toyList">
+              </div>
+          </div>
+          <div class="factoryBox">
+              ふぁくとり
+              <div data-bind="foreach:$root.factoryList">
+              </div>
+          </div>
+        <div>
+
+    </div><!-- /content -->
+    <div data-role="footer">
+      <h4>My Footer</h4>
+    </div><!-- /footer -->
+  </div><!-- /page -->
+</body>
+</html>
