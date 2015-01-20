@@ -92,27 +92,26 @@ function Camera(alVideoDevice) {
 // {
 //     blockOpt:{version:'0.01',head:'start',tail:'out'},
 //     blockContents:[
-//         {expressions:{}},
-//         {scope:{}},
-//         {expressions:{}},
-//         {scope:{}},
+//         {expressions:[]},
+//         {scope:{scopeName:'scopeA',}},
+//         {expressions:[]},
+//         {scope:{scopeName:'scopeB',}},
+//         {space:{}},
 //     ],
 // },
 // -- expressions --
-// expContents
+// expressions
 //   label
 //   string
 //   number
 //   bool
 //   options
-// {
-//     expContents:[
-//        {label:"ここに"}.
-//        {string:{dataName:''}},
-//        {string:{dataName:''}},
-//        {options:{dataName:'',list:{'いち':'1','に':'2',}}},
-//     ],
-// },
+// [
+//   {label:"ここに"}.
+//   {string:{dataName:'dataA'}},
+//   {string:{dataName:'dataB'}},
+//   {options:{dataName:'',list:{'いち':'1','に':'2',}}},
+// ],
 
 //■■■■■ 多言語対応案 ■■■■■ 
 //  blockWorldId と lang で多言語対応
@@ -120,40 +119,66 @@ function Camera(alVideoDevice) {
 //  
 //==============================
 
-
-function Block(blockTemplate,callback) {
+function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
     // どちらかというとプライベートな部分
-    self.callback  = callback;
+    self.blockManager  = blockManager;
     self.blockTemplate = JSON.parse(JSON.stringify(blockTemplate));
+    self.callback      = callback;
+
     self.blockDataTbl = {};
-    self.scopeTbl  = {};
+    self.scopeTbl = {};
 
     // どちらかというとViewModel的な部分
-    self.element     = null;
+    self.element = null;
+
     self.pix2em      = 1;
     self.blockWidth  = ko.observable(1);
     self.blockHeight = ko.observable(0);
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
 
-    // データテーブル準備
+    // ブロックテンプレからの準備
+    if(self.blockTemplate.blockOpt.head == 'in')
+    {
+        self.blockHeight(self.blockHeight()+0.5);
+        self.in = {block:null, hitArea:null};
+    }
+    if(self.blockTemplate.blockOpt.tail == 'out')
+    {        
+        self.blockHeight(self.blockHeight()+0.5);
+        self.out= {block:null, hitArea:null};
+    }
+    self.scopeTbl = {};
     for(var ii=0; ii < self.blockTemplate.blockContents.length ; ii+=1)
     {
         if(self.blockTemplate.blockContents[ii].expressions)
         {
-            $.each(self.blockTemplate.blockContents[ii].expressions.expContents,function(key,data){
+            self.blockHeight(self.blockHeight()+2);
+        }
+        if(self.blockTemplate.blockContents[ii].scope)
+        {
+            self.blockHeight(self.blockHeight()+2);
+        }
+        if(self.blockTemplate.blockContents[ii].space)
+        {
+            self.blockHeight(self.blockHeight()+2);
+        }
+
+        if(self.blockTemplate.blockContents[ii].expressions)
+        {
+            $.each(self.blockTemplate.blockContents[ii].expressions,function(key,data){
                 if(data.bool)
                 {
                     self.blockDataTbl[data.bool.dataName] = ko.observable(false);
                 }
                 if(data.string)
                 {
-                    self.blockDataTbl[data.string.dataName] = ko.observable("");
+                    self.blockDataTbl[data.string.dataName] = ko.observable(data.string.default||"");
                     self.blockDataTbl[data.string.dataName].subscribe(function(vv){
                         self.blockWidth(0);
-                        self.blockWidth($(self.element).width()/self.pix2em);
+                        self.blockWidth($(self.element).width() * self.pix2em);
                     });
                 }
                 if(data.number)
@@ -164,54 +189,263 @@ function Block(blockTemplate,callback) {
                 {
                     self.blockDataTbl[data.options.dataName] = ko.observable("");
                 }
+                if(data.scope)
+                {
+                    self.scopeTbl[data.scope.scopeName] = {
+                        block:null, hitArea:null,
+                    };
+                }
             });
         }
     }
+    // 要素関連のセットアップ
     self.setup = function(element){
         self.element = element;
-        self.pix2em  = $('#pix2em').outerHeight();
-        
+        self.pix2em  = 1.0 / $('#pix2em').outerHeight();
+        if(self.in)
+        {
+            self.in.hitArea = $(".hitAreaIn", element);
+        }
+        if(self.out)
+        {
+            self.out.hitArea = $(".hitAreaOut", element);
+        }
+        $.each(self.scopeTbl, function(k,v){
+            v.hitArea = $(".hitAreaScopeOut#"+k, element);
+        });
+        //self.hitAreaValueList=$(".hitAreaValue",element);
+
+
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
-        var draggableDiv =$(self.element).draggable();
+        var draggableDiv =$(self.element)
+          .draggable({
+              start:function(event, ui){
+                  self.blockManager.moveStart(self, ui.position);
+              },
+              drag:function(event, ui){
+                  self.blockManager.move(self, ui.position);
+              },
+              stop:function(event, ui){
+                  self.blockManager.moveStop(self, ui.position);
+              },
+          })
+          .dblclick(function(){
+              self.deferred();
+          });
+
         $('.string', draggableDiv).mousedown(function(ev) {
-             draggableDiv.draggable('disable');
+            draggableDiv.draggable('disable');
         }).mouseup(function(ev) {
-             draggableDiv.draggable('enable');
+            draggableDiv.draggable('enable');
         });
     }
 
     // Deferred の promise作って返します
     self.deferred = function()
     {
-        var dfd = $.Deferred();
-        self.callback(dfd,data);
-        return dfd.promise();
-    };
-
-    //ぶら下がってるブロックを挿入します
-    self.insertScopeBlock = function(scopeName,index,blockIns){
-        if(null==self.scopeTbl[scopeName]){
-            self.scopeTbl[scopeName] = [];
-        }
-        var blockArray = self.scopeTbl[scopeName];
-
-        if(index<0 || index >= blockArray.length){
-            blockArray.push(blockIns);
+        //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
+        if(self.out && self.out.block){
+            return self.callback(self.blockDataTbl, self.scopeTbl).then(
+                self.out.block.deferred
+            );
         }
         else{
-            blockArray.splice(index,0,blockIns);
+            return self.callback(self.blockDataTbl, self.scopeTbl);
         }
     };
 
-    // 複製します(ぶら下がってるブロックは複製されません)
-    self.newInstance = function(){
-        return new Block(self.blockData,self.callback);
+    self.clearOut = function()
+    {
+        if(self.out && self.out.block)
+        {
+            self.out.block.in.block = null;
+            self.out.block = null;
+        }
     }
+    self.clearIn = function()
+    {    
+        if(self.in && self.in.block)
+        {
+            self.in.block.out.block = null;
+            self.in.block = null;
+        }
+    }
+
+    // 外側のつながるブロックを追加します
+    self.connectOut = function(block){
+        self.clearOut();
+        block.clearIn();
+        self.out.block = block;
+        self.out.block.in.block = self;
+    };
+
+    // 内側のブロックをセットします
+    self.connectScopeBlock = function(scopeName, block){
+        if(null==self.scopeTbl[scopeName])
+        {
+            console.log("error:" + scopeName);
+            return;
+        }
+        if(self.scopeTbl[scopeName].block)
+        {
+            self.scopeTbl[scopeName].block.in.block = null;
+        }
+        self.scopeTbl[scopeName].block = block;
+        block.in.block = self;
+    };
+
+    // 複製します(内側のブロックは複製されません)
+    self.cloneThisBlock = function(){
+        var ins = new Block(self.blockManager, self.blockTemplate, self.callback);
+        $.each(self.blockDataTbl,function(key,value){
+            ins.blockDataTbl[key](value());
+        });
+        return ins;
+    };
+
+    // 管理に追加
+    self.blockManager.addList(self);
 }
 
+function BlockManager(){
+    var self = this;
+    self.blockList = [];
 
+    var checkHitDist = function(area0, area1){
+        var offs0 = area0.offset();
+        var offs1 = area1.offset();
+        var w0    = area0.width();
+        var h0    = area0.height();
+        var w1    = area1.width();
+        var h1    = area1.height();
+        if(offs0.top < offs1.top + h1&&
+           offs1.top < offs0.top + h0&&
+           offs0.left < offs1.left + w1&&
+           offs1.left < offs0.left + w0)
+        {
+            var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
+            var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
+            return Math.sqrt(vx*vx + vy*vy);
+        }
+    };
+    var getHitBlock = function(block){
+        var nearDist = 99999999;
+        var hitBlock = null;
+        var srcBlock = null;
+        var isIn     = false;
+        // 入出力ブロックを取り出します
+        var inBlock  = null;
+        var outBlock = null;
+        if(block.in){
+            inBlock = block;
+        }
+        if(block.out){
+            outBlock = block;
+            while(outBlock.out){
+                if(outBlock.out.block){
+                    outBlock = outBlock.out.block;
+                }
+                else{
+                    break; 
+                }
+            }
+        }
+        // ヒットチェックをします
+        $.each(self.blockList,function(k,tgtBlock){
+            if(tgtBlock == inBlock) return;
+            if(tgtBlock == outBlock) return;
+            if(tgtBlock.in && outBlock && outBlock.out){
+                var dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                if(dist && dist < nearDist){
+                    nearDist = dist;
+                    hitBlock = tgtBlock;
+                    srcBlock = outBlock;
+                    isSrcIn  = false;
+                }
+            }
+            if(tgtBlock.out && inBlock && inBlock.in){
+                var dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                if(dist && dist < nearDist){
+                    nearDist = dist;
+                    hitBlock = tgtBlock;
+                    srcBlock = inBlock;
+                    isSrcIn  = true;
+                }
+            }
+            if(tgtBlock.scope){
+            }
+        });
+        if(hitBlock){
+            return {hitBlock:hitBlock,
+                    srcBlock:srcBlock,isSrcIn:isSrcIn};
+        }
+    };
+    var updateLayout = function(updateBlock){
+        // 更新する一番上のブロックを探します
+        var topBlock = updateBlock;
+        while(topBlock.in && topBlock.in.block)
+        {
+            topBlock = topBlock.in.block;
+        }
+        // レイアウトします
+        var recv = function(block){
+            //block.scopeTbl;
+            if(block.out && block.out.block)
+            {
+                var blockA = block;
+                var blockB = block.out.block;
+                var elmA = blockA.element;
+                var elmB = blockB.element;
+                blockB.posY(
+                    blockA.posY() + blockA.blockHeight()
+                );
+                blockB.posX(
+                    blockA.posX()
+                );
+                recv(blockB);
+            }
+        };
+        recv(topBlock);
+    };
+
+    self.addList = function(newBlock){
+        self.blockList.push(newBlock);
+    };
+    self.moveStart = function(block,position){
+        block.clearIn();
+    };
+    self.move = function(block,position){
+        block.posX(position.left * block.pix2em);
+        block.posY(position.top  * block.pix2em);
+        updateLayout(block);
+                   
+        var hit = getHitBlock(block);
+        if(hit)
+        {
+        }
+    };
+    self.moveStop = function(block,position){
+        block.posX(position.left * block.pix2em);
+        block.posY(position.top  * block.pix2em);
+        updateLayout(block);
+        
+        var hit = getHitBlock(block);
+        if(hit)
+        {
+            if(hit.isSrcIn){
+                hit.hitBlock.connectOut(hit.srcBlock);
+            }
+            else{
+                hit.srcBlock.connectOut(hit.hitBlock);
+            }
+            //TODO:blockのほうをくっつくように移動させる処理を書く
+            updateLayout(block);
+        }
+    };
+}
 
 $(function(){
+    // -- カスタムバインド --
     ko.bindingHandlers.editableText = {
         init: function(element, valueAccessor) {
             $(element).on('blur', function() {
@@ -261,11 +495,12 @@ $(function(){
         update: function(element, valueAccessor) {
         }
     };
-
+    // -- MVVMのモデル(このアプリの中枢です) --
     function MyModel() {
 
         var self = this;
 
+        // -- --
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
         self.ip000_000_XXX_000 = ko.observable(11);
@@ -279,9 +514,6 @@ $(function(){
             });
             self.qims.service("ALAudioDevice").done(function(ins){
               self.alAudioDevice = ins;
-              self.alAudioDevice.getOutputVolume().done(function(val){
-                  self.nowVolume(val);
-              });
             });
             self.qims.service("ALMotion").done(function(ins){
               self.alMotion = ins;
@@ -294,7 +526,7 @@ $(function(){
               self.cameraIns = new Camera(self.alVideoDevice);
             });  
         }
-
+        self.qims = null;
         self.connect = function() 
         {
             var ip = 
@@ -318,10 +550,12 @@ $(function(){
         };
 
         //■  ■
+        self.blockManager = new BlockManager();
+
         self.materialList = ko.observableArray();
         self.toyList      = ko.observableArray();
         self.factoryList  = ko.observableArray();
-
+/*
         self.materialList.push(ko.observable(new Block(
           {
               blockOpt:{head:'in',tail:'out'},
@@ -352,8 +586,8 @@ $(function(){
             dfd.resolve();
           }
         )));
-
-
+*/
+/*
         self.materialList.push(ko.observable(new Block(
           {
               blockOpt:{head:'start',tail:'end'},
@@ -396,6 +630,36 @@ $(function(){
             dfd.resolve();
           }
         )));
+*/
+        //
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {string:{dataName:'talkText0',default:"こんにちわ"}},
+                      {label:'と　しゃべる'},
+                  ]},
+              ],
+          },
+          function(blockDataTbl){
+              if(self.qims){
+                  return self.qims.service("ALTextToSpeech").then(function(ins){
+                      return ins.say(blockDataTbl['talkText0']());
+                  });
+              }
+              else{
+                  var dfd = $.Deferred();
+                  dfd.reject();
+                  return dfd.promise();
+              }
+          }
+        )));
+
+        self.materialList.push(ko.observable(
+           self.materialList()[0]().cloneThisBlock()
+        ));
 
         var posX = 0;
         $.each(self.materialList(),function(key,blockInsObsv){
@@ -404,6 +668,6 @@ $(function(){
             posX += 20;//blockIns.blockWidth();
         });
     };
-
-    ko.applyBindings(new MyModel());
+    myModel = new MyModel();
+    ko.applyBindings( myModel );
 });

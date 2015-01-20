@@ -16,12 +16,18 @@
 </head>
 <body>
   <script type="text/html" id="block-space-start-template">
+      <div class="hitAreaOrigin">
+        <div class="hitAreaOut" style="top:-0.5em;left:1em;"></div>
+      </div>
       <svg class="head_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
         <rect x="0em" y="0.0em" width="5em" height="1.0em" fill="red" stroke="green" />
         <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()+'em'}" />
       </svg>
   </script>
   <script type="text/html" id="block-space-in-template">
+      <div class="hitAreaOrigin">
+        <div class="hitAreaIn" style="top:-0.5em;left:0.5em;"></div>
+      </div>
       <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
         <rect x="0.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green" />
         <rect x="1.0em" y="0.4em" width="1.0em" height="0.1em" fill="red" stroke="green" />
@@ -29,6 +35,9 @@
       </svg>
   </script>
   <script type="text/html" id="block-space-out-template">
+      <div class="hitAreaOrigin">
+        <div class="hitAreaOut" style="top:0.0em;left:0.5em;"></div>
+      </div>
       <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
         <rect x="0.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" />
         <rect x="1.0em" y="0.0em" width="1.0em" height="0.4em" fill="red" stroke="green" />
@@ -46,6 +55,9 @@
       </svg>
   </script>
   <script type="text/html" id="block-space-scope-top-template">
+      <div class="hitAreaOrigin">
+        <div class="hitAreaScopeOut" data-bind="attr:{id:$data.scope.scopeName}"></div>
+      </div>
       <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
         <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
         <rect x="2.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
@@ -61,7 +73,7 @@
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
                       style:{left:$data.posX()+'em',
-                            top: $data.posY()+'em',},">
+                             top: $data.posY()+'em',},">
         <!-- ko if:$data.blockTemplate.blockOpt.head=='start' -->
           <!-- ko template:'block-space-start-template',data:$data -->
           <!-- /ko -->
@@ -74,7 +86,7 @@
         <div data-bind="foreach:$data.blockTemplate.blockContents">
           <div data-bind="if:$data.expressions">
             <div class="expressions">
-              <div data-bind="foreach:$data.expressions.expContents">
+              <div data-bind="foreach:$data.expressions">
                 <!-- ko if: $data.label -->
                   <div class="label" data-bind="text:$data.label"></div>
                 <!-- /ko -->

@@ -64,18 +64,15 @@
     top:0.0em;
     left:0.0em;
 }
-.block .head_margin{ 
+.block .head_margin{
+  position:relative; 
   height:1.0em;
   width: 10em;
 }
 .block .parts_margin{ 
+  position:relative; 
   height:0.5em;
   width: 10em;
-}
-
-.block .tail{ 
-  width: 10em;
-  height:1em;
 }
 
 .block .scope{
@@ -115,4 +112,32 @@
 .block .expressions .options{ 
     border-style:solid;
     display:inline-block;
+}
+
+/*ドラッグ時のヒット判定用*/
+.block .hitAreaOrigin{
+  position:absolute;  
+}
+.block .hitAreaIn{
+  position:absolute;
+  width:2em;
+  height:1em;
+
+  background:blue;
+  opacity: 0.5;
+}
+.block .hitAreaOut{
+  position:absolute;
+  width:2em;
+  height:1em;
+
+  background: blueviolet;
+  opacity: 0.5;
+}
+.block .hitAreaValue{
+  position:absolute;
+  width:1em;
+  height:1em;
+
+  background:blue;
 }
