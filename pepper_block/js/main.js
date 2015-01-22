@@ -80,9 +80,9 @@ function Camera(alVideoDevice) {
 //   lang
 //     'jp' 'en'
 //   head
-//     'start' 'in'
+//     'start' 'in' ’value’
 //   tail
-//     'end' 'out'
+//     'end' 'out' ’value’
 // blockContents
 //   expressions
 //     ***下記参照***
@@ -140,16 +140,24 @@ function Block(blockManager, blockTemplate, callback) {
     self.posY        = ko.observable(0);
 
     // ブロックテンプレからの準備
-    if(self.blockTemplate.blockOpt.head == 'in')
+    if(self.blockTemplate.blockOpt.head == 'value')
     {
-        self.blockHeight(self.blockHeight()+0.5);
-        self.in = {block:null, hitArea:null};
+        //値扱いのブロック
+        self.value = {block:null, dataName:null, hitArea:null};
     }
-    if(self.blockTemplate.blockOpt.tail == 'out')
-    {        
-        self.blockHeight(self.blockHeight()+0.5);
-        self.out= {block:null, hitArea:null};
+    else{
+        if(self.blockTemplate.blockOpt.head == 'in')
+        {
+            self.blockHeight(self.blockHeight()+0.5);
+            self.in = {block:null, hitArea:null};
+        }
+        if(self.blockTemplate.blockOpt.tail == 'out')
+        {        
+            self.blockHeight(self.blockHeight()+0.5);
+            self.out= {block:null, hitArea:null};
+        }
     }
+    
     self.scopeTbl = {};
     for(var ii=0; ii < self.blockTemplate.blockContents.length ; ii+=1)
     {
@@ -176,10 +184,6 @@ function Block(blockManager, blockTemplate, callback) {
                 if(data.string)
                 {
                     self.blockDataTbl[data.string.dataName] = ko.observable(data.string.default||"");
-                    self.blockDataTbl[data.string.dataName].subscribe(function(vv){
-                        self.blockWidth(0);
-                        self.blockWidth($(self.element).width() * self.pix2em);
-                    });
                 }
                 if(data.number)
                 {
@@ -396,8 +400,9 @@ function BlockManager(){
                 var blockB = block.out.block;
                 var elmA = blockA.element;
                 var elmB = blockB.element;
+                var marginConnector = 0.5;
                 blockB.posY(
-                    blockA.posY() + blockA.blockHeight()
+                    blockA.posY() + blockA.blockHeight() + marginConnector
                 );
                 blockB.posX(
                     blockA.posX()
@@ -446,12 +451,50 @@ function BlockManager(){
 
 $(function(){
     // -- カスタムバインド --
+
+    function getCharacterOffsetWithin(range, node) {
+        var treeWalker = document.createTreeWalker(
+            node,
+            NodeFilter.SHOW_TEXT,
+            function(node) {
+                var nodeRange = document.createRange();
+                nodeRange.selectNode(node);
+                return nodeRange.compareBoundaryPoints(Range.END_TO_END, range) < 1 ?
+                    NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+            },
+            false
+        );
+
+        var charCount = 0;
+        while (treeWalker.nextNode()) {
+            charCount += treeWalker.currentNode.length;
+        }
+        if (range.startContainer.nodeType == 3) {
+            charCount += range.startOffset;
+        }
+        return charCount;
+    }
+        
     ko.bindingHandlers.editableText = {
         init: function(element, valueAccessor) {
+            $(element).attr("contenteditable","true");
             $(element).on('blur', function() {
             //$(element).on('input', function() {
+
+//var range = window.getSelection().getRangeAt(0);
+//var s = range.startOffset;
+//var e = range.endOffset;
+//var sc = range.startContainer;
+
                 var observable = valueAccessor();
                 observable( $(this).text() );
+
+//var range2 = window.getSelection().getRangeAt(0);
+//range2.setStart(sc, s);
+//range2.setEnd(sc, e);
+//var sel = window.getSelection();
+//sel.removeAllRanges();
+//sel.addRange(range2);
             });
         },
         update: function(element, valueAccessor) {
@@ -459,34 +502,7 @@ $(function(){
             $(element).text(value);
         }
     };
-    ko.bindingHandlers.autosizeInput = {
-        init: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-            $(element).attr("contenteditable","true");
-            /*
-            $(element).keypress(function(e) {
-              // enter
-              if(e.which == 13) {
-                document.execCommand('insertImage', false, '#BR#');
-                                var elm = $('img[src="#BR#"]', this);
-                                elm.before($('<br>'));
-                                elm.remove();
-                            }
-                        });
 
-                 return false;
-             }
-            var resizeInput = function(){
-                var size=$(element).val().length;
-                $(element).attr('size', size);
-            }
-            $(element)
-              .keyup(resizeInput)
-              .each(resizeInput);
-            */
-        },
-        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-        }
-    };
     ko.bindingHandlers.blockSetup = {
         init: function(element, valueAccessor) {
             var blockIns = ko.unwrap(valueAccessor());
@@ -495,10 +511,75 @@ $(function(){
         update: function(element, valueAccessor) {
         }
     };
+
+    ko.bindingHandlers.blockLayout = {
+        init: function(element, valueAccessor) {
+        },
+        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
+            var block = ko.utils.unwrapObservable(valueAccessor());
+            // ブロック内のデータの通知を受けることを伝えます
+            $.each(block.blockDataTbl,function(k,v){
+                v();
+            });
+            // レイアウトします
+            var posY =0;
+            var sizeW=0;
+            $(".blockRow",element).each(function(k,elem){
+                var sizeH = 0;
+                var posX  = 0;
+                $(".blockCell",elem).each(function(k,elem){
+                    $(elem).css({left:posX});
+                    var w = $(elem).outerWidth();
+                    var h = $(elem).outerHeight();
+                    posX += w;
+                    sizeH = Math.max(sizeH,h);
+                });
+                $(elem).css({top:posY,height:sizeH,width:posX});
+                posY += $(elem).outerHeight();
+                sizeW = Math.max(sizeW,$(elem).outerWidth());
+            });
+            $(element).css({height:posY,width:sizeW});
+            block.blockHeight(posY  * block.pix2em);
+            block.blockWidth (sizeW * block.pix2em);
+
+        }
+    };
+
+    ko.bindingHandlers.arrangeElem = {
+        init: function(element, valueAccessor) {
+        },
+        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
+            //var value = ko.utils.unwrapObservable(valueAccessor());
+
+            viewModel.textValue();
+
+            var posY =0;
+            var sizeW=0;
+            $(".testRow",element).each(function(k,elem){
+                var sizeH = 0;
+                var posX  = 0;
+                $(".testElm",elem).each(function(k,elem){
+
+                    $(elem).css({left:posX});
+                    var w = $(elem).outerWidth();
+                    var h = $(elem).outerHeight();
+                    posX += w;
+                    sizeH = Math.max(sizeH,h);
+                });
+                $(elem).css({top:posY,height:sizeH,width:posX});
+                posY += $(elem).outerHeight();
+                sizeW = Math.max(sizeW,$(elem).outerWidth());
+            });
+            $(element).css({height:posY,width:sizeW});
+        }
+    };
+
     // -- MVVMのモデル(このアプリの中枢です) --
     function MyModel() {
 
         var self = this;
+
+        self.textValue = ko.observable("");
 
         // -- --
         self.ipXXX_000_000_000 = ko.observable(192);
@@ -555,83 +636,8 @@ $(function(){
         self.materialList = ko.observableArray();
         self.toyList      = ko.observableArray();
         self.factoryList  = ko.observableArray();
-/*
-        self.materialList.push(ko.observable(new Block(
-          {
-              blockOpt:{head:'in',tail:'out'},
-              blockContents:[
-                  {expressions:{
-                      expOpt:{dataName:'TEST'},
-                      expContents:[
-                          {label:'てすと用に'},
-                          {bool:{dataName:'flag0'}},
-                          {label:'ならば'},
-                          {string:{dataName:'talkText0',default:""}},
-                          {label:'と'},
-                          {options:{dataName:'talkType0', list:{
-                              '喋る':'talkNormal',
-                              '早く喋る':'talkFast',
-                              'ゆっくり喋る':'talkSlow'}}
-                          },
-                      ],
-                  }},
-                  {scope:{
-                      scopeName:'scope0',
-                  }},
-                  {space:{
-                  }},
-              ],
-          },
-          function(dfd){
-            dfd.resolve();
-          }
-        )));
-*/
-/*
-        self.materialList.push(ko.observable(new Block(
-          {
-              blockOpt:{head:'start',tail:'end'},
-              blockContents:[
-                  {expressions:{
-                      expOpt:{dataName:'TEST'},
-                      expContents:[
-                          {label:'てすと用に'},
-                          {bool:{dataName:'flag0'}},
-                          {label:'ならば'},
-                          {string:{dataName:'talkText0',default:""}},
-                          {label:'と'},
-                          {options:{dataName:'talkType0', list:{
-                              '喋る':'talkNormal',
-                              '早く喋る':'talkFast',
-                              'ゆっくり喋る':'talkSlow'}}
-                          },
-                      ],
-                  }},
-                  {scope:{
-                      scopeName:'scope0',
-                  }},
-                  {expressions:{
-                      expOpt:{dataName:'TEST1'},
-                      expContents:[
-                          {bool:{dataName:'flag0'}},
-                          {label:'ならば'},
-                          {string:{dataName:'talkText0',default:""}},
-                          {label:'と'},
-                          {options:{dataName:'talkType0', list:{
-                              '喋る':'talkNormal',
-                              '早く喋る':'talkFast',
-                              'ゆっくり喋る':'talkSlow'}}
-                          },
-                      ],
-                  }},
-              ],
-          },
-          function(dfd){
-            dfd.resolve();
-          }
-        )));
-*/
-        //
+
+        // 会話ブロック
         self.materialList.push(ko.observable(new Block(
           self.blockManager,
           {
@@ -654,6 +660,26 @@ $(function(){
                   dfd.reject();
                   return dfd.promise();
               }
+          }
+        )));
+        // 文字列連結ブロック
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'value',tail:'value'},
+              blockContents:[
+                  {expressions:[
+                      {string:{dataName:'text0',default:"A"}},
+                      {label:'と'},
+                      {string:{dataName:'text1',default:"B"}},
+                  ]},
+              ],
+          },
+          function(blockDataTbl){
+              var dfd = $.Deferred();
+              var output = blockDataTbl['text0']() + blockDataTbl['text1']();
+              dfd.resolve(output);
+              return dfd.promise();
           }
         )));
 

@@ -58,21 +58,30 @@
 
 .block{
     font-size:1.0em;
-    margin:1em;
-    /* background:yellow; */
+    /* margin:1em; */
+    background:yellow;
     position:absolute;
     top:0.0em;
     left:0.0em;
 }
 .block .head_margin{
-  position:relative; 
+  position:absolute; 
   height:1.0em;
   width: 10em;
 }
 .block .parts_margin{ 
-  position:relative; 
+  position:absolute; 
   height:0.5em;
   width: 10em;
+}
+.block .blockRow{
+    position:absolute; 
+    display:block;  
+}
+.block .blockCell{ 
+    position:absolute; 
+    white-space: nowrap;
+    word-wrap: normal;
 }
 
 .block .scope{
@@ -88,30 +97,29 @@
 }
 
 .block .expressions{ 
-    display:block;
-    height: 1.8em;
+    /* height: 1.8em; */
     background: red;
+    /* text-shadow: 1px 1px 0px blue; */
 }
 .block .expressions .label{ 
-    display:inline-block;
 }
 .block .expressions .string{ 
     border-style:solid;
-    display:inline-block;
     background:white;
     min-width:1em; 
+    white-space: nowrap;
+    border-width: 1px;
+    border-radius: 2px;
+    padding: 0.1em;
 }
 .block .expressions .number{ 
     border-style:solid;
-    display:inline-block;
 }
 .block .expressions .bool{ 
     border-style:solid;
-    display:inline-block;
 }
 .block .expressions .options{ 
     border-style:solid;
-    display:inline-block;
 }
 
 /*ドラッグ時のヒット判定用*/
@@ -125,6 +133,7 @@
 
   background:blue;
   opacity: 0.5;
+  visibility: hidden;
 }
 .block .hitAreaOut{
   position:absolute;
@@ -133,11 +142,35 @@
 
   background: blueviolet;
   opacity: 0.5;
+  visibility: hidden;
 }
 .block .hitAreaValue{
   position:absolute;
-  width:1em;
-  height:1em;
+  width: 1.8em;
+  height:1.8em;
 
-  background:blue;
+  background:yellow;
+  opacity: 0.5;
+  visibility:hidden;
+}
+
+
+.testBox{
+  display: block;
+  position:absolute;
+  top:  60px;
+  left: 150px;
+  border-style:double;
+}
+.testRow{
+  display: block;
+  position:absolute;
+  border-style:double;
+}
+.testElm{
+  position:absolute;
+
+  border-style: double;
+  white-space: nowrap;
+  word-wrap: normal;
 }
