@@ -108,9 +108,9 @@ function Camera(alVideoDevice) {
 //   options
 // [
 //   {label:"ここに"}.
-//   {string:{dataName:'dataA'}},
-//   {string:{dataName:'dataB'}},
-//   {options:{dataName:'',list:{'いち':'1','に':'2',}}},
+//   {string:{default:"",},dataName:'dataA'},
+//   {string:{default:"",},dataName:'dataB'},
+//   {options:{default:'',list:{'いち':'1','に':'2',}},dataName:'dataC'},
 // ],
 
 //■■■■■ 多言語対応案 ■■■■■ 
@@ -127,7 +127,8 @@ function Block(blockManager, blockTemplate, callback) {
     self.blockTemplate = JSON.parse(JSON.stringify(blockTemplate));
     self.callback      = callback;
 
-    self.blockDataTbl = {};
+    self.valueDataTbl = {};
+    self.valueInTbl = {};
     self.scopeTbl = {};
 
     // どちらかというとViewModel的な部分
@@ -142,66 +143,64 @@ function Block(blockManager, blockTemplate, callback) {
     // ブロックテンプレからの準備
     if(self.blockTemplate.blockOpt.head == 'value')
     {
-        //値扱いのブロック
-        self.value = {block:null, dataName:null, hitArea:null};
+        // 値用のブロックの連結(出力)部分
+        // ※フローブロックと比べると、ある面でラムダ式っぽいかも。
+        self.valueOut = {block:null, tgtDataName:null, hitArea:null};
     }
     else{
+        // フロー用のブロックの連結(入出)部分
         if(self.blockTemplate.blockOpt.head == 'in')
         {
-            self.blockHeight(self.blockHeight()+0.5);
             self.in = {block:null, hitArea:null};
         }
         if(self.blockTemplate.blockOpt.tail == 'out')
-        {        
-            self.blockHeight(self.blockHeight()+0.5);
-            self.out= {block:null, hitArea:null};
+        {
+            self.out = {block:null, hitArea:null};
         }
     }
-    
-    self.scopeTbl = {};
     for(var ii=0; ii < self.blockTemplate.blockContents.length ; ii+=1)
     {
         if(self.blockTemplate.blockContents[ii].expressions)
         {
-            self.blockHeight(self.blockHeight()+2);
-        }
-        if(self.blockTemplate.blockContents[ii].scope)
-        {
-            self.blockHeight(self.blockHeight()+2);
-        }
-        if(self.blockTemplate.blockContents[ii].space)
-        {
-            self.blockHeight(self.blockHeight()+2);
-        }
-
-        if(self.blockTemplate.blockContents[ii].expressions)
-        {
             $.each(self.blockTemplate.blockContents[ii].expressions,function(key,data){
-                if(data.bool)
-                {
-                    self.blockDataTbl[data.bool.dataName] = ko.observable(false);
-                }
-                if(data.string)
-                {
-                    self.blockDataTbl[data.string.dataName] = ko.observable(data.string.default||"");
-                }
-                if(data.number)
-                {
-                    self.blockDataTbl[data.number.dataName] = ko.observable(0);
-                }
-                if(data.options)
-                {
-                    self.blockDataTbl[data.options.dataName] = ko.observable("");
-                }
-                if(data.scope)
-                {
-                    self.scopeTbl[data.scope.scopeName] = {
-                        block:null, hitArea:null,
+                if(data.dataName){
+                    self.valueInTbl[data.dataName] = {
+                        blockObs:ko.observable(), 
+                        hitArea:null, 
+                        dataTemplate:data,
+                        blockLocalX:0,
+                        blockLocalY:0,
                     };
+                    self.valueDataTbl[data.dataName] = ko.observable();
+                    var valueObs = self.valueDataTbl[data.dataName];
+                    if(data.bool)
+                    {
+                        valueObs(data.bool.default||false);
+                    }
+                    if(data.string)
+                    {
+                        valueObs(data.string.default||"");
+                    }
+                    if(data.number)
+                    {
+                        valueObs(data.number.default||0);
+                    }
+                    if(data.options)
+                    {
+                        valueObs(data.options.default||"");
+                    }
                 }
             });
         }
+        if(self.blockTemplate.blockContents[ii].scope)
+        {
+            var scope = self.blockTemplate.blockContents[ii].scope;
+            self.scopeTbl[scope.scopeName] = {
+                block:null, hitArea:null,
+            };
+        }
     }
+    
     // 要素関連のセットアップ
     self.setup = function(element){
         self.element = element;
@@ -214,11 +213,16 @@ function Block(blockManager, blockTemplate, callback) {
         {
             self.out.hitArea = $(".hitAreaOut", element);
         }
-        $.each(self.scopeTbl, function(k,v){
-            v.hitArea = $(".hitAreaScopeOut#"+k, element);
+        if(self.valueOut)
+        {
+            self.valueOut.hitArea = $(".hitAreaValue", element);
+        }
+        $.each(self.valueInTbl, function(dataName,v){
+            v.hitArea = $(".hitAreaValue#"+dataName, element);
         });
-        //self.hitAreaValueList=$(".hitAreaValue",element);
-
+        $.each(self.scopeTbl, function(k,v){
+            v.hitArea = $(".hitAreaScopeOut#"+dataName, element);
+        });
 
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
         var draggableDiv =$(self.element)
@@ -249,12 +253,12 @@ function Block(blockManager, blockTemplate, callback) {
     {
         //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
         if(self.out && self.out.block){
-            return self.callback(self.blockDataTbl, self.scopeTbl).then(
+            return self.callback(self.valueDataTbl, self.scopeTbl).then(
                 self.out.block.deferred
             );
         }
         else{
-            return self.callback(self.blockDataTbl, self.scopeTbl);
+            return self.callback(self.valueDataTbl, self.scopeTbl);
         }
     };
 
@@ -274,8 +278,25 @@ function Block(blockManager, blockTemplate, callback) {
             self.in.block = null;
         }
     }
+    self.clearValueIn = function(dataName)
+    {
+        var valueIn = self.valueInTbl[dataName];
+        if(valueIn && valueIn.blockObs())
+        {
+            valueIn.blockObs().valueOut.block       = null;
+            valueIn.blockObs().valueOut.tgtDataName = null;
+            valueIn.blockObs(null);
+        }
+    }
+    self.clearValueOut = function()
+    {
+        if(self.valueOut && self.valueOut.block)
+        {
+            self.valueOut.block.clearValueIn( self.valueOut.tgtDataName );
+        }
+    }
 
-    // 外側のつながるブロックを追加します
+    // 外側につながるブロックをセットします
     self.connectOut = function(block){
         self.clearOut();
         block.clearIn();
@@ -283,7 +304,21 @@ function Block(blockManager, blockTemplate, callback) {
         self.out.block.in.block = self;
     };
 
-    // 内側のブロックをセットします
+    // 値の入力のブロックをセットします
+    self.connectValueIn = function(dataName, valueBlock){
+        var valueIn = self.valueInTbl[dataName];
+        if(valueIn)
+        {
+            self.clearValueIn(dataName);
+            valueBlock.clearValueOut();
+
+            valueIn.blockObs(valueBlock);
+            valueBlock.valueOut.block       = self;
+            valueBlock.valueOut.tgtDataName = dataName;
+        }
+    };
+
+    // 内側につながるブロックをセットします
     self.connectScopeBlock = function(scopeName, block){
         if(null==self.scopeTbl[scopeName])
         {
@@ -301,8 +336,8 @@ function Block(blockManager, blockTemplate, callback) {
     // 複製します(内側のブロックは複製されません)
     self.cloneThisBlock = function(){
         var ins = new Block(self.blockManager, self.blockTemplate, self.callback);
-        $.each(self.blockDataTbl,function(key,value){
-            ins.blockDataTbl[key](value());
+        $.each(self.valueDataTbl,function(key,value){
+            ins.valueDataTbl[key](value());
         });
         return ins;
     };
@@ -337,9 +372,11 @@ function BlockManager(){
         var hitBlock = null;
         var srcBlock = null;
         var isIn     = false;
+        var valueName= null;
         // 入出力ブロックを取り出します
         var inBlock  = null;
         var outBlock = null;
+        var valueBlock = null;
         if(block.in){
             inBlock = block;
         }
@@ -354,10 +391,14 @@ function BlockManager(){
                 }
             }
         }
+        if(block.valueOut){
+            valueBlock = block;
+        }
         // ヒットチェックをします
         $.each(self.blockList,function(k,tgtBlock){
             if(tgtBlock == inBlock) return;
             if(tgtBlock == outBlock) return;
+            if(tgtBlock == valueBlock) return;
             if(tgtBlock.in && outBlock && outBlock.out){
                 var dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
                 if(dist && dist < nearDist){
@@ -365,6 +406,7 @@ function BlockManager(){
                     hitBlock = tgtBlock;
                     srcBlock = outBlock;
                     isSrcIn  = false;
+                    valueName = null;
                 }
             }
             if(tgtBlock.out && inBlock && inBlock.in){
@@ -374,25 +416,62 @@ function BlockManager(){
                     hitBlock = tgtBlock;
                     srcBlock = inBlock;
                     isSrcIn  = true;
+                    valueName = null;
                 }
             }
+            if(valueBlock){
+                $.each(tgtBlock.valueInTbl,function(dataName,valueIn){
+                    var dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                    if(dist && dist < nearDist){
+                        nearDist = dist;
+                        hitBlock = tgtBlock;
+                        srcBlock = valueBlock;
+                        isSrcIn  = false;
+                        valueName = dataName;
+                    }
+                });
+            }
             if(tgtBlock.scope){
+                //TODO:スコープ毎のoutの処理を
             }
         });
         if(hitBlock){
             return {hitBlock:hitBlock,
-                    srcBlock:srcBlock,isSrcIn:isSrcIn};
+                    srcBlock:srcBlock,
+                    isSrcIn:isSrcIn,
+                    valueName:valueName,};
         }
     };
-    var updateLayout = function(updateBlock){
+    // 位置のレイアウト処理です(サイズはカスタムバインドで処理します)
+    var updatePositionLayout = function(updateBlock){
         // 更新する一番上のブロックを探します
         var topBlock = updateBlock;
+        //値用ブロックの場合は接続先を辿ります
+        while(topBlock.valueOut && topBlock.valueOut.block)
+        {
+            topBlock = topBlock.valueOut.block;
+        }
+        //通常用ブロックの場合は接続元を辿ります
         while(topBlock.in && topBlock.in.block)
         {
             topBlock = topBlock.in.block;
         }
         // レイアウトします
         var recv = function(block){
+            // 位置のみなのでブロック内の処理順は自由にやれます
+            $.each(block.valueInTbl,function(k,valueIn){
+                if(valueIn.blockObs()){
+                    var blockA = block;
+                    var blockB = valueIn.blockObs();
+                    blockB.posX(
+                        blockA.posX() + valueIn.blockLocalX
+                    );
+                    blockB.posY(
+                        blockA.posY() + valueIn.blockLocalY
+                    );
+                    recv(valueIn.blockObs());
+                }
+            });
             //block.scopeTbl;
             if(block.out && block.out.block)
             {
@@ -400,7 +479,7 @@ function BlockManager(){
                 var blockB = block.out.block;
                 var elmA = blockA.element;
                 var elmB = blockB.element;
-                var marginConnector = 0.5;
+                var marginConnector = 0.5 / blockB.pix2em;
                 blockB.posY(
                     blockA.posY() + blockA.blockHeight() + marginConnector
                 );
@@ -418,11 +497,37 @@ function BlockManager(){
     };
     self.moveStart = function(block,position){
         block.clearIn();
+        block.clearValueOut();
+        // 動かすモノをかつながっている順に後ろに付け替えます
+        self.blockList.splice( self.blockList.indexOf(block), 1 );
+        self.blockList.push(block);
+        var recv = function(block){
+            $.each(block.valueInTbl,function(k,valueIn){
+                if(valueIn.blockObs())
+                {
+                    self.blockList.splice( self.blockList.indexOf(valueIn.blockObs()), 1 );                
+                    self.blockList.push( valueIn.blockObs() );
+                    recv(valueIn.blockObs());
+                }
+            });
+            if(block.out && block.out.block){
+                self.blockList.splice( self.blockList.indexOf(block.out.block), 1 );
+                self.blockList.push( block.out.block );
+                recv(block.out.block);
+            }
+        };
+        recv(block);
+        // zIndexを振りなおします
+        var zIndex = 100;
+        $.each(self.blockList,function(k,block){
+            $(block.element).css({zIndex:zIndex});
+            zIndex+=1;
+        });
     };
     self.move = function(block,position){
-        block.posX(position.left * block.pix2em);
-        block.posY(position.top  * block.pix2em);
-        updateLayout(block);
+        block.posX(position.left);
+        block.posY(position.top );
+        updatePositionLayout(block);
                    
         var hit = getHitBlock(block);
         if(hit)
@@ -430,21 +535,24 @@ function BlockManager(){
         }
     };
     self.moveStop = function(block,position){
-        block.posX(position.left * block.pix2em);
-        block.posY(position.top  * block.pix2em);
-        updateLayout(block);
+        block.posX(position.left);
+        block.posY(position.top );
+        updatePositionLayout(block);
         
         var hit = getHitBlock(block);
         if(hit)
         {
-            if(hit.isSrcIn){
+            if(hit.valueName){
+                hit.hitBlock.connectValueIn(hit.valueName, hit.srcBlock);
+            }
+            else if(hit.isSrcIn){
                 hit.hitBlock.connectOut(hit.srcBlock);
             }
             else{
                 hit.srcBlock.connectOut(hit.hitBlock);
             }
             //TODO:blockのほうをくっつくように移動させる処理を書く
-            updateLayout(block);
+            updatePositionLayout(block);
         }
     };
 }
@@ -518,29 +626,57 @@ $(function(){
         update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
             var block = ko.utils.unwrapObservable(valueAccessor());
             // ブロック内のデータの通知を受けることを伝えます
-            $.each(block.blockDataTbl,function(k,v){
+            $.each(block.valueDataTbl,function(k,v){
                 v();
             });
-            // レイアウトします
-            var posY =0;
-            var sizeW=0;
-            $(".blockRow",element).each(function(k,elem){
-                var sizeH = 0;
-                var posX  = 0;
-                $(".blockCell",elem).each(function(k,elem){
-                    $(elem).css({left:posX});
-                    var w = $(elem).outerWidth();
-                    var h = $(elem).outerHeight();
-                    posX += w;
-                    sizeH = Math.max(sizeH,h);
-                });
-                $(elem).css({top:posY,height:sizeH,width:posX});
-                posY += $(elem).outerHeight();
-                sizeW = Math.max(sizeW,$(elem).outerWidth());
+            $.each(block.valueInTbl,function(k,v){
+                v.blockObs();
             });
-            $(element).css({height:posY,width:sizeW});
-            block.blockHeight(posY  * block.pix2em);
-            block.blockWidth (sizeW * block.pix2em);
+            // レイアウトします
+            var blkLocalPosY =0;
+            var blkSizeW=0;
+            $(".blockRow",element).each(function(k,elemR){
+                var rowSizeH = 0;
+                var blkLocalPosX  = 0;
+                $(".blockCell",elemR).each(function(k,elemCell){
+                    var dataName = $(elemCell).attr("id");
+                    if(dataName)
+                    {
+                        var valueIn = block.valueInTbl[dataName];
+                        valueIn.blockLocalX = blkLocalPosX ;
+                        valueIn.blockLocalY = blkLocalPosY ;
+                         $(".hitAreaValue#"+dataName,elemR).css(
+                             {left:blkLocalPosX,
+                              top :0,}
+                         );
+                    }
+                    $(elemCell).css({left:blkLocalPosX});
+                    var cellW = $(elemCell).outerWidth();
+                    var cellH = $(elemCell).outerHeight();
+                    if(dataName)
+                    {
+                        var valueIn = block.valueInTbl[dataName];
+                        var nestMargin = 0.2 / block.pix2em;
+                        if(valueIn.blockObs())
+                        {
+                            cellW = Math.max(cellW, valueIn.blockObs().blockWidth()  + nestMargin);
+                            cellH = Math.max(cellH, valueIn.blockObs().blockHeight() + nestMargin);
+                        }
+                        //cellH += 0.2 / block.pix2em;
+                    }
+                    blkLocalPosX += cellW;
+                    rowSizeH = Math.max(rowSizeH,cellH);
+                });
+                $(elemR).css({
+                    top:blkLocalPosY,
+                    height:rowSizeH,
+                    width: blkLocalPosX});
+                blkLocalPosY += $(elemR).outerHeight();
+                blkSizeW = Math.max(blkSizeW,$(elemR).outerWidth());
+            });
+            $(element).css({height:blkLocalPosY,width:blkSizeW});
+            block.blockHeight(blkLocalPosY);
+            block.blockWidth (blkSizeW    );
 
         }
     };
@@ -644,15 +780,15 @@ $(function(){
               blockOpt:{head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
-                      {string:{dataName:'talkText0',default:"こんにちわ"}},
+                      {string:{default:"こんにちわ"},dataName:'talkText0',},
                       {label:'と　しゃべる'},
                   ]},
               ],
           },
-          function(blockDataTbl){
+          function(valueDataTbl){
               if(self.qims){
                   return self.qims.service("ALTextToSpeech").then(function(ins){
-                      return ins.say(blockDataTbl['talkText0']());
+                      return ins.say(valueDataTbl['talkText0']());
                   });
               }
               else{
@@ -669,15 +805,15 @@ $(function(){
               blockOpt:{head:'value',tail:'value'},
               blockContents:[
                   {expressions:[
-                      {string:{dataName:'text0',default:"A"}},
+                      {string:{default:"AAAA"},dataName:'text0',},
                       {label:'と'},
-                      {string:{dataName:'text1',default:"B"}},
+                      {string:{default:"BBBB"},dataName:'text1',},
                   ]},
               ],
           },
-          function(blockDataTbl){
+          function(valueDataTbl){
               var dfd = $.Deferred();
-              var output = blockDataTbl['text0']() + blockDataTbl['text1']();
+              var output = valueDataTbl['text0']() + valueDataTbl['text1']();
               dfd.resolve(output);
               return dfd.promise();
           }
@@ -686,12 +822,15 @@ $(function(){
         self.materialList.push(ko.observable(
            self.materialList()[0]().cloneThisBlock()
         ));
+        self.materialList.push(ko.observable(
+           self.materialList()[1]().cloneThisBlock()
+        ));
 
         var posX = 0;
         $.each(self.materialList(),function(key,blockInsObsv){
             blockIns = blockInsObsv();
             blockIns.posX(posX);
-            posX += 20;//blockIns.blockWidth();
+            posX += 200;//blockIns.blockWidth();
         });
     };
     myModel = new MyModel();

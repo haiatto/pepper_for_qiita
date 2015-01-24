@@ -22,10 +22,10 @@
       <svg class="head_margin" data-bind="style:{
             top:  -0.5+'em',
             left:  0.0+'em',
-            width:$parent.blockWidth()+'em'
+            width:$parent.blockWidth()
         }">
         <rect x="0em" y="0.0em" width="5em" height="1.0em" fill="red" stroke="green" />
-        <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()+'em'}" />
+        <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()}" />
       </svg>
   </script>
   <script type="text/html" id="block-space-in-template">
@@ -38,39 +38,39 @@
       <svg class="parts_margin" data-bind="style:{
             top:  -0.5+'em',
             left:  0.0+'em',
-            width:$parent.blockWidth()+'em'
+            width:$parent.blockWidth()
         }">
         <rect x="0.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green" />
         <rect x="1.0em" y="0.4em" width="1.0em" height="0.1em" fill="red" stroke="green" />
         <rect x="2.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green"
-         data-bind="attr:{width:($parent.blockWidth())+'em'}" />
+         data-bind="attr:{width:($parent.blockWidth())}" />
       </svg>
   </script>
   <script type="text/html" id="block-space-out-template">
       <div class="hitAreaOrigin" data-bind="style:{
-            top:  $parent.blockHeight()+'em',
+            top:  $parent.blockHeight(),
             left:  0.0+'em',
         }">
         <div class="hitAreaOut" style="top:0.0em;left:0.5em;"></div>
       </div>
       <svg class="parts_margin" data-bind="style:{
-            top:  $parent.blockHeight()+'em',
-            left:  0.0+'em',
-            width: $parent.blockWidth()+'em',
+            top:  $parent.blockHeight(),
+            left:  0.0,
+            width: $parent.blockWidth(),
         }">
         <rect x="0.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" />
         <rect x="1.0em" y="0.0em" width="1.0em" height="0.4em" fill="red" stroke="green" />
         <rect x="2.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" 
-         data-bind="attr:{width:($parent.blockWidth())+'em'}" />
+         data-bind="attr:{width:($parent.blockWidth())}" />
       </svg>
   </script>
   <script type="text/html" id="block-space-top-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
   </script>
   <script type="text/html" id="block-space-bottom-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
   </script>
@@ -78,13 +78,13 @@
       <div class="hitAreaOrigin">
         <div class="hitAreaScopeOut" data-bind="attr:{id:$data.scope.scopeName}"></div>
       </div>
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
         <rect x="2.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
   </script>
   <script type="text/html" id="block-space-scope-bottom-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()+'em'}">
+      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
   </script>
@@ -92,41 +92,39 @@
   <script type="text/html" id="block-template">
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
-                      style:{left:   $data.posX()+'em',
-                             top:    $data.posY()+'em',
-                             width:  $data.blockWidth()+'em',
-                             height: $data.blockHeight()+'em',},
+                      style:{left:   $data.posX(),
+                             top:    $data.posY(),
+                             width:  $data.blockWidth(),
+                             height: $data.blockHeight(),},
                       blockLayout:$data,">
         <!-- ko foreach:$data.blockTemplate.blockContents -->
           <div data-bind="if:$data.expressions">
             <div class="expressions blockRow">
               <!-- ko foreach:$data.expressions -->
+                <!-- ko if: $data.dataName -->
+                  <div class="hitAreaOrigin">
+                    <div class="hitAreaValue" style="top:0;left:0;" data-bind="attr:{id:$data.dataName}"></div>
+                  </div>
+                <!-- /ko -->
+
                 <!-- ko if: $data.label -->
                   <div class="label blockCell" data-bind="text:$data.label"></div>
-                <!-- /ko -->
+                <!-- /ko -->                
+
                 <!-- ko if: $data.string -->
-                  <div class="hitAreaOrigin">
-                    <div class="hitAreaValue" style="top:0.0em;left:0.0em;"></div>
-                  </div>
-                  <div class="string blockCell" data-bind="editableText:$parents[1].blockDataTbl[$data.string.dataName]"></div>
+                  <div class="string blockCell" data-bind="attr:{id:$data.dataName},editableText:$parents[1].valueDataTbl[$data.dataName]"></div>
                 <!-- /ko -->
+                
                 <!-- ko if: $data.number -->
-                  <div class="hitAreaOrigin">
-                    <div class="hitAreaValue" style="top:0.0em;left:0.0em;"></div>
-                  </div>
-                  <input class="number blockCell"  data-bind="">
+                  <input class="number blockCell" data-bind="attr:{id:$data.dataName}">
                 <!-- /ko -->
+
                 <!-- ko if: $data.bool -->
-                  <div class="hitAreaOrigin">
-                    <div class="hitAreaValue" style="top:0.0em;left:0.0em;"></div>
-                  </div>
-                  <div class="bool blockCell">ブール</div>
+                  <div class="bool blockCell" data-bind="attr:{id:$data.dataName}">ブール</div>
                 <!-- /ko -->
+                
                 <!-- ko if: $data.options -->
-                  <div class="hitAreaOrigin">
-                    <div class="hitAreaValue" style="top:0.0em;left:0.0em;"></div>
-                  </div>
-                  <select class="options blockCell"></select>
+                  <select class="options blockCell" data-bind="attr:{id:$data.dataName}"></select>
                 <!-- /ko -->
               <!-- /ko -->
             </div>
@@ -158,7 +156,7 @@
         <!-- /ko -->
         <!-- ko if:$data.blockTemplate.blockOpt.head=='value' -->
           <div class="hitAreaOrigin">
-            <div class="hitAreaValue" style="top:0.0em;left:0.0em;"></div>
+            <div class="hitAreaValue" style="top:0.0;left:0.0;"></div>
           </div>
         <!-- /ko -->
 

@@ -76,7 +76,9 @@
 }
 .block .blockRow{
     position:absolute; 
-    display:block;  
+    display:block;
+    border-style:solid;
+    border-width:1px;
 }
 .block .blockCell{ 
     position:absolute; 
@@ -122,7 +124,7 @@
     border-style:solid;
 }
 
-/*ドラッグ時のヒット判定用*/
+/*Ã£Æ’â€°Ã£Æ’Â©Ã£Æ’Æ’Ã£â€šÂ°Ã¦â„¢â€šÃ£ÂÂ®Ã£Æ’â€™Ã£Æ’Æ’Ã£Æ’Ë†Ã¥Ë†Â¤Ã¥Â®Å¡Ã§â€Â¨*/
 .block .hitAreaOrigin{
   position:absolute;  
 }
@@ -133,7 +135,7 @@
 
   background:blue;
   opacity: 0.5;
-  visibility: hidden;
+  /* visibility: hidden; */
 }
 .block .hitAreaOut{
   position:absolute;
@@ -142,16 +144,17 @@
 
   background: blueviolet;
   opacity: 0.5;
-  visibility: hidden;
+  /* visibility: hidden; */
 }
 .block .hitAreaValue{
   position:absolute;
-  width: 1.8em;
-  height:1.8em;
+  width: 1.0em;
+  height: 1.8em;
 
   background:yellow;
   opacity: 0.5;
-  visibility:hidden;
+  z-index: 99999;
+  /* visibility: hidden; */
 }
 
 
