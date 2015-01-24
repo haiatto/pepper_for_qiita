@@ -96,7 +96,7 @@ function Camera(alVideoDevice) {
 //         {scope:{scopeName:'scopeA',}},
 //         {expressions:[]},
 //         {scope:{scopeName:'scopeB',}},
-//         {space:{}},
+//         {space:{spaceName:'spaceA',}},
 //     ],
 // },
 // -- expressions --
@@ -122,89 +122,111 @@ function Camera(alVideoDevice) {
 function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
-    // どちらかというとプライベートな部分
+    // ■どちらかというとプライベートな部分(プライベートに出来そう)
     self.blockManager  = blockManager;
     self.blockTemplate = JSON.parse(JSON.stringify(blockTemplate));
     self.callback      = callback;
 
-    self.valueDataTbl = {};
-    self.valueInTbl = {};
-    self.scopeTbl = {};
-
-    // どちらかというとViewModel的な部分
+    // ■どちらかというとViewModel的な部分
     self.element = null;
 
-    self.pix2em      = 1;
-    self.blockWidth  = ko.observable(1);
+    self.pix2em           = 1.0;//ピクセル単位をフォント単位に変換する値
+    self.minimumRowHeight = 1.0;
+    self.indentWidth      = 1.0;
+    self.blockWidth  = ko.observable(0);
     self.blockHeight = ko.observable(0);
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
 
-    // ブロックテンプレからの準備
-    if(self.blockTemplate.blockOpt.head == 'value')
-    {
+    // ■ブロックテンプレからの準備
+
+    // 入出力部分を準備します
+    if(self.blockTemplate.blockOpt.head == 'value') {
         // 値用のブロックの連結(出力)部分
         // ※フローブロックと比べると、ある面でラムダ式っぽいかも。
         self.valueOut = {block:null, tgtDataName:null, hitArea:null};
     }
     else{
         // フロー用のブロックの連結(入出)部分
-        if(self.blockTemplate.blockOpt.head == 'in')
-        {
+        if(self.blockTemplate.blockOpt.head == 'in') {
             self.in = {block:null, hitArea:null};
         }
-        if(self.blockTemplate.blockOpt.tail == 'out')
-        {
+        if(self.blockTemplate.blockOpt.tail == 'out') {
             self.out = {block:null, hitArea:null};
         }
     }
-    for(var ii=0; ii < self.blockTemplate.blockContents.length ; ii+=1)
-    {
-        if(self.blockTemplate.blockContents[ii].expressions)
-        {
-            $.each(self.blockTemplate.blockContents[ii].expressions,function(key,data){
-                if(data.dataName){
-                    self.valueInTbl[data.dataName] = {
-                        blockObs:ko.observable(), 
-                        hitArea:null, 
-                        dataTemplate:data,
-                        blockLocalX:0,
-                        blockLocalY:0,
-                    };
-                    self.valueDataTbl[data.dataName] = ko.observable();
-                    var valueObs = self.valueDataTbl[data.dataName];
-                    if(data.bool)
+
+    // 行のような部分の中身を作ります
+    self.valueDataTbl = {};
+    self.valueInTbl = {};
+    self.scopeTbl = {};
+    self.rowContents = [];
+    $.each(self.blockTemplate.blockContents,function(rowIndex,contentTemplate){
+        // 行のような部分を構築
+        var rowContent = {
+            contentTemplate:contentTemplate,
+            rowBlockLocalY:ko.observable(),
+            rowHeight:ko.observable(),
+        };
+        if(contentTemplate.expressions) {
+            // 式(ラベルと値で構成される)の構築をします
+            rowContent.expressions = [];
+            $.each(contentTemplate.expressions,function(key,dataTemplate){
+                var expression = {
+                    dataTemplate:dataTemplate,
+                    blockLocalX:0,
+                    blockLocalY:0,
+                };
+                if(dataTemplate.dataName){
+                    expression.blockObsv = ko.observable();
+                    expression.hitArea   = null;
+                    expression.valueObsv = ko.observable();
+                    self.valueInTbl[dataTemplate.dataName] = expression;
+                    self.valueDataTbl[dataTemplate.dataName] = expression.valueObsv;
+                    if(dataTemplate.bool)
                     {
-                        valueObs(data.bool.default||false);
+                        expression.valueObsv(dataTemplate.bool.default||false);
                     }
-                    if(data.string)
+                    if(dataTemplate.string)
                     {
-                        valueObs(data.string.default||"");
+                        expression.valueObsv(dataTemplate.string.default||"");
                     }
-                    if(data.number)
+                    if(dataTemplate.number)
                     {
-                        valueObs(data.number.default||0);
+                        expression.valueObsv(dataTemplate.number.default||0);
                     }
-                    if(data.options)
+                    if(dataTemplate.options)
                     {
-                        valueObs(data.options.default||"");
+                        expression.valueObsv(dataTemplate.options.default||"");
                     }
                 }
+                rowContent.expressions.push(expression);
             });
         }
-        if(self.blockTemplate.blockContents[ii].scope)
+        if(contentTemplate.scope)
         {
-            var scope = self.blockTemplate.blockContents[ii].scope;
-            self.scopeTbl[scope.scopeName] = {
-                block:null, hitArea:null,
+            // スコープがつながる先のためのデータを作ります。
+            rowContent.scopeOut = {
+                blockObsv:ko.observable(), 
+                hitArea:null,
+            };
+            self.scopeTbl[contentTemplate.scope.scopeName] = rowContent;
+        }
+        if(contentTemplate.space)
+        {
+            // スペース用のデータを作ります。現状は空テーブル
+            rowContent.space = {
             };
         }
-    }
+        self.rowContents.push(rowContent);
+    });
     
     // 要素関連のセットアップ
     self.setup = function(element){
         self.element = element;
         self.pix2em  = 1.0 / $('#pix2em').outerHeight();
+        self.minimumRowHeight = self.minimumRowHeight / self.pix2em;
+        self.indentWidth      = self.indentWidth / self.pix2em;
         if(self.in)
         {
             self.in.hitArea = $(".hitAreaIn", element);
@@ -215,13 +237,13 @@ function Block(blockManager, blockTemplate, callback) {
         }
         if(self.valueOut)
         {
-            self.valueOut.hitArea = $(".hitAreaValue", element);
+            self.valueOut.hitArea = $(".hitAreaValueOut", element);
         }
-        $.each(self.valueInTbl, function(dataName,v){
-            v.hitArea = $(".hitAreaValue#"+dataName, element);
+        $.each(self.valueInTbl, function(dataName,valueIn){
+            valueIn.hitArea = $(".hitAreaValueIn#"+dataName, element);
         });
-        $.each(self.scopeTbl, function(k,v){
-            v.hitArea = $(".hitAreaScopeOut#"+dataName, element);
+        $.each(self.scopeTbl, function(scopeName,scope){
+            scope.scopeOut.hitArea = $(".hitAreaScopeOut#"+scopeName, element);
         });
 
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
@@ -251,6 +273,14 @@ function Block(blockManager, blockTemplate, callback) {
     // Deferred の promise作って返します
     self.deferred = function()
     {
+        // 値の受け取りを行います
+        // HACK: この形が良いかは要検討。コールバック内に委ねる方がいいかも？
+        $.each(self.valueInTbl,function(k,valueIn){
+            if(valueIn.blockObsv()){
+                //TODO: deferredの使い方に慣れたら並列化しるべし
+                self.valueDataTbl[valueIn.dataName] = valueIn.blockObsv().deferred();
+            } 
+        });
         //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
         if(self.out && self.out.block){
             return self.callback(self.valueDataTbl, self.scopeTbl).then(
@@ -281,11 +311,11 @@ function Block(blockManager, blockTemplate, callback) {
     self.clearValueIn = function(dataName)
     {
         var valueIn = self.valueInTbl[dataName];
-        if(valueIn && valueIn.blockObs())
+        if(valueIn && valueIn.blockObsv())
         {
-            valueIn.blockObs().valueOut.block       = null;
-            valueIn.blockObs().valueOut.tgtDataName = null;
-            valueIn.blockObs(null);
+            valueIn.blockObsv().valueOut.block       = null;
+            valueIn.blockObsv().valueOut.tgtDataName = null;
+            valueIn.blockObsv(null);
         }
     }
     self.clearValueOut = function()
@@ -312,24 +342,24 @@ function Block(blockManager, blockTemplate, callback) {
             self.clearValueIn(dataName);
             valueBlock.clearValueOut();
 
-            valueIn.blockObs(valueBlock);
+            valueIn.blockObsv(valueBlock);
             valueBlock.valueOut.block       = self;
             valueBlock.valueOut.tgtDataName = dataName;
         }
     };
 
     // 内側につながるブロックをセットします
-    self.connectScopeBlock = function(scopeName, block){
+    self.connectScopeOut = function(scopeName, block){
         if(null==self.scopeTbl[scopeName])
         {
             console.log("error:" + scopeName);
             return;
         }
-        if(self.scopeTbl[scopeName].block)
+        if(self.scopeTbl[scopeName].scopeOut.blockObsv())
         {
-            self.scopeTbl[scopeName].block.in.block = null;
+            self.scopeTbl[scopeName].scopeOut.blockObsv().in.block = null;
         }
-        self.scopeTbl[scopeName].block = block;
+        self.scopeTbl[scopeName].scopeOut.blockObsv(block);
         block.in.block = self;
     };
 
@@ -407,9 +437,10 @@ function BlockManager(){
                     srcBlock = outBlock;
                     isSrcIn  = false;
                     valueName = null;
+                    scopeName = null;
                 }
             }
-            if(tgtBlock.out && inBlock && inBlock.in){
+            if(tgtBlock.out && inBlock){
                 var dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
                 if(dist && dist < nearDist){
                     nearDist = dist;
@@ -417,29 +448,42 @@ function BlockManager(){
                     srcBlock = inBlock;
                     isSrcIn  = true;
                     valueName = null;
+                    scopeName = null;
                 }
             }
+            if(inBlock){
+                $.each(tgtBlock.scopeTbl,function(name,scope){
+                    var dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                    if(dist && dist < nearDist){
+                        nearDist = dist;
+                        hitBlock = tgtBlock;
+                        srcBlock = inBlock;
+                        isSrcIn  = true;
+                        valueName = null;
+                        scopeName = name;
+                    }
+                });
+            }
             if(valueBlock){
-                $.each(tgtBlock.valueInTbl,function(dataName,valueIn){
+                $.each(tgtBlock.valueInTbl,function(name,valueIn){
                     var dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
                     if(dist && dist < nearDist){
                         nearDist = dist;
                         hitBlock = tgtBlock;
                         srcBlock = valueBlock;
                         isSrcIn  = false;
-                        valueName = dataName;
+                        valueName = name;
+                        scopeName = null;
                     }
                 });
-            }
-            if(tgtBlock.scope){
-                //TODO:スコープ毎のoutの処理を
             }
         });
         if(hitBlock){
             return {hitBlock:hitBlock,
                     srcBlock:srcBlock,
                     isSrcIn:isSrcIn,
-                    valueName:valueName,};
+                    valueName:valueName,
+                    scopeName:scopeName,};
         }
     };
     // 位置のレイアウト処理です(サイズはカスタムバインドで処理します)
@@ -460,19 +504,32 @@ function BlockManager(){
         var recv = function(block){
             // 位置のみなのでブロック内の処理順は自由にやれます
             $.each(block.valueInTbl,function(k,valueIn){
-                if(valueIn.blockObs()){
+                if(valueIn.blockObsv()){
                     var blockA = block;
-                    var blockB = valueIn.blockObs();
+                    var blockB = valueIn.blockObsv();
                     blockB.posX(
                         blockA.posX() + valueIn.blockLocalX
                     );
                     blockB.posY(
                         blockA.posY() + valueIn.blockLocalY
                     );
-                    recv(valueIn.blockObs());
+                    recv(valueIn.blockObsv());
                 }
             });
-            //block.scopeTbl;
+            $.each(block.scopeTbl,function(k,scope){
+                if(scope.scopeOut.blockObsv()){
+                    var blockA = block;
+                    var blockB = scope.scopeOut.blockObsv();
+                    var marginConnector = 0.5 / blockB.pix2em;
+                    blockB.posY(
+                        blockA.posY() + scope.rowBlockLocalY() + marginConnector
+                    );
+                    blockB.posX(
+                        blockA.posX() + blockA.indentWidth
+                    );
+                    recv(blockB);
+                }
+            });
             if(block.out && block.out.block)
             {
                 var blockA = block;
@@ -503,11 +560,19 @@ function BlockManager(){
         self.blockList.push(block);
         var recv = function(block){
             $.each(block.valueInTbl,function(k,valueIn){
-                if(valueIn.blockObs())
+                if(valueIn.blockObsv())
                 {
-                    self.blockList.splice( self.blockList.indexOf(valueIn.blockObs()), 1 );                
-                    self.blockList.push( valueIn.blockObs() );
-                    recv(valueIn.blockObs());
+                    self.blockList.splice( self.blockList.indexOf(valueIn.blockObsv()), 1 );                
+                    self.blockList.push( valueIn.blockObsv() );
+                    recv(valueIn.blockObsv());
+                }
+            });
+            $.each(block.scopeTbl,function(k,scope){
+                if(scope.scopeOut.blockObsv())
+                {
+                    self.blockList.splice( self.blockList.indexOf(scope.scopeOut.blockObsv()), 1 );                
+                    self.blockList.push( scope.scopeOut.blockObsv() );
+                    recv(scope.scopeOut.blockObsv());
                 }
             });
             if(block.out && block.out.block){
@@ -545,6 +610,9 @@ function BlockManager(){
             if(hit.valueName){
                 hit.hitBlock.connectValueIn(hit.valueName, hit.srcBlock);
             }
+            else if(hit.scopeName){
+                hit.hitBlock.connectScopeOut(hit.scopeName, hit.srcBlock);
+            }
             else if(hit.isSrcIn){
                 hit.hitBlock.connectOut(hit.srcBlock);
             }
@@ -553,6 +621,99 @@ function BlockManager(){
             }
             //TODO:blockのほうをくっつくように移動させる処理を書く
             updatePositionLayout(block);
+        }
+    };
+    // ブロック用のカスタムバインド
+    ko.bindingHandlers.blockSetup = {
+        init: function(element, valueAccessor) {
+            var blockIns = ko.unwrap(valueAccessor());
+            blockIns.setup(element);
+        },
+        update: function(element, valueAccessor) {
+        }
+    };
+
+    ko.bindingHandlers.blockLayout = {
+        init: function(element, valueAccessor) {
+        },
+        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
+            var block = ko.utils.unwrapObservable(valueAccessor());
+            // ブロック内のデータの通知を受けることを伝えます
+            $.each(block.valueDataTbl,function(k,v){
+                v();
+            });
+            $.each(block.valueInTbl,function(k,v){
+                v.blockObsv();
+            });
+            // レイアウトします
+            var blkLocalPosY = 0;
+            var blkSizeW     = 0;
+            $(".blockRow",element).each(function(rowIndex,elemR){
+                var rowContent = block.rowContents[rowIndex];
+                var rowSizeH   = block.minimumRowHeight;
+                var blkLocalPosX = 0;
+                if(rowContent.expressions)
+                {
+                    $(".blockCell",elemR).each(function(k,elemCell){
+                        var dataName = $(elemCell).attr("id");
+                        if(dataName)
+                        {
+                            var valueIn = block.valueInTbl[dataName];
+                            valueIn.blockLocalX = blkLocalPosX ;
+                            valueIn.blockLocalY = blkLocalPosY ;
+                            $(".hitAreaValueIn#"+dataName,elemR).css(
+                                 {left:blkLocalPosX,
+                                  top :0,}
+                            );
+                        }
+                        $(elemCell).css({left:blkLocalPosX});
+                        var cellW = $(elemCell).outerWidth();
+                        var cellH = $(elemCell).outerHeight();
+                        if(dataName)
+                        {
+                            var valueIn = block.valueInTbl[dataName];
+                            var nestMargin = 0.2 / block.pix2em;
+                            if(valueIn.blockObsv())
+                            {
+                                cellW = Math.max(cellW, valueIn.blockObsv().blockWidth()  + nestMargin);
+                                cellH = Math.max(cellH, valueIn.blockObsv().blockHeight() + nestMargin);
+                            }
+                            //cellH += 0.2 / block.pix2em;
+                        }
+                        blkLocalPosX += cellW;
+                        rowSizeH = Math.max(rowSizeH,cellH);
+                    });
+                    rowContent.rowHeight(rowSizeH);
+                }
+                else if(rowContent.scopeOut){
+                    var scopeBlocksH = 0;
+                    var tmpOutBlock = rowContent.scopeOut.blockObsv();
+                    while(tmpOutBlock)
+                    {
+                        scopeBlocksH = scopeBlocksH + tmpOutBlock.blockHeight();
+                        if(tmpOutBlock.out && tmpOutBlock.out.block){
+                            tmpOutBlock = tmpOutBlock.out.block;
+                        }else{
+                            tmpOutBlock = null;
+                        }
+                    }
+                    rowSizeH = Math.max( rowSizeH, scopeBlocksH );
+                }
+                else if(rowContent.space){
+                }
+                rowContent.rowHeight(rowSizeH);
+                rowContent.rowBlockLocalY(blkLocalPosY);
+                $(elemR).css({
+                    top:    blkLocalPosY,
+                    height: rowSizeH,
+                    width:  blkLocalPosX});
+                blkLocalPosY += $(elemR).outerHeight();
+                blkSizeW = Math.max(blkSizeW,$(elemR).outerWidth());
+            });
+            $(element).css({height:blkLocalPosY,width:blkSizeW});
+            block.blockHeight(blkLocalPosY);
+            block.blockWidth (blkSizeW    );
+
         }
     };
 }
@@ -608,105 +769,6 @@ $(function(){
         update: function(element, valueAccessor) {
             var value = ko.utils.unwrapObservable(valueAccessor());
             $(element).text(value);
-        }
-    };
-
-    ko.bindingHandlers.blockSetup = {
-        init: function(element, valueAccessor) {
-            var blockIns = ko.unwrap(valueAccessor());
-            blockIns.setup(element);
-        },
-        update: function(element, valueAccessor) {
-        }
-    };
-
-    ko.bindingHandlers.blockLayout = {
-        init: function(element, valueAccessor) {
-        },
-        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-            var block = ko.utils.unwrapObservable(valueAccessor());
-            // ブロック内のデータの通知を受けることを伝えます
-            $.each(block.valueDataTbl,function(k,v){
-                v();
-            });
-            $.each(block.valueInTbl,function(k,v){
-                v.blockObs();
-            });
-            // レイアウトします
-            var blkLocalPosY =0;
-            var blkSizeW=0;
-            $(".blockRow",element).each(function(k,elemR){
-                var rowSizeH = 0;
-                var blkLocalPosX  = 0;
-                $(".blockCell",elemR).each(function(k,elemCell){
-                    var dataName = $(elemCell).attr("id");
-                    if(dataName)
-                    {
-                        var valueIn = block.valueInTbl[dataName];
-                        valueIn.blockLocalX = blkLocalPosX ;
-                        valueIn.blockLocalY = blkLocalPosY ;
-                         $(".hitAreaValue#"+dataName,elemR).css(
-                             {left:blkLocalPosX,
-                              top :0,}
-                         );
-                    }
-                    $(elemCell).css({left:blkLocalPosX});
-                    var cellW = $(elemCell).outerWidth();
-                    var cellH = $(elemCell).outerHeight();
-                    if(dataName)
-                    {
-                        var valueIn = block.valueInTbl[dataName];
-                        var nestMargin = 0.2 / block.pix2em;
-                        if(valueIn.blockObs())
-                        {
-                            cellW = Math.max(cellW, valueIn.blockObs().blockWidth()  + nestMargin);
-                            cellH = Math.max(cellH, valueIn.blockObs().blockHeight() + nestMargin);
-                        }
-                        //cellH += 0.2 / block.pix2em;
-                    }
-                    blkLocalPosX += cellW;
-                    rowSizeH = Math.max(rowSizeH,cellH);
-                });
-                $(elemR).css({
-                    top:blkLocalPosY,
-                    height:rowSizeH,
-                    width: blkLocalPosX});
-                blkLocalPosY += $(elemR).outerHeight();
-                blkSizeW = Math.max(blkSizeW,$(elemR).outerWidth());
-            });
-            $(element).css({height:blkLocalPosY,width:blkSizeW});
-            block.blockHeight(blkLocalPosY);
-            block.blockWidth (blkSizeW    );
-
-        }
-    };
-
-    ko.bindingHandlers.arrangeElem = {
-        init: function(element, valueAccessor) {
-        },
-        update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-            //var value = ko.utils.unwrapObservable(valueAccessor());
-
-            viewModel.textValue();
-
-            var posY =0;
-            var sizeW=0;
-            $(".testRow",element).each(function(k,elem){
-                var sizeH = 0;
-                var posX  = 0;
-                $(".testElm",elem).each(function(k,elem){
-
-                    $(elem).css({left:posX});
-                    var w = $(elem).outerWidth();
-                    var h = $(elem).outerHeight();
-                    posX += w;
-                    sizeH = Math.max(sizeH,h);
-                });
-                $(elem).css({top:posY,height:sizeH,width:posX});
-                posY += $(elem).outerHeight();
-                sizeW = Math.max(sizeW,$(elem).outerWidth());
-            });
-            $(element).css({height:posY,width:sizeW});
         }
     };
 
@@ -815,6 +877,34 @@ $(function(){
               var dfd = $.Deferred();
               var output = valueDataTbl['text0']() + valueDataTbl['text1']();
               dfd.resolve(output);
+              return dfd.promise();
+          }
+        )));
+        // 分岐ブロック
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {label:'もし'},
+                      {bool:{default:false},dataName:'checkFlag0',},
+                      {label:'なら'},
+                  ]},
+                  {scope:{scopeName:"scope0"}},
+                  {space:{}},
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              if(valueDataTbl["checkFlag0"]()){
+                  if(scopeTbl["scope0"].blockObsv())
+                  {
+                      //TODO:deferredの使い方に慣れたら使い方を検証するべし(たぶん本来の使い方じゃないよかん)
+                      scopeTbl["scope0"].blockObsv().deferred();
+                  }
+                  dfd.resolve();
+              }
               return dfd.promise();
           }
         )));

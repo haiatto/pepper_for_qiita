@@ -88,13 +88,16 @@
 
 .block .scope{
     display:block;
-    height:0.2em;
+    height:1.0em;
     width: 1.0em;
     background:red;
 }
 .block .space{
     display:block;
     height:0.5em;
+    background:red;
+}
+.block .space .bg{
     background:red;
 }
 
@@ -146,9 +149,9 @@
   opacity: 0.5;
   /* visibility: hidden; */
 }
-.block .hitAreaValue{
+.block .hitAreaValueIn{
   position:absolute;
-  width: 1.0em;
+  width: 1.5em;
   height: 1.8em;
 
   background:yellow;
@@ -156,7 +159,24 @@
   z-index: 99999;
   /* visibility: hidden; */
 }
+.block .hitAreaValueOut{
+  position:absolute;
+  width: 1.5em;
+  height: 1.8em;
 
+  background:yellow;
+  opacity: 0.5;
+  z-index: 99999;
+  /* visibility: hidden; */
+}
+.block .hitAreaScopeOut{
+  position:absolute;
+  width: 1.5em;
+  height: 1.8em;
+  background:red;
+  opacity: 0.5;
+  z-index: 99999;  
+}
 
 .testBox{
   display: block;
