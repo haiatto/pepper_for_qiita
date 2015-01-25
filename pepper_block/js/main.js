@@ -238,14 +238,10 @@ function Block(blockManager, blockTemplate, callback) {
     });
     
     // クローンするドラッグモード
+    self.isCloneDragMode = false;
     self.setCloneDragMode = function(enable)
     {
-        if(enable){
-
-        }
-        else{
-
-        }
+        self.isCloneDragMode = enable;
     };
 
     // 要素関連のセットアップ
@@ -277,6 +273,11 @@ function Block(blockManager, blockTemplate, callback) {
         var draggableDiv =$(self.element)
           .draggable({
               start:function(event, ui){
+                  if(self.isCloneDragMode)
+                  {
+                      //元の位置にクローンを残します
+                      self.cloneThisBlock();                      
+                  }
                   self.blockManager.moveStart(self, ui.position);
               },
               drag:function(event, ui){
@@ -284,6 +285,10 @@ function Block(blockManager, blockTemplate, callback) {
               },
               stop:function(event, ui){
                   self.blockManager.moveStop(self, ui.position);
+                  if(self.isCloneDragMode)
+                  {
+                      //ドロップされなかったら削除とかする                      
+                  }
               },
           })
           .dblclick(function(){
@@ -464,6 +469,11 @@ function BlockManager(){
     var self = this;
     self.blockList = [];
 
+    self.materialList = ko.observableArray();
+    self.toyList      = ko.observableArray();
+    self.factoryList  = ko.observableArray();
+
+    // コリジョン判定
     var checkHitDist = function(area0, area1){
         var offs0 = area0.offset();
         var offs1 = area1.offset();
@@ -707,6 +717,7 @@ function BlockManager(){
             updatePositionLayout(block);
         }
     };
+
     // ブロック用のカスタムバインド
     ko.bindingHandlers.blockSetup = {
         init: function(element, valueAccessor) {
@@ -800,6 +811,9 @@ function BlockManager(){
 
         }
     };
+
+    // ブロックリスト管理など
+    
 }
 
 $(function(){
@@ -1016,7 +1030,13 @@ $(function(){
         $.each(self.materialList(),function(key,blockInsObsv){
             blockIns = blockInsObsv();
             blockIns.posX(posX);
-            posX += 200;//blockIns.blockWidth();
+            posX += 150;
+        });
+
+        // マテリアルリスト内をクローンドラッグモードに変更します
+        $.each(self.materialList(), function(k,blockInsObsv){
+            blockIns = blockInsObsv();
+            blockIns.setCloneDragMode(true);
         });
     };
     myModel = new MyModel();
