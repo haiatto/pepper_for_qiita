@@ -79,6 +79,8 @@ function Camera(alVideoDevice) {
 //     '世界共通の重複しない識別子'
 //   lang
 //     'jp' 'en'
+//   color
+//     'red' '#F88'
 //   head
 //     'start' 'in' ’value’
 //   tail
@@ -136,12 +138,15 @@ function Block(blockManager, blockTemplate, callback) {
     self.element = null;
 
     self.pix2em           = 1.0;//ピクセル単位をフォント単位に変換する値
-    self.minimumRowHeight = 1.0;
-    self.indentWidth      = 1.0;
+    self.minimumRowHeightEm = 1.0;
+    self.indentWidthEm      = 1.0;
+    self.minimumRowHeight   = 0.0;//pix2em確定時に確定
+    self.indentWidth        = 0.0;//pix2em確定時に確定
     self.blockWidth  = ko.observable(0);
     self.blockHeight = ko.observable(0);
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
+    self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
 
     // ■ブロックテンプレからの準備
 
@@ -236,20 +241,43 @@ function Block(blockManager, blockTemplate, callback) {
         }
         self.rowContents.push(rowContent);
     });
+
     
     // クローンするドラッグモード
     self.isCloneDragMode = false;
     self.setCloneDragMode = function(enable)
     {
         self.isCloneDragMode = enable;
+        if(self.element) {
+            $(self.element).draggable( 
+                "option", "scope", 
+                enable?"toCloneBlock":"toOriginalBlock" 
+            );
+            $(self.element).draggable( 
+                "option", "containment", 
+                enable?$(".blockBox"):null 
+            );
+        }
     };
+
+    // 接続禁止にするモード
+    self.isNoConnectMode = false;
+    self.setNoConnectMode = function(enable)
+    {
+        self.isNoConnectMode = enable;
+    };
+
 
     // 要素関連のセットアップ
     self.setup = function(element){
+        if(self.element){
+            // 対象となる要素の再セットアップの場合…なにかやるべき？
+            self.element = null;
+        }
         self.element = element;
         self.pix2em  = 1.0 / $('#pix2em').outerHeight();
-        self.minimumRowHeight = self.minimumRowHeight / self.pix2em;
-        self.indentWidth      = self.indentWidth / self.pix2em;
+        self.minimumRowHeight = self.minimumRowHeightEm / self.pix2em;
+        self.indentWidth      = self.indentWidthEm      / self.pix2em;
         if(self.in)
         {
             self.in.hitArea = $(".hitAreaIn", element);
@@ -270,30 +298,55 @@ function Block(blockManager, blockTemplate, callback) {
         });
 
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
+        var cloneBlock = null;
         var draggableDiv =$(self.element)
           .draggable({
-              start:function(event, ui){
-                  if(self.isCloneDragMode)
-                  {
-                      //元の位置にクローンを残します
-                      self.cloneThisBlock();                      
+              //containment:$(".blockBox"),
+              //scope:'toOriginalBlock',
+              helper:function(e){
+                  if(self.isCloneDragMode){
+                      cloneBlock = self.cloneThisBlock();
+                      self.blockManager.addFloatDraggingList(cloneBlock);
+                      return cloneBlock.element;
                   }
-                  self.blockManager.moveStart(self, ui.position);
+                  else{
+                      return this;
+                  }
+              },
+              start:function(event, ui){
+                  if(self.isCloneDragMode){
+                      self.blockManager.moveStart(cloneBlock, ui.position);
+                  }
+                  else{
+                      self.blockManager.moveStart(self, ui.position);
+                  }
               },
               drag:function(event, ui){
-                  self.blockManager.move(self, ui.position);
+                  if(self.isCloneDragMode){
+                      self.blockManager.move(cloneBlock, ui.position);
+                  }
+                  else{
+                      self.blockManager.move(self, ui.position);
+                  }
               },
               stop:function(event, ui){
-                  self.blockManager.moveStop(self, ui.position);
-                  if(self.isCloneDragMode)
-                  {
-                      //ドロップされなかったら削除とかする                      
+                  if(self.isCloneDragMode){
+                      self.blockManager.moveStop(cloneBlock, ui.position);
+                      cloneBlock = null;
+                  }
+                  else{
+                      self.blockManager.moveStop(self, ui.position);
                   }
               },
           })
           .dblclick(function(){
               self.deferred();
+          })
+          .doubletap(function(){
+              self.deferred();
           });
+          // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
+          self.setCloneDragMode(self.isCloneDragMode);
 
         $('.string', draggableDiv).mousedown(function(ev) {
             draggableDiv.draggable('disable');
@@ -459,15 +512,12 @@ function Block(blockManager, blockTemplate, callback) {
         });
         return ins;
     };
-
-    // 管理に追加
-    self.blockManager.addList(self);
 }
 
 function BlockManager(){
     var self = this;
     self.blockList = [];
-
+    self.floatDraggingList = ko.observableArray();
     self.materialList = ko.observableArray();
     self.toyList      = ko.observableArray();
     self.factoryList  = ko.observableArray();
@@ -519,6 +569,9 @@ function BlockManager(){
         }
         // ヒットチェックをします
         $.each(self.blockList,function(k,tgtBlock){
+            if(tgtBlock.isNoConnectMode){
+                return;
+            }
             var dist;
             if(tgtBlock == inBlock) return;
             if(tgtBlock == outBlock) return;
@@ -643,9 +696,6 @@ function BlockManager(){
         recv(topBlock);
     };
 
-    self.addList = function(newBlock){
-        self.blockList.push(newBlock);
-    };
     self.moveStart = function(block,position){
         block.clearIn();
         block.clearValueOut();
@@ -814,7 +864,65 @@ function BlockManager(){
     };
 
     // ブロックリスト管理など
-    
+
+    // 素材リストに追加
+    self.addMaterialBlock = function(newBlock){
+        // 素材リスト内はクローンドラッグモード＆接続禁止モードに設定します
+        self.blockList.push(newBlock);
+        self.materialList.push(ko.observable(newBlock));
+        newBlock.setCloneDragMode(true);
+        newBlock.setNoConnectMode(true);
+    };    
+    // オモチャリストに追加
+    self.addToyBlock = function(newBlock){
+        self.blockList.push(newBlock);
+        self.toyList.push(ko.observable(newBlock));
+        newBlock.setCloneDragMode(false);
+        newBlock.setNoConnectMode(false);
+    };
+    // 工場リストに追加
+    self.addFactoryBlock = function(newBlock){
+        self.blockList.push(newBlock);
+        self.factoryList.push(ko.observable(newBlock));
+        newBlock.setCloneDragMode(false);
+        newBlock.setNoConnectMode(false);
+    };
+
+    // マテリアルブロックの配置を更新します
+    self.materialBlockLayoutUpdate = function(){
+        var posX = 10;
+        var posY = 20;
+        $.each(self.materialList(),function(key,blockInsObsv){
+            blockIns = blockInsObsv();
+            blockIns.posX(posX);
+            blockIns.posY(posY);
+            posX += 150;
+        });
+    };
+
+    // 別ボックスへ移動するためのドラッグ向けのリストに追加
+    self.addFloatDraggingList = function(newBlock){
+        newBlock.setCloneDragMode(false);
+        newBlock.setNoConnectMode(false);
+        self.blockList.push(newBlock);
+        self.floatDraggingList.push(ko.observable(newBlock));
+
+    };
+    self.popFloatDraggingListByElem = function(elem){
+        for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
+        {
+            var blockObsv = self.floatDraggingList()[ii];
+            if($(blockObsv().element).get(0) == $(elem).get(0))
+            {
+                self.floatDraggingList.splice(ii,1);
+
+                var block = blockObsv();
+                self.blockList.splice( self.blockList.indexOf(block), 1 );
+                self.blockList.push(block);
+                return block;
+            }
+        }
+    };
 }
 
 $(function(){
@@ -873,16 +981,15 @@ $(function(){
 
     // -- MVVMのモデル(このアプリの中枢です) --
     function MyModel() {
-
         var self = this;
 
-        self.textValue = ko.observable("");
-
-        // -- --
+        // ■ 接続処理 ■
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
-        self.ip000_000_XXX_000 = ko.observable(3);
-        self.ip000_000_000_XXX = ko.observable(34);
+//        self.ip000_000_XXX_000 = ko.observable(3);
+//        self.ip000_000_000_XXX = ko.observable(34);
+        self.ip000_000_XXX_000 = ko.observable(11);
+        self.ip000_000_000_XXX = ko.observable(17);
 
         self.nowState = ko.observable("未接続");
 
@@ -927,13 +1034,8 @@ $(function(){
             });
         };
 
-        //■  ■
-        self.blockManager = new BlockManager();
-
-        self.materialList = ko.observableArray();
-        self.toyList      = ko.observableArray();
-        self.factoryList  = ko.observableArray();
-
+        //■ ＵＩ関連の準備など ■
+        
         // 起動ボタン
         self.execBlock = function(){
 
@@ -943,11 +1045,39 @@ $(function(){
             
         };
 
+        $(".materialBox").droppable({
+            scope: 'toMaterialBlock',
+        });
+        $(".toyBox").droppable({
+            scope: 'toCloneBlock',
+            drop: function(e, ui) {
+                var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+                var dropBlock = findBlock.cloneThisBlock();
+                self.blockManager.addToyBlock(dropBlock);
+                var areaOffset = $(".toyBox").offset();
+                dropBlock.posX(ui.offset.left - areaOffset.left);
+                dropBlock.posY(ui.offset.top  - areaOffset.top);
+            },
+        });
+        $(".factoryBox").droppable({
+            scope: 'toCloneBlock',
+            drop: function(e, ui) {
+                var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+                self.blockManager.addFactoryBlock(findBlock);
+            },
+        });
+
+        //■ ブロック管理を作成 ■
+        self.blockManager = new BlockManager();
+
+
+        //■ ブロックの実装(後でソース自体を適度に分離予定) ■
+
         // 会話ブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'in',tail:'out'},
+              blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
                       {string:{default:"こんにちわ"},dataName:'talkText0',},
@@ -967,12 +1097,12 @@ $(function(){
                   return dfd.promise();
               }
           }
-        )));
+        ));
         // 文字列連結ブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'value',tail:'value'},
+              blockOpt:{color:'orange',head:'value',tail:'value'},
               blockContents:[
                   {expressions:[
                       {string:{default:"AAAA"},dataName:'text0',},
@@ -987,12 +1117,12 @@ $(function(){
               dfd.resolve(output);
               return dfd.promise();
           }
-        )));
+        ));
         // 分岐ブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'in',tail:'out'},
+              blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
                       {label:'もし'},
@@ -1018,12 +1148,12 @@ $(function(){
                   dfd.resolve();
               });
           }
-        )));
+        ));
         // ループブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'in',tail:'out'},
+              blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
                       {label:'ずっと繰り返す'}
@@ -1036,18 +1166,20 @@ $(function(){
               // スコープの先頭ブロックからpromiseを返します
               // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
               return $.Deferred(function(dfd){
-                  var d;
-                  for(var i = 0; i < 10; ++i) {
-                      scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                  if(scopeTbl.scope0.scopeOut.blockObsv())
+                  {
+                      for(var i = 0; i < 10; ++i) {
+                          scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                      }
                   }
               });
           }
-        )));
+        ));
         // モーションブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'in',tail:'out'},
+              blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
                       {string:{default:'正面'}, dataName:'angle',},
@@ -1093,15 +1225,15 @@ $(function(){
               }
               return $.Deferred().reject().promise();
           }
-        )));
+        ));
         // センサーブロック
-        self.materialList.push(ko.observable(new Block(
+        self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'value',tail:'value'},
+              blockOpt:{color:'orange',head:'value',tail:'value'},
               blockContents:[
                   {expressions:[
-                      {label:'物があるか'}
+                      {label:'物が正面にある'}
                   ]}
               ],
           },
@@ -1122,28 +1254,9 @@ $(function(){
               }
               return dfd.promise();
           }
-        )));
-
-
-        self.materialList.push(ko.observable(
-           self.materialList()[0]().cloneThisBlock()
         ));
-        self.materialList.push(ko.observable(
-           self.materialList()[1]().cloneThisBlock()
-        ));
-
-        var posX = 0;
-        $.each(self.materialList(),function(key,blockInsObsv){
-            blockIns = blockInsObsv();
-            blockIns.posX(posX);
-            posX += 150;
-        });
-
-        // マテリアルリスト内をクローンドラッグモードに変更します
-        $.each(self.materialList(), function(k,blockInsObsv){
-            blockIns = blockInsObsv();
-            blockIns.setCloneDragMode(true);
-        });
+        // 配置を更新します
+        self.blockManager.materialBlockLayoutUpdate();
     }
     myModel = new MyModel();
     ko.applyBindings( myModel );

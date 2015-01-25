@@ -3,13 +3,14 @@
   <title>ペッパーＢＬＯＣＫ</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link type="text/css" rel="stylesheet" href="css/styles.css" />
   <link type="text/css" rel="stylesheet" href="libs/jquery-ui-1.11.2/jquery-ui.css">
   <link type="text/css" rel="stylesheet" href="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.css">
+  <link type="text/css" rel="stylesheet" href="css/styles.css" />
   <script type='text/javascript' src='libs/jquery-2.1.3.min.js'></script>
   <script type='text/javascript' src='libs/jquery-ui-1.11.2/jquery-ui.js'></script>
   <script type='text/javascript' src="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.js"></script>
   <script type='text/javascript' src="libs/jquery.ui.touch-punch.js"></script>
+  <script type='text/javascript' src="libs/jquery.ui.dobletap.js"></script>
   <script type='text/javascript' src='libs/knockout-3.2.0.debug.js'></script>
   <script type='text/javascript' src="libs/qimessaging/1.0/qimessaging.js"></script>
   <script type='text/javascript' src="js/main.js"></script>
@@ -90,7 +91,7 @@
   </script>
 
   <script type="text/html" id="block-template">
-      <div class="block" 
+      <div class="ui-widget-content block" 
            data-bind="with:$data,blockSetup:$data,
                       style:{left:   $data.posX(),
                              top:    $data.posY(),
@@ -99,7 +100,7 @@
                       blockLayout:$data,">
         <!-- ko foreach:$data.rowContents -->
           <div data-bind="if:$data.expressions">
-            <div class="expressions blockRow">
+            <div class="expressions blockRow" data-bind="style:{background:$parent.blockColor()}">
               <!-- ko foreach:$data.expressions -->
                 <!-- ko if: $data.valueObsv!=null -->
                   <div class="hitAreaOrigin">
@@ -192,27 +193,35 @@
           <input type="text" pattern="\d{1,3}\" placeholder="000" data-bind="value: ip000_000_000_XXX" />
           <button data-bind="click: $root.connect">接続</button>
         </div>
-        <div>
-          <button class="vButton" data-bind="click: $root.execBlock">きどうボタン</button>
-          <button class="vButton" data-bind="click: $root.stopBlock">すべてていし</button>
+        <div class="vButton">
+          <button data-bind="click: $root.execBlock">きどうボタン</button>
+          <button data-bind="click: $root.stopBlock">すべてていし</button>
         </div>
         <div class="blockBox">
           <div id="pix2em" class="pix2em"></div>
 
+          <div class="floatDraggingArea">
+              <div data-bind="foreach:$root.blockManager.floatDraggingList">
+                <div data-bind="template:'block-template',data:$data"></div>
+              </div>
+          </div>
+
           <div class="materialBox">
               そざい
-              <div data-bind="foreach:$root.materialList">
+              <div data-bind="foreach:$root.blockManager.materialList">
                 <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
           <div class="toyBox">
               とい
-              <div data-bind="foreach:$root.toyList">
+              <div data-bind="foreach:$root.blockManager.toyList">
+                <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
           <div class="factoryBox">
               ふぁくとり
-              <div data-bind="foreach:$root.factoryList">
+              <div data-bind="foreach:$root.blockManager.factoryList">
+                <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
         <div>

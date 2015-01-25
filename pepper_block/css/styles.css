@@ -21,11 +21,16 @@
 {
     display:inline-block;
     width:20%;
- }
+}
 
-.vButton{
-   display:inline-block;
-   width:40%;   
+.vButton >.ui-btn
+{
+    display:inline-block;
+    width:49%;
+}
+
+.floatDraggingArea{
+  position:absolute;
 }
 
 .blockBox{
