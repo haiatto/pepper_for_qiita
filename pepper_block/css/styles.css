@@ -23,6 +23,11 @@
     width:20%;
  }
 
+.vButton{
+   display:inline-block;
+   width:40%;   
+}
+
 .blockBox{
     font-size:0.8em;
 }
@@ -144,7 +149,7 @@
 
   background:blue;
   opacity: 0.5;
-  /* visibility: hidden; */
+  visibility: hidden;
 }
 .block .hitAreaOut{
   position:absolute;
@@ -153,7 +158,7 @@
 
   background: blueviolet;
   opacity: 0.5;
-  /* visibility: hidden; */
+  visibility: hidden;
 }
 .block .hitAreaValueIn{
   position:absolute;
@@ -173,7 +178,7 @@
   background:yellow;
   opacity: 0.5;
   z-index: 99999;
-  /* visibility: hidden; */
+  visibility: hidden;
 }
 .block .hitAreaScopeOut{
   position:absolute;
@@ -182,6 +187,7 @@
   background:red;
   opacity: 0.5;
   z-index: 99999;  
+  visibility: hidden;
 }
 
 .testBox{

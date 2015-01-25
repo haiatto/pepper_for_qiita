@@ -237,6 +237,17 @@ function Block(blockManager, blockTemplate, callback) {
         self.rowContents.push(rowContent);
     });
     
+    // クローンするドラッグモード
+    self.setCloneDragMode = function(enable)
+    {
+        if(enable){
+
+        }
+        else{
+
+        }
+    };
+
     // 要素関連のセットアップ
     self.setup = function(element){
         self.element = element;
@@ -285,7 +296,7 @@ function Block(blockManager, blockTemplate, callback) {
             draggableDiv.draggable('enable');
         });
     };
-
+    
     // Deferred の promise作って返します
     self.deferred = function()
     {
@@ -908,6 +919,15 @@ $(function(){
         self.materialList = ko.observableArray();
         self.toyList      = ko.observableArray();
         self.factoryList  = ko.observableArray();
+
+        // 起動ボタン
+        self.execBlock = function(){
+
+        };
+        // 停止
+        self.stopBlock = function(){
+            
+        };
 
         // 会話ブロック
         self.materialList.push(ko.observable(new Block(
