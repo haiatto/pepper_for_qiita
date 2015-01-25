@@ -157,7 +157,7 @@
   background:yellow;
   opacity: 0.5;
   z-index: 99999;
-  /* visibility: hidden; */
+  visibility: hidden;
 }
 .block .hitAreaValueOut{
   position:absolute;

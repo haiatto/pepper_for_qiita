@@ -144,15 +144,26 @@ function Block(blockManager, blockTemplate, callback) {
     if(self.blockTemplate.blockOpt.head == 'value') {
         // 値用のブロックの連結(出力)部分
         // ※フローブロックと比べると、ある面でラムダ式っぽいかも。
-        self.valueOut = {block:null, tgtDataName:null, hitArea:null};
+        self.valueOut = {
+            block:null, 
+            tgtDataName:null, 
+            hitArea:null
+        };
     }
     else{
         // フロー用のブロックの連結(入出)部分
         if(self.blockTemplate.blockOpt.head == 'in') {
-            self.in = {block:null, hitArea:null};
+            self.in = {
+                block:null,
+                srcScopeName:null, 
+                hitArea:null
+            };
         }
         if(self.blockTemplate.blockOpt.tail == 'out') {
-            self.out = {block:null, hitArea:null};
+            self.out = {
+                block:null, 
+                hitArea:null
+            };
         }
     }
 
@@ -278,7 +289,9 @@ function Block(blockManager, blockTemplate, callback) {
         $.each(self.valueInTbl,function(k,valueIn){
             if(valueIn.blockObsv()){
                 //TODO: deferredの使い方に慣れたら並列化しるべし
-                self.valueDataTbl[valueIn.dataName] = valueIn.blockObsv().deferred();
+                var df   = valueIn.blockObsv().deferred;
+                var obsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
+                obsv(df());
             } 
         });
         //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
@@ -304,8 +317,22 @@ function Block(blockManager, blockTemplate, callback) {
     {    
         if(self.in && self.in.block)
         {
-            self.in.block.out.block = null;
-            self.in.block = null;
+            if(self.in.srcScopeName){
+                self.in.block.clearScopeOut(self.in.srcScopeName);
+            }else{
+                self.in.block.clearOut();
+            }
+        }
+    };
+    self.clearScopeOut = function(scopeName){
+        if(self.scopeTbl[scopeName])
+        {
+            if(self.scopeTbl[scopeName].scopeOut.blockObsv())
+            {
+                self.scopeTbl[scopeName].scopeOut.blockObsv().in.block = null;
+                self.scopeTbl[scopeName].scopeOut.blockObsv().in.srcScopeName = null;
+                self.scopeTbl[scopeName].scopeOut.blockObsv(null);
+            }
         }
     };
     self.clearValueIn = function(dataName)
@@ -361,6 +388,7 @@ function Block(blockManager, blockTemplate, callback) {
         }
         self.scopeTbl[scopeName].scopeOut.blockObsv(block);
         block.in.block = self;
+        block.in.srcScopeName = scopeName;
     };
 
     // 複製します(内側のブロックは複製されません)
@@ -900,10 +928,11 @@ $(function(){
           function(valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
               if(valueDataTbl.checkFlag0()){
-                  if(scopeTbl.scope0.blockObsv())
+                  //HACK: scopeOutが微妙なのでなんとかしたい。
+                  if(scopeTbl.scope0.scopeOut.blockObsv())
                   {
                       //TODO:deferredの使い方に慣れたら使い方を検証するべし(たぶん本来の使い方じゃないよかん)
-                      scopeTbl.scope0.blockObsv().deferred();
+                      scopeTbl.scope0.scopeOut.blockObsv().deferred();
                   }
                   dfd.resolve();
               }
@@ -917,24 +946,40 @@ $(function(){
               blockOpt:{head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
-                      {label:'横'},
-                      {number:{default:50}, dataName:'ratio_x',},
-                      {label:'度、縦'},
-                      {number:{default:0}, dataName:'ratio_y',},
-                      {label:'度を向く'},
+                      {string:{default:'正面'}, dataName:'angle',},
+                      {label:'を向く'},
                   ]}
               ],
           },
           function(valueDataTbl,scopeTbl){
               var dfd;
               var onFail = function(e) {console.error('fail:' + e);};
-              var ratio_x = valueDataTbl.ratio_x() / 360;
-              var ratio_y = valueDataTbl.ratio_y() / 360;
+              var ratio_x;
+              var ratio_y = 0.5;
+
+              switch(valueDataTbl.angle()) {
+              case '右':
+                  ratio_x = 0.25;
+                  break;
+              case '左':
+                  ratio_x = 0.75;
+                  break;
+              case '正面':
+                  ratio_x = 0.5;
+                  break;
+              default:
+                  ratio_x = 0.5;
+                  break;
+              }
+
               var angYaw = (2.0857 + 2.0857) * ratio_x + -2.0857;
               var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
               var name = ['HeadYaw', 'HeadPitch'];
               var angle = [angYaw, angPitch];
-              var DELAY = 0.4;
+              var DELAY = 0.5;
+
+              console.log('ratio_x:' + ratio_x);
+
               if(self.qims){
                   return self.qims.service('ALMotion')
                       .fail(onFail).done(function(ms){
