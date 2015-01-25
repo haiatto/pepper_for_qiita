@@ -956,6 +956,8 @@ $(function(){
               var onFail = function(e) {console.error('fail:' + e);};
               var ratio_x;
               var ratio_y = 0.5;
+              var name = ['HeadYaw', 'HeadPitch'];
+              var DELAY = 0.5;
 
               switch(valueDataTbl.angle()) {
               case '右':
@@ -974,19 +976,13 @@ $(function(){
 
               var angYaw = (2.0857 + 2.0857) * ratio_x + -2.0857;
               var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
-              var name = ['HeadYaw', 'HeadPitch'];
               var angle = [angYaw, angPitch];
-              var DELAY = 0.5;
-
-              console.log('ratio_x:' + ratio_x);
 
               if(self.qims){
                   return self.qims.service('ALMotion')
                       .fail(onFail).done(function(ms){
                           ms.wakeUp().fail(onFail).done(function(){
-                              ms.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail).done(function(){
-                                  console.log("success");
-                              });
+                              ms.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail);
                           });
                       });
               }
@@ -995,7 +991,6 @@ $(function(){
                   dfd.reject();
                   return dfd.promise();
               }
-              return dfd.promise();
           }
         )));
 
