@@ -985,6 +985,30 @@ $(function(){
               });
           }
         )));
+        // ループブロック
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {label:'ずっと繰り返す'}
+                  ]},
+                  {scope:{scopeName:"scope0"}},
+                  {space:{}},
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              // スコープの先頭ブロックからpromiseを返します
+              // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
+              return $.Deferred(function(dfd){
+                  var d;
+                  for(var i = 0; i < 10; ++i) {
+                      scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                  }
+              });
+          }
+        )));
         // モーションブロック
         self.materialList.push(ko.observable(new Block(
           self.blockManager,
@@ -1043,8 +1067,7 @@ $(function(){
               blockOpt:{head:'value',tail:'value'},
               blockContents:[
                   {expressions:[
-                      {string:{default:'左'}, dataName:'side',},
-                      {label:'に物があるか'}
+                      {label:'物があるか'}
                   ]}
               ],
           },
