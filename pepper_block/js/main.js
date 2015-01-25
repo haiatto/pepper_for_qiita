@@ -268,7 +268,7 @@ function Block(blockManager, blockTemplate, callback) {
         }).mouseup(function(ev) {
             draggableDiv.draggable('enable');
         });
-    }
+    };
 
     // Deferred の promise作って返します
     self.deferred = function()
@@ -299,7 +299,7 @@ function Block(blockManager, blockTemplate, callback) {
             self.out.block.in.block = null;
             self.out.block = null;
         }
-    }
+    };
     self.clearIn = function()
     {    
         if(self.in && self.in.block)
@@ -307,7 +307,7 @@ function Block(blockManager, blockTemplate, callback) {
             self.in.block.out.block = null;
             self.in.block = null;
         }
-    }
+    };
     self.clearValueIn = function(dataName)
     {
         var valueIn = self.valueInTbl[dataName];
@@ -317,14 +317,14 @@ function Block(blockManager, blockTemplate, callback) {
             valueIn.blockObsv().valueOut.tgtDataName = null;
             valueIn.blockObsv(null);
         }
-    }
+    };
     self.clearValueOut = function()
     {
         if(self.valueOut && self.valueOut.block)
         {
             self.valueOut.block.clearValueIn( self.valueOut.tgtDataName );
         }
-    }
+    };
 
     // 外側につながるブロックをセットします
     self.connectOut = function(block){
@@ -350,7 +350,7 @@ function Block(blockManager, blockTemplate, callback) {
 
     // 内側につながるブロックをセットします
     self.connectScopeOut = function(scopeName, block){
-        if(null==self.scopeTbl[scopeName])
+        if(!self.scopeTbl[scopeName])
         {
             console.log("error:" + scopeName);
             return;
@@ -426,11 +426,12 @@ function BlockManager(){
         }
         // ヒットチェックをします
         $.each(self.blockList,function(k,tgtBlock){
+            var dist;
             if(tgtBlock == inBlock) return;
             if(tgtBlock == outBlock) return;
             if(tgtBlock == valueBlock) return;
             if(tgtBlock.in && outBlock && outBlock.out){
-                var dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
                 if(dist && dist < nearDist){
                     nearDist = dist;
                     hitBlock = tgtBlock;
@@ -441,7 +442,7 @@ function BlockManager(){
                 }
             }
             if(tgtBlock.out && inBlock){
-                var dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
                 if(dist && dist < nearDist){
                     nearDist = dist;
                     hitBlock = tgtBlock;
@@ -453,7 +454,7 @@ function BlockManager(){
             }
             if(inBlock){
                 $.each(tgtBlock.scopeTbl,function(name,scope){
-                    var dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                    dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
                     if(dist && dist < nearDist){
                         nearDist = dist;
                         hitBlock = tgtBlock;
@@ -466,7 +467,7 @@ function BlockManager(){
             }
             if(valueBlock){
                 $.each(tgtBlock.valueInTbl,function(name,valueIn){
-                    var dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                    dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
                     if(dist && dist < nearDist){
                         nearDist = dist;
                         hitBlock = tgtBlock;
@@ -655,10 +656,11 @@ function BlockManager(){
                 if(rowContent.expressions)
                 {
                     $(".blockCell",elemR).each(function(k,elemCell){
+                        var valueln;
                         var dataName = $(elemCell).attr("id");
                         if(dataName)
                         {
-                            var valueIn = block.valueInTbl[dataName];
+                            valueIn = block.valueInTbl[dataName];
                             valueIn.blockLocalX = blkLocalPosX ;
                             valueIn.blockLocalY = blkLocalPosY ;
                             $(".hitAreaValueIn#"+dataName,elemR).css(
@@ -671,7 +673,7 @@ function BlockManager(){
                         var cellH = $(elemCell).outerHeight();
                         if(dataName)
                         {
-                            var valueIn = block.valueInTbl[dataName];
+                            valueIn = block.valueInTbl[dataName];
                             var nestMargin = 0.2 / block.pix2em;
                             if(valueIn.blockObsv())
                             {
@@ -782,8 +784,8 @@ $(function(){
         // -- --
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
-        self.ip000_000_XXX_000 = ko.observable(11);
-        self.ip000_000_000_XXX = ko.observable(17);
+        self.ip000_000_XXX_000 = ko.observable(3);
+        self.ip000_000_000_XXX = ko.observable(34);
 
         self.nowState = ko.observable("未接続");
 
@@ -804,7 +806,7 @@ $(function(){
               self.alVideoDevice = ins;
               self.cameraIns = new Camera(self.alVideoDevice);
             });  
-        }
+        };
         self.qims = null;
         self.connect = function() 
         {
@@ -850,7 +852,7 @@ $(function(){
           function(valueDataTbl){
               if(self.qims){
                   return self.qims.service("ALTextToSpeech").then(function(ins){
-                      return ins.say(valueDataTbl['talkText0']());
+                      return ins.say(valueDataTbl.talkText0());
                   });
               }
               else{
@@ -875,7 +877,7 @@ $(function(){
           },
           function(valueDataTbl){
               var dfd = $.Deferred();
-              var output = valueDataTbl['text0']() + valueDataTbl['text1']();
+              var output = valueDataTbl.text0() + valueDataTbl.text1();
               dfd.resolve(output);
               return dfd.promise();
           }
@@ -897,13 +899,56 @@ $(function(){
           },
           function(valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
-              if(valueDataTbl["checkFlag0"]()){
-                  if(scopeTbl["scope0"].blockObsv())
+              if(valueDataTbl.checkFlag0()){
+                  if(scopeTbl.scope0.blockObsv())
                   {
                       //TODO:deferredの使い方に慣れたら使い方を検証するべし(たぶん本来の使い方じゃないよかん)
-                      scopeTbl["scope0"].blockObsv().deferred();
+                      scopeTbl.scope0.blockObsv().deferred();
                   }
                   dfd.resolve();
+              }
+              return dfd.promise();
+          }
+        )));
+        // モーションブロック
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {label:'横'},
+                      {number:{default:50}, dataName:'ratio_x',},
+                      {label:'度、縦'},
+                      {number:{default:0}, dataName:'ratio_y',},
+                      {label:'度を向く'},
+                  ]}
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              var dfd;
+              var onFail = function(e) {console.error('fail:' + e);};
+              var ratio_x = valueDataTbl.ratio_x() / 360;
+              var ratio_y = valueDataTbl.ratio_y() / 360;
+              var angYaw = (2.0857 + 2.0857) * ratio_x + -2.0857;
+              var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
+              var name = ['HeadYaw', 'HeadPitch'];
+              var angle = [angYaw, angPitch];
+              var DELAY = 0.4;
+              if(self.qims){
+                  return self.qims.service('ALMotion')
+                      .fail(onFail).done(function(ms){
+                          ms.wakeUp().fail(onFail).done(function(){
+                              ms.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail).done(function(){
+                                  console.log("success");
+                              });
+                          });
+                      });
+              }
+              else{
+                  dfd = $.Deferred();
+                  dfd.reject();
+                  return dfd.promise();
               }
               return dfd.promise();
           }
@@ -922,7 +967,7 @@ $(function(){
             blockIns.posX(posX);
             posX += 200;//blockIns.blockWidth();
         });
-    };
+    }
     myModel = new MyModel();
     ko.applyBindings( myModel );
 });
