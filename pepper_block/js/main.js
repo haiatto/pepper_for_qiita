@@ -313,19 +313,38 @@ function Block(blockManager, blockTemplate, callback) {
             if(self.out && self.out.block){
                 return $.Deferred(function(dfd){
                     // 自身の処理を実行します
-                    //return self.callback(self.valueDataTbl, self.scopeTbl).then(function(){
+                    $(self.element).removeClass("executeError"); 
+                    $(self.element).addClass("executeNow");
                     self.callback(self.valueDataTbl, self.scopeTbl)
-                    .then(function(){
+                    .then(
+                      function(){
                         // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
+                        $(self.element).removeClass("executeNow"); 
                         self.out.block.deferred().then(function(){
                             // 繋がるブロック移行が完了したら自身も完了させます
                             dfd.resolve();
-                        })
-                    })
+                        });
+                      },
+                      function(){
+                        //失敗時
+                        $(self.element).removeClass("executeNow"); 
+                        $(self.element).addClass("executeError");                        
+                      }
+                    );
                 }).promise();
             }
             else{
-                return self.callback(self.valueDataTbl, self.scopeTbl);
+                $(self.element).removeClass("executeError"); 
+                $(self.element).addClass("executeNow");
+                return self.callback(self.valueDataTbl, self.scopeTbl).then(function(v){
+                   $(self.element).removeClass("executeNow"); 
+                   return v;
+                },
+                function(){
+                    //失敗時
+                    $(self.element).removeClass("executeNow"); 
+                    $(self.element).addClass("executeError");
+                });
             }
         });
     };

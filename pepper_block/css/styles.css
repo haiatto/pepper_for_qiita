@@ -64,6 +64,12 @@
     top:0.0em;
     left:0.0em;
 }
+.executeNow{
+  box-shadow: 0 0 1em 0.5em red;
+}
+.executeError{
+  box-shadow: 0 0 1em 0.5em blue;
+}
 .block .head_margin{
   position:absolute; 
   height:1.0em;
