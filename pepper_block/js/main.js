@@ -952,7 +952,6 @@ $(function(){
               ],
           },
           function(valueDataTbl,scopeTbl){
-              var dfd;
               var onFail = function(e) {console.error('fail:' + e);};
               var ratio_x;
               var ratio_y = 0.5;
@@ -977,22 +976,48 @@ $(function(){
               var angYaw = (2.0857 + 2.0857) * ratio_x + -2.0857;
               var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
               var angle = [angYaw, angPitch];
+              var alMotion;
 
               if(self.qims){
                   return self.qims.service('ALMotion')
-                      .fail(onFail).done(function(ms){
-                          ms.wakeUp().fail(onFail).done(function(){
-                              ms.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail);
-                          });
-                      });
+                      .then(function(s){
+                          alMotion = s;
+                          return alMotion.wakeUp();
+                      }, onFail).then(function(){
+                          return alMotion.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail);
+                      }, onFail).promise();
               }
-              else{
-                  dfd = $.Deferred();
-                  dfd.reject();
-                  return dfd.promise();
-              }
+              return $.Deferred().reject().promise();
           }
         )));
+        // センサーブロック
+        self.materialList.push(ko.observable(new Block(
+          self.blockManager,
+          {
+              blockOpt:{head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {string:{default:'左'}, dataName:'side',},
+                      {label:'に物があるか'}
+                  ]}
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              var onFail = function(e) {console.error('fail:' + e);};
+              var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
+              var LIMIT = 0.5;
+              if(self.qims){
+                  return self.qims.service('ALMemory').then(function(s){
+                      return s.getData(FRONT_KEY).then(function(v){
+                          return v < LIMIT;
+                      }, onFail).promise();
+                  }, onFail);
+              }
+              return $.Deferred().reject().promise();
+          }
+        )));
+
 
         self.materialList.push(ko.observable(
            self.materialList()[0]().cloneThisBlock()
