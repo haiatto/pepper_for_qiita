@@ -289,7 +289,9 @@ function Block(blockManager, blockTemplate, callback) {
         $.each(self.valueInTbl,function(k,valueIn){
             if(valueIn.blockObsv()){
                 //TODO: deferredの使い方に慣れたら並列化しるべし
-                self.valueDataTbl[valueIn.dataName] = valueIn.blockObsv().deferred();
+                var df   = valueIn.blockObsv().deferred;
+                var obsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
+                obsv(df());
             } 
         });
         //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
@@ -924,10 +926,11 @@ $(function(){
           function(valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
               if(valueDataTbl["checkFlag0"]()){
-                  if(scopeTbl["scope0"].blockObsv())
+                  //HACK: scopeOutが微妙なのでなんとかしたい。
+                  if(scopeTbl["scope0"].scopeOut.blockObsv())
                   {
                       //TODO:deferredの使い方に慣れたら使い方を検証するべし(たぶん本来の使い方じゃないよかん)
-                      scopeTbl["scope0"].blockObsv().deferred();
+                      scopeTbl["scope0"].scopeOut.blockObsv().deferred();
                   }
                   dfd.resolve();
               }
