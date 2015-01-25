@@ -119,6 +119,11 @@ function Camera(alVideoDevice) {
 //  
 //==============================
 
+//deferredの参考リンク
+// http://s3pw.com/qrefy/collectdeferred/
+// http://tokkono.cute.coocan.jp/blog/slow/index.php/programming/jquery-deferred-for-responsive-applications-basic/
+//
+
 function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
@@ -286,23 +291,62 @@ function Block(blockManager, blockTemplate, callback) {
     {
         // 値の受け取りを行います
         // HACK: この形が良いかは要検討。コールバック内に委ねる方がいいかも？
+        var valuePromiseList = [];
         $.each(self.valueInTbl,function(k,valueIn){
             if(valueIn.blockObsv()){
-                //TODO: deferredの使い方に慣れたら並列化しるべし
-                var df   = valueIn.blockObsv().deferred;
-                var obsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
-                obsv(df());
+                // 値ブロックのpromiseを実行してその結果をvalueDataTblにセットするpromiseを作成
+                valuePromiseList.push(
+                    $.Deferred(function(dfd) {
+                        var valuePromise = valueIn.blockObsv().deferred();
+                        valuePromise.then(function(value){
+                            var valueObsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
+                            valueObsv(value);
+                            dfd.resolve();
+                        });
+                    }).promise()
+                );
             } 
         });
-        //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
-        if(self.out && self.out.block){
-            return self.callback(self.valueDataTbl, self.scopeTbl).then(
-                self.out.block.deferred
-            );
-        }
-        else{
-            return self.callback(self.valueDataTbl, self.scopeTbl);
-        }
+        // 入力する値ブロックが全部完了したら自身のコールバックを実行します
+        return $.when(valuePromiseList).then(function(){
+            //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
+            if(self.out && self.out.block){
+                return $.Deferred(function(dfd){
+                    // 自身の処理を実行します
+                    $(self.element).removeClass("executeError"); 
+                    $(self.element).addClass("executeNow");
+                    self.callback(self.valueDataTbl, self.scopeTbl)
+                    .then(
+                      function(){
+                        // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
+                        $(self.element).removeClass("executeNow"); 
+                        self.out.block.deferred().then(function(){
+                            // 繋がるブロック移行が完了したら自身も完了させます
+                            dfd.resolve();
+                        });
+                      },
+                      function(){
+                        //失敗時
+                        $(self.element).removeClass("executeNow"); 
+                        $(self.element).addClass("executeError");                        
+                      }
+                    );
+                }).promise();
+            }
+            else{
+                $(self.element).removeClass("executeError"); 
+                $(self.element).addClass("executeNow");
+                return self.callback(self.valueDataTbl, self.scopeTbl).then(function(v){
+                   $(self.element).removeClass("executeNow"); 
+                   return v;
+                },
+                function(){
+                    //失敗時
+                    $(self.element).removeClass("executeNow"); 
+                    $(self.element).addClass("executeError");
+                });
+            }
+        });
     };
 
     self.clearOut = function()
@@ -926,17 +970,19 @@ $(function(){
               ],
           },
           function(valueDataTbl,scopeTbl){
-              var dfd = $.Deferred();
               if(valueDataTbl.checkFlag0()){
                   //HACK: scopeOutが微妙なのでなんとかしたい。
                   if(scopeTbl.scope0.scopeOut.blockObsv())
                   {
-                      //TODO:deferredの使い方に慣れたら使い方を検証するべし(たぶん本来の使い方じゃないよかん)
-                      scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                      // スコープの先頭ブロックからpromiseを返します
+                      // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
+                      return scopeTbl.scope0.scopeOut.blockObsv().deferred();
                   }
-                  dfd.resolve();
               }
-              return dfd.promise();
+              //分岐なかったので即resolveするpromiseを返します
+              return $.Deferred(function(dfd){
+                  dfd.resolve();
+              });
           }
         )));
         // モーションブロック
@@ -994,7 +1040,7 @@ $(function(){
         self.materialList.push(ko.observable(new Block(
           self.blockManager,
           {
-              blockOpt:{head:'in',tail:'out'},
+              blockOpt:{head:'value',tail:'value'},
               blockContents:[
                   {expressions:[
                       {string:{default:'左'}, dataName:'side',},
@@ -1008,13 +1054,16 @@ $(function(){
               var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
               var LIMIT = 0.5;
               if(self.qims){
-                  return self.qims.service('ALMemory').then(function(s){
-                      return s.getData(FRONT_KEY).then(function(v){
-                          return v < LIMIT;
-                      }, onFail).promise();
+                  self.qims.service('ALMemory').then(function(s){
+                      s.getData(FRONT_KEY).then(function(v){
+                          console.log('value:' + v);
+                          dfd.resolve(v < LIMIT);
+                      }, onFail);
                   }, onFail);
+              } else {
+                  dfd.reject();
               }
-              return $.Deferred().reject().promise();
+              return dfd.promise();
           }
         )));
 
