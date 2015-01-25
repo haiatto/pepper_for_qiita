@@ -144,15 +144,26 @@ function Block(blockManager, blockTemplate, callback) {
     if(self.blockTemplate.blockOpt.head == 'value') {
         // 値用のブロックの連結(出力)部分
         // ※フローブロックと比べると、ある面でラムダ式っぽいかも。
-        self.valueOut = {block:null, tgtDataName:null, hitArea:null};
+        self.valueOut = {
+            block:null, 
+            tgtDataName:null, 
+            hitArea:null
+        };
     }
     else{
         // フロー用のブロックの連結(入出)部分
         if(self.blockTemplate.blockOpt.head == 'in') {
-            self.in = {block:null, hitArea:null};
+            self.in = {
+                block:null,
+                srcScopeName:null, 
+                hitArea:null
+            };
         }
         if(self.blockTemplate.blockOpt.tail == 'out') {
-            self.out = {block:null, hitArea:null};
+            self.out = {
+                block:null, 
+                hitArea:null
+            };
         }
     }
 
@@ -299,15 +310,29 @@ function Block(blockManager, blockTemplate, callback) {
             self.out.block.in.block = null;
             self.out.block = null;
         }
-    }
+    };
     self.clearIn = function()
     {    
         if(self.in && self.in.block)
         {
-            self.in.block.out.block = null;
-            self.in.block = null;
+            if(self.in.srcScopeName){
+                self.in.block.clearScopeOut(self.in.srcScopeName);
+            }else{
+                self.in.block.clearOut();
+            }
         }
-    }
+    };
+    self.clearScopeOut = function(scopeName){
+        if(self.scopeTbl[scopeName])
+        {
+            if(self.scopeTbl[scopeName].scopeOut.blockObsv())
+            {
+                self.scopeTbl[scopeName].scopeOut.blockObsv().in.block = null;
+                self.scopeTbl[scopeName].scopeOut.blockObsv().in.srcScopeName = null;
+                self.scopeTbl[scopeName].scopeOut.blockObsv(null);
+            }
+        }
+    };
     self.clearValueIn = function(dataName)
     {
         var valueIn = self.valueInTbl[dataName];
@@ -317,14 +342,14 @@ function Block(blockManager, blockTemplate, callback) {
             valueIn.blockObsv().valueOut.tgtDataName = null;
             valueIn.blockObsv(null);
         }
-    }
+    };
     self.clearValueOut = function()
     {
         if(self.valueOut && self.valueOut.block)
         {
             self.valueOut.block.clearValueIn( self.valueOut.tgtDataName );
         }
-    }
+    };
 
     // 外側につながるブロックをセットします
     self.connectOut = function(block){
@@ -361,6 +386,7 @@ function Block(blockManager, blockTemplate, callback) {
         }
         self.scopeTbl[scopeName].scopeOut.blockObsv(block);
         block.in.block = self;
+        block.in.srcScopeName = scopeName;
     };
 
     // 複製します(内側のブロックは複製されません)
@@ -782,8 +808,8 @@ $(function(){
         // -- --
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
-        self.ip000_000_XXX_000 = ko.observable(11);
-        self.ip000_000_000_XXX = ko.observable(17);
+        self.ip000_000_XXX_000 = ko.observable(3);
+        self.ip000_000_000_XXX = ko.observable(34);
 
         self.nowState = ko.observable("未接続");
 
