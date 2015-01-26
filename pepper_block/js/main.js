@@ -1245,16 +1245,18 @@ $(function(){
                                 list:[{text:"正面",value:"正面"},
                                       {text:"右",value:"右"},
                                       {text:"左",value:"左"},
+                                      {text:"上",value:"上"},
+                                      {text:"下",value:"下"},
                                      ]}, 
                        dataName:'angle',
                       },
-                      {label:'を向く'},
+                      {label:'に顔を向ける'},
                   ]}
               ],
           },
           function(valueDataTbl,scopeTbl){
               var onFail = function(e) {console.error('fail:' + e);};
-              var ratio_x;
+              var ratio_x = 0.5;
               var ratio_y = 0.5;
               var name = ['HeadYaw', 'HeadPitch'];
               var DELAY = 0.5;
@@ -1269,16 +1271,21 @@ $(function(){
               case '正面':
                   ratio_x = 0.5;
                   break;
+              case '上':
+                  ratio_y = 0.25;
+                  break;
+              case '下':
+                  ratio_y = 0.75;
+                  break;
               default:
                   ratio_x = 0.5;
                   break;
               }
 
-              var angYaw = (2.0857 + 2.0857) * ratio_x + -2.0857;
+              var angYaw   = (2.0857 + 2.0857) * ratio_x + -2.0857;
               var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
               var angle = [angYaw, angPitch];
               var alMotion;
-
               if(self.qims){
                   return self.qims.service('ALMotion')
 //                       .then(function(s){
@@ -1315,6 +1322,54 @@ $(function(){
                           console.log('value:' + v);
                           dfd.resolve(v < LIMIT);
                       }, onFail);
+                  }, onFail);
+              } else {
+                  dfd.reject();
+              }
+              return dfd.promise();
+          }
+        ));
+
+        // 音声認識ブロック
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{color:'orange',head:'value',tail:'value'},
+              blockContents:[
+                  {expressions:[
+                      {string:{default:"はい"},dataName:'recoText',},
+                      {label:'と聞こえたら'},
+                  ]}
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              var onFail = function(e) {console.error('fail:' + e);};
+              var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
+              var LIMIT = 0.5;
+              if(self.qims){
+                  var wait_time =  function(time){
+                      return (function(){
+                          var dfd = $.Deferred()
+                          setTimeout(function(){  console.log("resolve#wait_time("+time+") ");dfd.resolve(); }, time*1000);
+                          return dfd.promise()
+                      })
+                  };
+                  self.qims.service('ALSpeechRecognition').then(function(asr){
+                      asr.setLanguage("Japanese").then(function(){
+                          var vocabulary = [valueDataTbl["recoText"]()];
+                          asr.unsubscribe("Test_ASR AAA").then(function(){
+                              asr.setVocabulary(vocabulary, true).then(function(){
+                                  //Start the speech recognition engine with user Test_ASR
+                                  asr.subscribe("Test_ASR AAA")
+                                  .then(function(){
+                                      console.log('Speech recognition engine started');
+                                      asr.unsubscribe("Test_ASR AAA").then(function(){
+                                      });
+                                  });
+                              });
+                          });                              
+                      });
                   }, onFail);
               } else {
                   dfd.reject();
