@@ -112,7 +112,7 @@ function Camera(alVideoDevice) {
 //   {label:"ここに"}.
 //   {string:{default:"",},dataName:'dataA'},
 //   {string:{default:"",},dataName:'dataB'},
-//   {options:{default:'',list:{'いち':'1','に':'2',}},dataName:'dataC'},
+//   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC'},
 // ],
 
 //■■■■■ 多言語対応案 ■■■■■ 
@@ -299,7 +299,8 @@ function Block(blockManager, blockTemplate, callback) {
 
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
         var cloneBlock = null;
-        var draggableDiv =$(self.element)
+        var draggableDiv =$(self.element);
+        draggableDiv
           .draggable({
               //containment:$(".blockBox"),
               //scope:'toOriginalBlock',
@@ -339,19 +340,21 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
           })
-          .dblclick(function(){
-              self.deferred();
-          })
+          //.dblclick(function(){
+          //    self.deferred();
+          //})
           .doubletap(function(){
               self.deferred();
           });
-          // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
-          self.setCloneDragMode(self.isCloneDragMode);
+        // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
+        self.setCloneDragMode(self.isCloneDragMode);
 
-        $('.string', draggableDiv).mousedown(function(ev) {
-            draggableDiv.draggable('disable');
-        }).mouseup(function(ev) {
-            draggableDiv.draggable('enable');
+        $('.string', draggableDiv)
+        .mousedown(function(ev) {
+              draggableDiv.draggable('disable');
+        })
+        .mouseup(function(ev) {
+              draggableDiv.draggable('enable');
         });
     };
     
@@ -405,15 +408,16 @@ function Block(blockManager, blockTemplate, callback) {
             else{
                 $(self.element).removeClass("executeError"); 
                 $(self.element).addClass("executeNow");
-                return self.callback(self.valueDataTbl, self.scopeTbl).then(function(v){
-                   $(self.element).removeClass("executeNow"); 
-                   return v;
-                },
-                function(){
-                    //失敗時
-                    $(self.element).removeClass("executeNow"); 
-                    $(self.element).addClass("executeError");
-                });
+                return self.callback(self.valueDataTbl, self.scopeTbl)
+                    .then(function(v){
+                        $(self.element).removeClass("executeNow"); 
+                        return v;
+                     },
+                     function(){
+                         //失敗時
+                         $(self.element).removeClass("executeNow"); 
+                         $(self.element).addClass("executeError");
+                     });
             }
         });
     };
@@ -896,7 +900,7 @@ function BlockManager(){
             blockIns = blockInsObsv();
             blockIns.posX(posX);
             blockIns.posY(posY);
-            posX += 150;
+            posX += 130;
         });
     };
 
@@ -986,10 +990,10 @@ $(function(){
         // ■ 接続処理 ■
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
-//        self.ip000_000_XXX_000 = ko.observable(3);
-//        self.ip000_000_000_XXX = ko.observable(34);
-        self.ip000_000_XXX_000 = ko.observable(11);
-        self.ip000_000_000_XXX = ko.observable(17);
+        self.ip000_000_XXX_000 = ko.observable(3);
+        self.ip000_000_000_XXX = ko.observable(80);
+//         self.ip000_000_XXX_000 = ko.observable(11);
+//         self.ip000_000_000_XXX = ko.observable(17);
 
         self.nowState = ko.observable("未接続");
 
@@ -1035,10 +1039,26 @@ $(function(){
         };
 
         //■ ＵＩ関連の準備など ■
+
+        self.wakeupPepper = function(){
+          if(self.qims){
+              self.qims.service("ALMotion")
+              .then(function(alMotion){
+                  return alMotion.wakeUp();
+              });
+          }
+        };
+        self.restPepper = function(){
+          if(self.qims){
+              self.qims.service("ALMotion")
+              .then(function(alMotion){
+                  return alMotion.rest();
+              });
+          }
+        };
         
         // 起動ボタン
         self.execBlock = function(){
-
         };
         // 停止
         self.stopBlock = function(){
@@ -1156,7 +1176,8 @@ $(function(){
               blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
-                      {label:'ずっと繰り返す'}
+                      //{label:'ずっと繰り返す'}
+                      {label:'しばらく繰り返す'}
                   ]},
                   {scope:{scopeName:"scope0"}},
                   {space:{}},
@@ -1165,16 +1186,53 @@ $(function(){
           function(valueDataTbl,scopeTbl){
               // スコープの先頭ブロックからpromiseを返します
               // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
-              return $.Deferred(function(dfd){
-                  if(scopeTbl.scope0.scopeOut.blockObsv())
-                  {
-                      for(var i = 0; i < 10; ++i) {
-                          scopeTbl.scope0.scopeOut.blockObsv().deferred();
-                      }
-                  }
-              });
+              var dfd = $.Deferred();
+              if(scopeTbl.scope0.scopeOut.blockObsv())
+              {
+                  //無限ループがうまく実装できてないのでひとまずこれで対処…
+                  var scopeDef = scopeTbl.scope0.scopeOut.blockObsv().deferred;
+                  scopeDef()
+                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
+                     .then(dfd.resolve)
+              }
+              else
+              {
+                  dfd.resolve();
+              }
+              return dfd.promise();
           }
         ));
+
+        // Ｎ秒まつブロック
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {string:{default:'1.0'}, dataName:'waitSec',},
+                      {label:'秒 まつ'},
+                  ]}
+              ],
+          },
+          function(valueDataTbl,scopeTbl){
+              var time = valueDataTbl["waitSec"]();
+              var wait_time =  function(time){
+                  return (function(){
+                      var dfd = $.Deferred()
+                      setTimeout(function(){  console.log("resolve#wait_time("+time+") ");dfd.resolve(); }, time*1000);
+                      return dfd.promise()
+                  })
+              };              
+              return wait_time(parseFloat(time))();
+          }
+        ));
+        
         // モーションブロック
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
@@ -1182,7 +1240,14 @@ $(function(){
               blockOpt:{color:'red',head:'in',tail:'out'},
               blockContents:[
                   {expressions:[
-                      {string:{default:'正面'}, dataName:'angle',},
+                      //{string:{default:'正面'}, dataName:'angle',},
+                      {options:{default:'正面',
+                                list:[{text:"正面",value:"正面"},
+                                      {text:"右",value:"右"},
+                                      {text:"左",value:"左"},
+                                     ]}, 
+                       dataName:'angle',
+                      },
                       {label:'を向く'},
                   ]}
               ],
@@ -1216,10 +1281,12 @@ $(function(){
 
               if(self.qims){
                   return self.qims.service('ALMotion')
+//                       .then(function(s){
+//                           alMotion = s;
+//                           return alMotion.wakeUp();
+//                       }, onFail)
                       .then(function(s){
                           alMotion = s;
-                          return alMotion.wakeUp();
-                      }, onFail).then(function(){
                           return alMotion.angleInterpolationWithSpeed(name, angle, DELAY).fail(onFail);
                       }, onFail).promise();
               }

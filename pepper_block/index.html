@@ -125,7 +125,11 @@
                 <!-- /ko -->
                 
                 <!-- ko if: $data.dataTemplate.options -->
-                  <select class="options blockCell" data-bind="attr:{id:$data.dataTemplate.dataName}"></select>
+                  <select class="options blockCell" data-bind="attr:{id:$data.dataTemplate.dataName},
+                                                               optionsText:'text',
+                                                               optionsValue:'value',
+                                                               options:$data.dataTemplate.options.list,
+                                                               value:$data.valueObsv,"></select>
                 <!-- /ko -->
               <!-- /ko -->
             </div>
@@ -194,7 +198,11 @@
           <button data-bind="click: $root.connect">接続</button>
         </div>
         <div class="vButton">
-          <button data-bind="click: $root.execBlock">きどうボタン</button>
+          <button data-bind="click: $root.wakeupPepper">ペッパー起こす</button>
+          <button data-bind="click: $root.restPepper">ペッパー寝かす</button>
+        </div>
+        <div class="vButton">
+          <button data-bind="click: $root.execBlock">きどうスイッチ</button>
           <button data-bind="click: $root.stopBlock">すべてていし</button>
         </div>
         <div class="blockBox">
