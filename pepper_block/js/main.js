@@ -126,6 +126,12 @@ function Camera(alVideoDevice) {
 // http://tokkono.cute.coocan.jp/blog/slow/index.php/programming/jquery-deferred-for-responsive-applications-basic/
 //
 
+$(function(){
+    $(window).on('beforeunload', function() {
+        return 'このまま移動しますか？';
+    });
+});
+
 function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
@@ -380,7 +386,7 @@ function Block(blockManager, blockTemplate, callback) {
             } 
         });
         // 入力する値ブロックが全部完了したら自身のコールバックを実行します
-        return $.when(valuePromiseList).then(function(){
+        return $.when.apply($,valuePromiseList).then(function(){
             //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
             if(self.out && self.out.block){
                 return $.Deferred(function(dfd){
@@ -990,10 +996,36 @@ $(function(){
         // ■ 接続処理 ■
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
-        self.ip000_000_XXX_000 = ko.observable(3);
-        self.ip000_000_000_XXX = ko.observable(80);
-//         self.ip000_000_XXX_000 = ko.observable(11);
-//         self.ip000_000_000_XXX = ko.observable(17);
+        self.ip000_000_XXX_000 = ko.observable(1);
+        self.ip000_000_000_XXX = ko.observable(2);
+
+        var pepper_ip = JSON.parse(localStorage.getItem("pepper_ip"));
+        if(pepper_ip){
+            self.ipXXX_000_000_000( pepper_ip.ip[0] );
+            self.ip000_XXX_000_000( pepper_ip.ip[1] );
+            self.ip000_000_XXX_000( pepper_ip.ip[2] );
+            self.ip000_000_000_XXX( pepper_ip.ip[3] );
+        }
+        else{
+            pepper_ip = {
+                ip:[self.ipXXX_000_000_000(),
+                    self.ip000_XXX_000_000(),
+                    self.ip000_000_XXX_000(),
+                    self.ip000_000_000_XXX(),],
+            };
+            localStorage.setItem("pepper_ip",JSON.stringify(pepper_ip));
+        }
+        var updatePepperIp = function(){
+            pepper_ip.ip[0] = self.ipXXX_000_000_000();
+            pepper_ip.ip[1] = self.ip000_XXX_000_000();
+            pepper_ip.ip[2] = self.ip000_000_XXX_000();
+            pepper_ip.ip[3] = self.ip000_000_000_XXX();
+            localStorage.setItem("pepper_ip",JSON.stringify(pepper_ip));
+        }
+        self.ipXXX_000_000_000.subscribe(updatePepperIp);
+        self.ip000_XXX_000_000.subscribe(updatePepperIp);
+        self.ip000_000_XXX_000.subscribe(updatePepperIp);
+        self.ip000_000_000_XXX.subscribe(updatePepperIp);
 
         self.nowState = ko.observable("未接続");
 
@@ -1189,21 +1221,20 @@ $(function(){
               var dfd = $.Deferred();
               if(scopeTbl.scope0.scopeOut.blockObsv())
               {
-                  //無限ループがうまく実装できてないのでひとまずこれで対処…
-                  var scopeDef = scopeTbl.scope0.scopeOut.blockObsv().deferred;
-                  scopeDef()
-                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     .then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     //.then(scopeDef).then(scopeDef).then(scopeDef).then(scopeDef)
-                     .then(dfd.resolve)
+                  //無限ループ停止がまだ実装できてないのでひとまずこれで対処
+                  var cnt = 99;
+                  var loopFunc = function(){
+                      console.log("loop " + cnt);
+                      if(cnt-->0){
+                         dfd
+                         .then(scopeTbl.scope0.scopeOut.blockObsv().deferred)
+                         .then(loopFunc);
+                         return dfd.promise();
+                      }
+                  }
+                  dfd.then(loopFunc);
               }
-              else
-              {
-                  dfd.resolve();
-              }
+              dfd.resolve();
               return dfd.promise();
           }
         ));
@@ -1344,32 +1375,63 @@ $(function(){
           },
           function(valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
-              var onFail = function(e) {console.error('fail:' + e);};
-              var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
-              var LIMIT = 0.5;
+              var onFail = function(e) {
+                  console.error('fail:' + e);};
+              var onFailPass = function(e) {
+                  console.log('fail:' + e); 
+                  return $.Deferred().resolve();};
               if(self.qims){
-                  var wait_time =  function(time){
-                      return (function(){
-                          var dfd = $.Deferred()
-                          setTimeout(function(){  console.log("resolve#wait_time("+time+") ");dfd.resolve(); }, time*1000);
-                          return dfd.promise()
-                      })
-                  };
-                  self.qims.service('ALSpeechRecognition').then(function(asr){
-                      asr.setLanguage("Japanese").then(function(){
-                          var vocabulary = [valueDataTbl["recoText"]()];
-                          asr.unsubscribe("Test_ASR AAA").then(function(){
-                              asr.setVocabulary(vocabulary, true).then(function(){
-                                  //Start the speech recognition engine with user Test_ASR
-                                  asr.subscribe("Test_ASR AAA")
-                                  .then(function(){
-                                      console.log('Speech recognition engine started');
-                                      asr.unsubscribe("Test_ASR AAA").then(function(){
-                                      });
+                  $.when( self.qims.service("ALMemory"),
+                          self.qims.service('ALSpeechRecognition')
+                  ).then(function(alMemory, asr){
+                      var vocabulary = [valueDataTbl["recoText"]()];
+                      var resultValue = null;
+                      var dfd2 = $.Deferred();
+                      dfd2
+                      .then( asr.pause.bind(null), onFailPass )
+                      .then( asr.setLanguage.bind(null,"Japanese"), onFailPass )
+                      .then( asr.unsubscribe.bind(null,"PepperBLockASR"), onFailPass )
+                      .then( 
+                          function(){},
+                          onFailPass
+                      )
+                      .then( function(){
+                          return asr.setVocabulary(vocabulary, true);} ,
+                          onFailPass )
+                      .then( function(){
+                          return asr.subscribe("PepperBLockASR");} ,
+                          onFail )
+                      .then( function(){
+                          console.log('Speech recognition engine started');
+                          return $.Deferred(function(newDfd){
+                             //タイムアウトを設定します
+                             var timeoutID  = setTimeout(function(){
+                                console.log("reco->Timeout"); newDfd.resolve(); }, 
+                                5.0*1000
+                             );
+                             alMemory.subscriber("WordRecognized").done(function (subscriber) {
+                                  // subscriber.signal is a signal associated to "FrontTactilTouched"
+                                  subscriber.signal.connect(function (value) {
+                                      if(value[0].length>0)
+                                      {
+                                          clearTimeout(timeoutID);
+                                          console.log("reco->" + value[0] + ":" +value[1]*100 + "%");
+                                          newDfd.resolve(value);
+                                      }
                                   });
-                              });
-                          });                              
-                      });
+                             })
+                             .fail(newDfd.reject);
+                          }).promise();
+                      })
+                      .then(function(value){
+                          resultValue = value;
+                          return asr.unsubscribe("PepperBLockASR");},
+                          onFail )
+                      .then(function(){
+                          dfd.resolve(resultValue?true:false);
+                       });
+                      dfd2.resolve();
+                      return dfd2.promise();
                   }, onFail);
               } else {
                   dfd.reject();
