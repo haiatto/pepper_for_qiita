@@ -331,9 +331,10 @@ function Block(blockManager, blockTemplate, callback) {
                 // 外れた要素の編集状態を無効にします
                 // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
                 // (荒わざっぽいけど働いてる事は働いてる)
-                var editableFix = jQuery('<input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1">').appendTo( element );
+
+                var editableFix = jQuery('<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>').appendTo( element );
                 editableFix.focus();
-                editableFix[0].setSelectionRange(0, 0);
+                editableFix.children()[0].setSelectionRange(0, 0);
                 editableFix.blur();
                 editableFix.remove();
             };
