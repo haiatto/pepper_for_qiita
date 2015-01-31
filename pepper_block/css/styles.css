@@ -126,12 +126,13 @@
 }
 .block .expressions .string{ 
     border-style:solid;
-    background:white;
+    background: white;
     min-width:1em; 
     white-space: nowrap;
     border-width: 1px;
     border-radius: 2px;
     padding: 0.1em;
+    z-index:1;
 }
 .block .expressions .number{ 
     border-style:solid;
@@ -194,6 +195,13 @@
   z-index: 99999;  
   visibility: hidden;
 }
+
+.curEditMode{
+  background:cyan !important;
+}
+.curEditModeForDraggable{
+}
+
 
 .testBox{
   display: block;

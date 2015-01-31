@@ -306,7 +306,89 @@ function Block(blockManager, blockTemplate, callback) {
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
         var cloneBlock = null;
         var draggableDiv =$(self.element);
+
+        // 編集モード
+        function EditMode(){
+            var self = this;
+            var editModeTimeId;
+            var draggableElem;
+            var tgtElem;
+            var setEditMode_ = function(draggableElem, editableElm){
+                // curEditMode を割り当てます
+                $(editableElm).addClass("curEditMode");
+                $(draggableElem).addClass("curEditModeForDraggable");
+                // 対象ブロックのドラッグを無効化します
+                $(draggableElem).draggable('disable');
+            };
+            var clearAllEditMode_ = function(){
+                // curEditMode を外します
+                var nowEditableElm = $(".curEditMode");
+                var nowEditableDraggableElm = $(".curEditModeForDraggable");
+                nowEditableElm.removeClass("curEditMode");
+                nowEditableDraggableElm.removeClass("curEditModeForDraggable");
+                // 外れた要素のドラッグを有効化します
+                nowEditableDraggableElm.draggable('enable');
+                // 外れた要素の編集状態を無効にします
+                // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
+                // (荒わざっぽいけど働いてる事は働いてる)
+                var editableFix = jQuery('<input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1">').appendTo( element );
+                editableFix.focus();
+                editableFix[0].setSelectionRange(0, 0);
+                editableFix.blur();
+                editableFix.remove();
+            };
+
+            self.lazyEditModeStart = function(draggableElem_,tgtElem_){
+                draggableElem = draggableElem_;
+                tgtElem       = tgtElem_;
+                console.log("edit mode ready");
+                // 編集モードへの移行を開始します
+                // (押したりりタップ後、一定時間でキャンセルされなければ開始となります)
+                editModeTimeId = setTimeout(function(){
+                    console.log("edit mode start");
+                    // 編集対象を探します
+                    var editableElm;
+                    if($(tgtElem).attr("contentEditable")=='true'){
+                        editableElm = $(tgtElem);
+                    }
+                    if(!editableElm||editableElm.length==0){
+                        editableElm = $("[contentEditable='true']", tgtElem);
+                    }
+                    if(!editableElm||editableElm.length==0){
+                        editableElm = $("[contentEditable='true']", draggableElem);
+                    }
+                    if(editableElm.length>0){
+                        editableElm = $(editableElm[0]);
+                    }
+                    // 編集対象があれば選択します
+                    if(editableElm.length>0){
+                        console.log("edit mode start2");
+                        // 現在編集モードの対象をクリアします
+                        clearAllEditMode_();
+                        // 編集対象をセットします
+                        setEditMode_(draggableElem, editableElm);
+                        // 編集対象へフォーカスをあてます
+                        editableElm[0].focus();
+                        $(editableElm[0]).blur(function(){
+                            console.log("edit mode blur");
+                            clearAllEditMode_();
+                        });
+                    }
+                },400);
+            };
+            self.lazyEditModeCancel = function(){
+                console.log("edit mode cancel");
+                clearTimeout(editModeTimeId);
+                clearAllEditMode_();
+                editModeTimeId = null;
+            };
+        };
+        var editMode = new EditMode();
+
         draggableDiv
+          .mousedown(function(ev) {
+              editMode.lazyEditModeStart(this,ev.target);
+          })
           .draggable({
               //containment:$(".blockBox"),
               //scope:'toOriginalBlock',
@@ -321,6 +403,8 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               start:function(event, ui){
+                  editMode.lazyEditModeCancel();
+
                   if(self.isCloneDragMode){
                       self.blockManager.moveStart(cloneBlock, ui.position);
                   }
@@ -329,6 +413,7 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               drag:function(event, ui){
+                  console.log("drag ");
                   if(self.isCloneDragMode){
                       self.blockManager.move(cloneBlock, ui.position);
                   }
@@ -337,6 +422,7 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               stop:function(event, ui){
+                  console.log("drag stop");
                   if(self.isCloneDragMode){
                       self.blockManager.moveStop(cloneBlock, ui.position);
                       cloneBlock = null;
@@ -350,11 +436,14 @@ function Block(blockManager, blockTemplate, callback) {
           //    self.deferred();
           //})
           .doubletap(function(){
+              editMode.lazyEditModeCancel();
               self.deferred();
           });
+
         // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
         self.setCloneDragMode(self.isCloneDragMode);
 
+/*
         $('.string', draggableDiv)
         .mousedown(function(ev) {
               draggableDiv.draggable('disable');
@@ -362,6 +451,7 @@ function Block(blockManager, blockTemplate, callback) {
         .mouseup(function(ev) {
               draggableDiv.draggable('enable');
         });
+*/
     };
     
     // Deferred の promise作って返します
@@ -965,23 +1055,24 @@ $(function(){
         init: function(element, valueAccessor) {
             $(element).attr("contenteditable","true");
             $(element).on('blur', function() {
-            //$(element).on('input', function() {
-
-//var range = window.getSelection().getRangeAt(0);
-//var s = range.startOffset;
-//var e = range.endOffset;
-//var sc = range.startContainer;
-
                 var observable = valueAccessor();
                 observable( $(this).text() );
-
-//var range2 = window.getSelection().getRangeAt(0);
-//range2.setStart(sc, s);
-//range2.setEnd(sc, e);
-//var sel = window.getSelection();
-//sel.removeAllRanges();
-//sel.addRange(range2);
             });
+            //TODO:ここらへんのキャレット復帰方法がちゃんとできれば
+            //     リアルタイムに伸縮するテキストエリアが実現できる
+            //$(element).on('input', function() {
+            //var range = window.getSelection().getRangeAt(0);
+            //var s = range.startOffset;
+            //var e = range.endOffset;
+            //var sc = range.startContainer;
+            //})
+            //var range2 = window.getSelection().getRangeAt(0);
+            //range2.setStart(sc, s);
+            //range2.setEnd(sc, e);
+            //var sel = window.getSelection();
+            //sel.removeAllRanges();
+            //sel.addRange(range2);
+            //});
         },
         update: function(element, valueAccessor) {
             var value = ko.utils.unwrapObservable(valueAccessor());
