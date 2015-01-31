@@ -9,6 +9,8 @@
  */
 
 (function($){
+	//微妙な構造だったので改造 2015.1.30 haiatto
+
 	// Determine if we on iPhone or iPad
 	var isiOS = false;
 	var agent = navigator.userAgent.toLowerCase();
@@ -19,9 +21,10 @@
 	$.fn.doubletap = function(onDoubleTapCallback, onTapCallback, delay){
 		var eventName, action;
 		delay = delay == null? 500 : delay;
-		eventName = isiOS == true? 'touchend' : 'click';
+		//eventName = isiOS == true? 'touchend' : 'click';
+		//タッチ対応はiOSだけじゃない
 
-		$(this).bind(eventName, function(event){
+		var func = function(event){
 			var now = new Date().getTime();
 			var lastTouch = $(this).data('lastTouch') || now + 1 /** the first time this will make delta a negative number */;
 			var delta = now - lastTouch;
@@ -40,6 +43,12 @@
 				}, delay, [event]);
 			}
 			$(this).data('lastTouch', now);
+		};
+		$(this).bind("click", function(event){
+			func.bind($(this),event)();
+		});
+		$(this).bind("touchend", function(event){
+			func.bind($(this),event)();
 		});
 	};
 })(jQuery);
