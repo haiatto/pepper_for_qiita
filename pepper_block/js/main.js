@@ -186,6 +186,11 @@ function Block(blockManager, blockTemplate, callback) {
     self.posY        = ko.observable(0);
     self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
 
+    //レイアウトにかかわるパラメータが更新されたら更新をかけます
+    self.blockHeight.subscribe(function(){
+        self.blockManager.updatePositionLayout(self);
+    });
+
     // ■ブロックテンプレからの準備
 
     // 入出力部分を準備します
@@ -202,14 +207,14 @@ function Block(blockManager, blockTemplate, callback) {
         // フロー用のブロックの連結(入出)部分
         if(self.blockTemplate.blockOpt.head == 'in') {
             self.in = {
-                block:null,
+                blockObsv:ko.observable(),
                 srcScopeName:null, 
                 hitArea:null
             };
         }
         if(self.blockTemplate.blockOpt.tail == 'out') {
             self.out = {
-                block:null, 
+                blockObsv:ko.observable(), 
                 hitArea:null
             };
         }
@@ -421,7 +426,7 @@ function Block(blockManager, blockTemplate, callback) {
                             clearAllEditMode_();
                         });
                     }
-                },400);
+                },300);
             };
             self.lazyEditModeCancel = function(){
                 //console.log("edit mode cancel");
@@ -468,7 +473,7 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               drag:function(event, ui){
-                  console.log("drag ");
+                  //console.log("drag ");
                   if(self.isCloneDragMode){
                       self.blockManager.move(cloneBlock, ui.position);
                   }
@@ -477,7 +482,7 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               stop:function(event, ui){
-                  console.log("drag stop");
+                  //console.log("drag stop");
                   if(self.isCloneDragMode){
                       self.blockManager.moveStop(cloneBlock, ui.position);
                       cloneBlock = null;
@@ -497,16 +502,6 @@ function Block(blockManager, blockTemplate, callback) {
 
         // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
         self.setCloneDragMode(self.isCloneDragMode);
-
-/*
-        $('.string', draggableDiv)
-        .mousedown(function(ev) {
-              draggableDiv.draggable('disable');
-        })
-        .mouseup(function(ev) {
-              draggableDiv.draggable('enable');
-        });
-*/
     };
     
     // Deferred の promise作って返します
@@ -533,7 +528,7 @@ function Block(blockManager, blockTemplate, callback) {
         // 入力する値ブロックが全部完了したら自身のコールバックを実行します
         return $.when.apply($,valuePromiseList).then(function(){
             //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
-            if(self.out && self.out.block){
+            if(self.out && self.out.blockObsv()){
                 return $.Deferred(function(dfd){
                     // 自身の処理を実行します
                     $(self.element).removeClass("executeError"); 
@@ -543,7 +538,7 @@ function Block(blockManager, blockTemplate, callback) {
                       function(){
                         // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
                         $(self.element).removeClass("executeNow"); 
-                        self.out.block.deferred().then(function(){
+                        self.out.blockObsv().deferred().then(function(){
                             // 繋がるブロック移行が完了したら自身も完了させます
                             dfd.resolve();
                         });
@@ -575,20 +570,20 @@ function Block(blockManager, blockTemplate, callback) {
 
     self.clearOut = function()
     {
-        if(self.out && self.out.block)
+        if(self.out && self.out.blockObsv())
         {
-            self.out.block.in.block = null;
-            self.out.block = null;
+            self.out.blockObsv().in.blockObsv(null);
+            self.out.blockObsv(null);
         }
     };
     self.clearIn = function()
     {    
-        if(self.in && self.in.block)
+        if(self.in && self.in.blockObsv())
         {
             if(self.in.srcScopeName){
-                self.in.block.clearScopeOut(self.in.srcScopeName);
+                self.in.blockObsv().clearScopeOut(self.in.srcScopeName);
             }else{
-                self.in.block.clearOut();
+                self.in.blockObsv().clearOut();
             }
         }
     };
@@ -597,7 +592,7 @@ function Block(blockManager, blockTemplate, callback) {
         {
             if(self.scopeTbl[scopeName].scopeOut.blockObsv())
             {
-                self.scopeTbl[scopeName].scopeOut.blockObsv().in.block = null;
+                self.scopeTbl[scopeName].scopeOut.blockObsv().in.blockObsv(null);
                 self.scopeTbl[scopeName].scopeOut.blockObsv().in.srcScopeName = null;
                 self.scopeTbl[scopeName].scopeOut.blockObsv(null);
             }
@@ -625,8 +620,8 @@ function Block(blockManager, blockTemplate, callback) {
     self.connectOut = function(block){
         self.clearOut();
         block.clearIn();
-        self.out.block = block;
-        self.out.block.in.block = self;
+        self.out.blockObsv(block);
+        self.out.blockObsv().in.blockObsv(self);
     };
 
     // 値の入力のブロックをセットします
@@ -652,10 +647,10 @@ function Block(blockManager, blockTemplate, callback) {
         }
         if(self.scopeTbl[scopeName].scopeOut.blockObsv())
         {
-            self.scopeTbl[scopeName].scopeOut.blockObsv().in.block = null;
+            self.scopeTbl[scopeName].scopeOut.blockObsv().in.blockObsv(null);
         }
         self.scopeTbl[scopeName].scopeOut.blockObsv(block);
-        block.in.block = self;
+        block.in.blockObsv(self);
         block.in.srcScopeName = scopeName;
     };
 
@@ -711,8 +706,8 @@ function BlockManager(){
         if(block.out){
             outBlock = block;
             while(outBlock.out){
-                if(outBlock.out.block){
-                    outBlock = outBlock.out.block;
+                if(outBlock.out.blockObsv()){
+                    outBlock = outBlock.out.blockObsv();
                 }
                 else{
                     break; 
@@ -789,7 +784,9 @@ function BlockManager(){
         }
     };
     // 位置のレイアウト処理です(サイズはカスタムバインドで処理します)
-    var updatePositionLayout = function(updateBlock){
+    self.updatePositionLayout = function(updateBlock){
+        //console.log("updatePositionLayout");
+
         // 更新する一番上のブロックを探します
         var topBlock = updateBlock;
         //値用ブロックの場合は接続先を辿ります
@@ -798,10 +795,10 @@ function BlockManager(){
             topBlock = topBlock.valueOut.block;
         }
         //通常用ブロックの場合は接続元を辿ります
-        while(topBlock.in && topBlock.in.block)
+        while(topBlock.in && topBlock.in.blockObsv())
         {
-            topBlock = topBlock.in.block;
-        }
+            topBlock = topBlock.in.blockObsv();
+        }        
         // レイアウトします
         var recv = function(block){
             // 位置のみなのでブロック内の処理順は自由にやれます
@@ -832,10 +829,10 @@ function BlockManager(){
                     recv(blockB);
                 }
             });
-            if(block.out && block.out.block)
+            if(block.out && block.out.blockObsv())
             {
                 var blockA = block;
-                var blockB = block.out.block;
+                var blockB = block.out.blockObsv();
                 var elmA = blockA.element;
                 var elmB = blockB.element;
                 var marginConnector = 0.5 / blockB.pix2em;
@@ -874,10 +871,10 @@ function BlockManager(){
                     recv(scope.scopeOut.blockObsv());
                 }
             });
-            if(block.out && block.out.block){
-                self.blockList.splice( self.blockList.indexOf(block.out.block), 1 );
-                self.blockList.push( block.out.block );
-                recv(block.out.block);
+            if(block.out && block.out.blockObsv()){
+                self.blockList.splice( self.blockList.indexOf(block.out.blockObsv()), 1 );
+                self.blockList.push( block.out.blockObsv() );
+                recv(block.out.blockObsv());
             }
         };
         recv(block);
@@ -891,7 +888,7 @@ function BlockManager(){
     self.move = function(block,position){
         block.posX(position.left);
         block.posY(position.top );
-        updatePositionLayout(block);
+        self.updatePositionLayout(block);
                    
         var hit = getHitBlock(block);
         if(hit)
@@ -901,7 +898,7 @@ function BlockManager(){
     self.moveStop = function(block,position){
         block.posX(position.left);
         block.posY(position.top );
-        updatePositionLayout(block);
+        self.updatePositionLayout(block);
         
         var hit = getHitBlock(block);
         if(hit)
@@ -919,7 +916,7 @@ function BlockManager(){
                 hit.srcBlock.connectOut(hit.hitBlock);
             }
             //TODO:blockのほうをくっつくように移動させる処理を書く
-            updatePositionLayout(block);
+            self.updatePositionLayout(block);
         }
     };
 
@@ -933,10 +930,12 @@ function BlockManager(){
         }
     };
 
-    ko.bindingHandlers.blockLayout = {
+    ko.bindingHandlers.updateBlockSizeLayout = {
         init: function(element, valueAccessor) {
         },
         update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
+            console.log("updateBlockSizeLayout");
+             
             var block = ko.utils.unwrapObservable(valueAccessor());
             // ブロック内のデータの通知を受けることを伝えます
             $.each(block.valueDataTbl,function(k,v){
@@ -945,6 +944,10 @@ function BlockManager(){
             $.each(block.valueInTbl,function(k,v){
                 v.blockObsv();
             });
+            //
+            if(block.in){
+                block.in.blockObsv();
+            }
             // レイアウトします
             var blkLocalPosY = 0;
             var blkSizeW     = 0;
@@ -992,8 +995,8 @@ function BlockManager(){
                     while(tmpOutBlock)
                     {
                         scopeBlocksH = scopeBlocksH + tmpOutBlock.blockHeight();
-                        if(tmpOutBlock.out && tmpOutBlock.out.block){
-                            tmpOutBlock = tmpOutBlock.out.block;
+                        if(tmpOutBlock.out && tmpOutBlock.out.blockObsv()){
+                            tmpOutBlock = tmpOutBlock.out.blockObsv();
                         }else{
                             tmpOutBlock = null;
                         }

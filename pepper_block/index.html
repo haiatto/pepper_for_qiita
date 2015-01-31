@@ -97,7 +97,7 @@
                              top:    $data.posY(),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
-                      blockLayout:$data,">
+                      updateBlockSizeLayout:$data,">
         <!-- ko foreach:$data.rowContents -->
           <div data-bind="if:$data.expressions">
             <div class="expressions blockRow" data-bind="style:{background:$parent.blockColor()}">
