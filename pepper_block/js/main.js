@@ -22,6 +22,38 @@ function _arrayBufferToBase64(buffer) {
     return window.btoa( binary );
 }
 
+var userAgent = window.navigator.userAgent.toLowerCase();
+var appVersion = window.navigator.appVersion.toLowerCase();
+
+//ドラッグ時にフォーカス外れない対策いるか？(現状はChrome対策)
+function checkAgent_NeedDragUnselect()
+{
+    if (userAgent.indexOf('msie') != -1) {
+        //IE全般
+        if (appVersion.indexOf("msie 6.") != -1) {
+            //IE6
+        }else if (appVersion.indexOf("msie 7.") != -1) {
+            //IE7
+        }else if (appVersion.indexOf("msie 8.") != -1) {
+            //IE8
+        }else if (appVersion.indexOf("msie 9.") != -1) {
+            //IE9
+        }else if (appVersion.indexOf("msie 10.") != -1) {
+            //IE10
+        }
+    }else if (userAgent.indexOf('chrome') != -1) {
+        //Chrome
+        return true;
+    }else if (userAgent.indexOf('safari') != -1) {
+        //Safari
+    }else if (userAgent.indexOf('firefox') != -1) {
+        //Firefox
+    }else if (userAgent.indexOf('opera') != -1) {
+        //Opera
+    }
+    return false;
+}
+
 function Camera(alVideoDevice) {
     var self = this;
     self.subscribe = function(){
@@ -330,24 +362,37 @@ function Block(blockManager, blockTemplate, callback) {
                 nowEditableDraggableElm.draggable('enable');
             };
             var clearEditableFocus_ = function(){
-                // 外れた要素の編集状態を無効にします
-                // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
-                // (荒わざっぽいけど働いてる事は働いてる)
-                var editableFix = jQuery('<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>').appendTo( element );
-                editableFix.focus();
-                editableFix.children()[0].setSelectionRange(0, 0);
-                editableFix.blur();
-                editableFix.remove();
+                if(checkAgent_NeedDragUnselect())
+                {
+                    // 外れた要素の編集状態を無効にします
+                    // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
+                    // (荒わざっぽいけど働いてる事は働いてる)
+                    var editableFix = jQuery('<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>').appendTo( element );
+                    editableFix.focus();
+                    editableFix.children()[0].setSelectionRange(0, 0);
+                    editableFix.blur();
+                    editableFix.remove();
+                }
             }
-
+            var nowWait_ = false;
+            self.isNowLazyEditModeStartWait = function()
+            {
+                return nowWait_;
+            }
             self.lazyEditModeStart = function(draggableElem_,tgtElem_){
+                nowWait_ = true;
                 draggableElem = draggableElem_;
                 tgtElem       = tgtElem_;
-                console.log("edit mode ready");
+                //console.log("edit mode ready");
                 // 編集モードへの移行を開始します
                 // (押したりりタップ後、一定時間でキャンセルされなければ開始となります)
+                if(editModeTimeId){
+                    clearTimeout(editModeTimeId);
+                    editModeTimeId = null;   
+                }
                 editModeTimeId = setTimeout(function(){
-                    console.log("edit mode start");
+                    nowWait_ = false;
+                    //console.log("edit mode start");
                     // 編集対象を探します
                     var editableElm;
                     if($(tgtElem).attr("contentEditable")=='true'){
@@ -364,7 +409,7 @@ function Block(blockManager, blockTemplate, callback) {
                     }
                     // 編集対象があれば選択します
                     if(editableElm.length>0){
-                        console.log("edit mode start2");
+                        //console.log("edit mode start2");
                         // 現在編集モードの対象をクリアします
                         clearAllEditMode_();
                         // 編集対象をセットします
@@ -372,16 +417,18 @@ function Block(blockManager, blockTemplate, callback) {
                         // 編集対象へフォーカスをあてます
                         editableElm[0].focus();
                         $(editableElm[0]).blur(function(){
-                            console.log("edit mode blur");
+                            //console.log("edit mode blur");
                             clearAllEditMode_();
                         });
                     }
                 },400);
             };
             self.lazyEditModeCancel = function(){
-                console.log("edit mode cancel");
+                //console.log("edit mode cancel");
+                nowWait_ = false;
                 clearTimeout(editModeTimeId);
                 clearAllEditMode_();
+                clearEditableFocus_();
                 editModeTimeId = null;
             };
         };
@@ -389,7 +436,13 @@ function Block(blockManager, blockTemplate, callback) {
 
         draggableDiv
           .mousedown(function(ev) {
-              editMode.lazyEditModeStart(this,ev.target);
+              if(editMode.isNowLazyEditModeStartWait()){
+                  //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
+                  editMode.lazyEditModeCancel();                  
+              }
+              else{
+                  editMode.lazyEditModeStart(this,ev.target);
+              }
           })
           .draggable({
               //containment:$(".blockBox"),
