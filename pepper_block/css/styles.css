@@ -69,7 +69,7 @@
 .block{
     font-size:1.0em;
     /* margin:1em; */
-    background:yellow;
+    /* background:yellow; */
     position:absolute;
     top:0.0em;
     left:0.0em;
@@ -87,14 +87,15 @@
 }
 .block .parts_margin{ 
   position:absolute; 
-  height:0.5em;
-  width: 10em;
+}
+.block .svg_basic{ 
+  position:absolute; 
 }
 .block .blockRow{
     position:absolute; 
     display:block;
-    border-style:solid;
-    border-width:1px;
+    /* border-style:solid; */
+    /* border-width:1px; */
 }
 .block .blockCell{ 
     position:absolute; 
@@ -155,6 +156,7 @@
 
   background:blue;
   opacity: 0.5;
+
   visibility: hidden;
 }
 .block .hitAreaOut{
@@ -164,6 +166,7 @@
 
   background: blueviolet;
   opacity: 0.5;
+
   visibility: hidden;
 }
 .block .hitAreaValueIn{
@@ -174,6 +177,7 @@
   background:yellow;
   opacity: 0.5;
   z-index: 99999;
+
   visibility: hidden;
 }
 .block .hitAreaValueOut{
@@ -184,6 +188,7 @@
   background:yellow;
   opacity: 0.5;
   z-index: 99999;
+
   visibility: hidden;
 }
 .block .hitAreaScopeOut{
@@ -193,7 +198,7 @@
   background:red;
   opacity: 0.5;
   z-index: 99999;  
-  visibility: hidden;
+/*    visibility: hidden;*/
 }
 
 .curEditMode{

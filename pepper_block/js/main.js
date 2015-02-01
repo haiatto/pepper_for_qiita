@@ -191,6 +191,21 @@ function Block(blockManager, blockTemplate, callback) {
         self.blockManager.updatePositionLayout(self);
     });
 
+    // SVG要素作成のための補助
+    self.makeSvgPath = function(templ)
+    {
+        templ = templ.replace(/%blockW/g, ""+self.blockWidth() );
+        templ = templ.replace(/%blockH/g, ""+self.blockHeight() );
+        templ = templ.replace(/([0-9]+(\.[0-9]+)?)em/g, function(s,a){
+            return (parseFloat(a) / self.pix2em);
+        } );
+        templ = templ.replace(/([+-]?[0-9]+(\.[0-9]+)?)([+-])([0-9]+(\.[0-9]+)?)/g, function(s,a,x,op,b){
+            return ""+(op=='+'?(parseFloat(a)+parseFloat(b)): 
+                               (parseFloat(a)-parseFloat(b)));
+        } );
+        return templ;
+    };
+
     // ■ブロックテンプレからの準備
 
     // 入出力部分を準備します
@@ -452,6 +467,7 @@ function Block(blockManager, blockTemplate, callback) {
           .draggable({
               //containment:$(".blockBox"),
               //scope:'toOriginalBlock',
+              scroll:false,
               helper:function(e){
                   if(self.isCloneDragMode){
                       cloneBlock = self.cloneThisBlock();
@@ -842,9 +858,9 @@ function BlockManager(){
                 if(scope.scopeOut.blockObsv()){
                     var blockA = block;
                     var blockB = scope.scopeOut.blockObsv();
-                    var marginConnector = 0.5 / blockB.pix2em;
+                    //var marginConnector = 0.5 / blockB.pix2em;
                     blockB.posY(
-                        blockA.posY() + scope.rowBlockLocalY() + marginConnector
+                        blockA.posY() + scope.rowBlockLocalY()// + marginConnector
                     );
                     blockB.posX(
                         blockA.posX() + blockA.indentWidth
@@ -858,9 +874,9 @@ function BlockManager(){
                 var blockB = block.out.blockObsv();
                 var elmA = blockA.element;
                 var elmB = blockB.element;
-                var marginConnector = 0.5 / blockB.pix2em;
+                //var marginConnector = 0.5 / blockB.pix2em;
                 blockB.posY(
-                    blockA.posY() + blockA.blockHeight() + marginConnector
+                    blockA.posY() + blockA.blockHeight()// + marginConnector
                 );
                 blockB.posX(
                     blockA.posX()
@@ -985,8 +1001,13 @@ function BlockManager(){
                 block.in.blockObsv();
             }
             // レイアウトします
-            var blkLocalPosY = 0;
-            var blkSizeW     = 0;
+            var blkConnectorHalfMargin = 0.25 / block.pix2em;
+            var blkLocalPosY  = 0;
+            var blkSizeW      = 0;
+            if(block.in){
+                //コネクタの半分のマージンを足します(繋がると一つ分になる想定)
+                blkLocalPosY += blkConnectorHalfMargin;
+            }
             $(".blockRow",element).each(function(rowIndex,elemR){
                 var rowContent = block.rowContents[rowIndex];
                 var rowSizeH   = block.minimumRowHeight;
@@ -1001,9 +1022,9 @@ function BlockManager(){
                             valueIn = block.valueInTbl[dataName];
                             valueIn.blockLocalX = blkLocalPosX ;
                             valueIn.blockLocalY = blkLocalPosY ;
-                            $(".hitAreaValueIn#"+dataName,elemR).css(
+                            $(".hitAreaValueIn#"+dataName,block.element).css(
                                  {left:blkLocalPosX,
-                                  top :0,}
+                                  top :blkLocalPosY,}
                             );
                         }
                         $(elemCell).css({left:blkLocalPosX});
@@ -1012,11 +1033,11 @@ function BlockManager(){
                         if(dataName)
                         {
                             valueIn = block.valueInTbl[dataName];
-                            var nestMargin = 0.2 / block.pix2em;
+                            var nestValueMargin = 0.2 / block.pix2em;
                             if(valueIn.blockObsv())
                             {
-                                cellW = Math.max(cellW, valueIn.blockObsv().blockWidth()  + nestMargin);
-                                cellH = Math.max(cellH, valueIn.blockObsv().blockHeight() + nestMargin);
+                                cellW = Math.max(cellW, valueIn.blockObsv().blockWidth()  + nestValueMargin);
+                                cellH = Math.max(cellH, valueIn.blockObsv().blockHeight() + nestValueMargin);
                             }
                             //cellH += 0.2 / block.pix2em;
                         }
@@ -1040,6 +1061,7 @@ function BlockManager(){
                     rowSizeH = Math.max( rowSizeH, scopeBlocksH );
                 }
                 else if(rowContent.space){
+                    rowSizeH = Math.max( rowSizeH, 1.0 / block.pix2em );
                 }
                 rowContent.rowHeight(rowSizeH);
                 rowContent.rowBlockLocalY(blkLocalPosY);
@@ -1048,12 +1070,16 @@ function BlockManager(){
                     height: rowSizeH,
                     width:  blkLocalPosX});
                 blkLocalPosY += $(elemR).outerHeight();
+
                 blkSizeW = Math.max(blkSizeW,$(elemR).outerWidth());
             });
+            if(block.out){
+                blkLocalPosY += blkConnectorHalfMargin;
+            }
             $(element).css({height:blkLocalPosY,width:blkSizeW});
-            block.blockHeight(blkLocalPosY);
-            block.blockWidth (blkSizeW    );
-
+            var blkSizeH = blkLocalPosY;
+            block.blockHeight(blkSizeH);
+            block.blockWidth (blkSizeW);
         }
     };
 

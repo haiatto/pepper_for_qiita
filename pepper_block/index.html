@@ -16,10 +16,12 @@
   <script type='text/javascript' src="js/main.js"></script>
 </head>
 <body>
-  <script type="text/html" id="block-space-start-template">
+  <!-- 図形と当たりのテンプレ -->
+  <script type="text/html" id="block-shape-start-template">
       <div class="hitAreaOrigin">
         <div class="hitAreaOut" style="top:-0.5em;left:1em;"></div>
       </div>
+
       <svg class="head_margin" data-bind="style:{
             top:  -0.5+'em',
             left:  0.0+'em',
@@ -28,85 +30,233 @@
         <rect x="0em" y="0.0em" width="5em" height="1.0em" fill="red" stroke="green" />
         <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()}" />
       </svg>
+
   </script>
-  <script type="text/html" id="block-space-in-template">
+  <script type="text/html" id="block-shape-in-template">
       <div class="hitAreaOrigin" data-bind="style:{
             top:  -0.5+'em',
             left:  0.0+'em',
         }">
         <div class="hitAreaIn" style="top:-0.5em;left:0.5em;"></div>
       </div>
-      <svg class="parts_margin" data-bind="style:{
-            top:  -0.5+'em',
+      <svg class="svg_basic" data-bind="style:{
+            top:  -0.25+'em',
             left:  0.0+'em',
-            width:$parent.blockWidth()
+            width: $parent.blockWidth(),
+            height:$parent.blockHeight(),
         }">
-        <rect x="0.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green" />
-        <rect x="1.0em" y="0.4em" width="1.0em" height="0.1em" fill="red" stroke="green" />
-        <rect x="2.0em" y="0.1em" width="1.0em" height="0.4em" fill="red" stroke="green"
-         data-bind="attr:{width:($parent.blockWidth())}" />
+        <path fill="red" data-bind="attr:{
+          d:$parent.makeSvgPath(
+               'M 0.0em,  0.5em'  
+              +'  0.0em  ,0.1em'
+              +'  1.0em  ,0.1em'
+              +'  1.0em  ,0.35em'
+              +'  2.0em  ,0.35em'
+              +'  2.0em  ,0.1em'
+              +'  %blockW,0.1em'
+              +'  %blockW,0.5em'
+              +'  0.0em  ,0.5em'
+          ),
+          fill:$parent.blockColor(),
+          }"
+        />
       </svg>
   </script>
-  <script type="text/html" id="block-space-out-template">
+  <script type="text/html" id="block-shape-out-template">
       <div class="hitAreaOrigin" data-bind="style:{
             top:  $parent.blockHeight(),
             left:  0.0+'em',
         }">
         <div class="hitAreaOut" style="top:0.0em;left:0.5em;"></div>
       </div>
-      <svg class="parts_margin" data-bind="style:{
-            top:  $parent.blockHeight(),
-            left:  0.0,
+      <svg class="svg_basic" data-bind="style:{
+            top:   0.0+'em',
+            left:  0.0+'em',
             width: $parent.blockWidth(),
+            height:$parent.blockHeight()+32,
         }">
-        <rect x="0.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" />
-        <rect x="1.0em" y="0.0em" width="1.0em" height="0.4em" fill="red" stroke="green" />
-        <rect x="2.0em" y="0.0em" width="1.0em" height="0.1em" fill="red" stroke="green" 
-         data-bind="attr:{width:($parent.blockWidth())}" />
+        <path fill="red" data-bind="attr:{
+          d:$parent.makeSvgPath(
+               'M 0.0em,  %blockH-0.25em'
+              +'L 0.0em,  %blockH-0.15em'  
+              +'  1.0em  ,%blockH-0.15em'
+              +'  1.0em  ,%blockH+0.25em'
+              +'  2.0em  ,%blockH+0.25em'
+              +'  2.0em  ,%blockH-0.15em'
+              +'  %blockW,%blockH-0.15em'
+              +'  %blockW,%blockH-0.25em'
+              +'  0.0em,  %blockH-0.25em'
+          ),
+          fill:$parent.blockColor(),
+          }"
+        />
       </svg>
   </script>
-  <script type="text/html" id="block-space-top-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
+  <script type="text/html" id="block-shape-top-template">
+<!--
+      <svg class="svg_basic" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
+-->
   </script>
-  <script type="text/html" id="block-space-bottom-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
+  <script type="text/html" id="block-shape-bottom-template">
+<!--
+      <svg class="svg_basic" data-bind="style:{width:$parent.blockWidth()}">
         <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
       </svg>
+-->
   </script>
-  <script type="text/html" id="block-space-scope-top-template">
+  <script type="text/html" id="block-shape-scope-template">
       <div class="hitAreaOrigin">
         <div class="hitAreaScopeOut" data-bind="attr:{id:$data.contentTemplate.scope.scopeName},style:{left:'1.75em'}"></div>
       </div>
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
-        <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
-        <rect x="2.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
-      </svg>
-  </script>
-  <script type="text/html" id="block-space-scope-bottom-template">
-      <svg class="parts_margin" data-bind="style:{width:$parent.blockWidth()}">
-        <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
+      <svg class="svg_basic" data-bind="style:{
+            top:   $data.rowBlockLocalY(),
+            width: $parent.blockWidth(),
+            height:$parent.blockHeight()+32,
+            }"
+        }">
+        <path fill="red" data-bind="attr:{
+          d:$parent.makeSvgPath(
+               'M 0.0em+1em,  -0.25em+0.25em'
+              +'L 0.0em+1em,  -0.15em+0.25em'  
+              +'  1.0em+1em  ,-0.15em+0.25em'
+              +'  1.0em+1em  ,+0.25em+0.25em'
+              +'  2.0em+1em  ,+0.25em+0.25em'
+              +'  2.0em+1em  ,-0.15em+0.25em'
+              +'  %blockW    ,-0.15em+0.25em'
+              +'  %blockW    ,-0.25em+0.25em'
+              +'  0.0em+1em,  -0.25em+0.25em'
+          ),
+          fill:$parent.blockColor(),
+          }"
+        />
       </svg>
   </script>
 
+  <!-- ブロックのテンプレ -->
   <script type="text/html" id="block-template">
-      <div class="ui-widget-content block" 
+      <div class="block" 
            data-bind="with:$data,blockSetup:$data,
                       style:{left:   $data.posX(),
                              top:    $data.posY(),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
                       updateBlockSizeLayout:$data,">
+
+        <!-- 装飾的な要素(デザイン寄りな部分) -->
+
+        <!--   ブロック単位の装飾 -->
+        <svg class="svg_basic" data-bind="style:{
+              top:  -2.0 +'em',
+              left: -2.0 +'em',
+              width: $data.blockWidth() +4.0/$data.pix2em,
+              height:$data.blockHeight()+4.0/$data.pix2em,
+          }">
+          <!--   インデント相当の棒 -->
+          <rect x="2.0em" y="2.0em" 
+                fill="red"
+                data-bind="attr:{
+                   width: '1em',
+                   height:$data.blockHeight(),
+                   fill:  $data.blockColor(),
+                }"/>
+          <!--   取っ手(ドラッグし易いようにつけてみる) -->
+          <rect fill="red"
+                data-bind="attr:{
+                   x:  $data.blockWidth()+2.5/$data.pix2em,
+                   y:  2.5/$data.pix2em,
+                   width: '1em',
+                   height:'1em',
+                   fill:  $data.blockColor(),
+                }"/>
+        </svg>
+        <!-- ko if:$data.blockTemplate.blockOpt.head=='start' -->
+          <!-- ko template:'block-shape-start-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.head=='in' -->
+          <!-- ko template:'block-shape-in-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.head=='value' -->
+          <div class="hitAreaOrigin">
+            <div class="hitAreaValueOut" style="top:0.0;left:0.0;"></div>
+          </div>
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.tail=='end' -->
+          <!-- ko template:'block-shape-bottom-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+        <!-- ko if:$data.blockTemplate.blockOpt.tail=='out' -->
+          <!-- ko template:'block-shape-out-template',data:$data -->
+          <!-- /ko -->
+        <!-- /ko -->
+
+
+        <!--   行単位の装飾 -->
+        <!-- ko foreach:$data.rowContents -->
+          <div data-bind="if:$data.expressions">
+            <div>
+              <!-- ko foreach:$data.expressions -->
+                <!--   値を持つ場合のヒットエリア -->
+                <!-- ko if: $data.valueObsv!=null -->
+                  <div class="hitAreaOrigin">
+                    <div class="hitAreaValueIn" 
+                         data-bind="attr:{
+                           id:$data.dataTemplate.dataName,
+                         },
+                         style:{
+                           top: $data.blockLocalX+"px",
+                           left:$data.blockLocalY+"px",
+                         }"></div>
+                  </div>
+                <!-- /ko -->
+
+                <!-- ko if: $data.dataTemplate.label -->
+                <!-- /ko -->                
+
+                <!-- ko if: $data.dataTemplate.string -->
+                <!-- /ko -->
+                
+                <!-- ko if: $data.dataTemplate.number -->
+                <!-- /ko -->
+
+                <!-- ko if: $data.dataTemplate.bool -->
+                <!-- /ko -->
+                
+                <!-- ko if: $data.dataTemplate.options -->
+                <!-- /ko -->
+
+              <!-- /ko -->
+            </div>
+          </div>
+          <div data-bind="if:$data.scopeOut">
+            <div>
+              <!-- ko template:'block-shape-scope-template',data:$data -->
+              <!-- /ko -->
+            </div>
+          </div>
+          <div data-bind="if:$data.space">
+            <svg class="svg_basic" data-bind="
+                style:{width: $parent.blockWidth(),
+                       height:$parent.blockHeight(),}">
+              <rect x="0.0em" y="0.0em" 
+                    width="5.0em" height="0.5em" fill="blue" 
+                    data-bind="attr:{
+                        y:     $data.rowBlockLocalY(),
+                        height:$data.rowHeight(),
+                        width: $parent.blockWidth(),
+                    }"/>
+            </svg>
+          </div>
+        <!-- /ko -->
+
+        <!-- UI的な要素(プログラム寄りな部分) -->
         <!-- ko foreach:$data.rowContents -->
           <div data-bind="if:$data.expressions">
             <div class="expressions blockRow" data-bind="style:{background:$parent.blockColor()}">
               <!-- ko foreach:$data.expressions -->
-                <!-- ko if: $data.valueObsv!=null -->
-                  <div class="hitAreaOrigin">
-                    <div class="hitAreaValueIn" style="top:0;left:0;" data-bind="attr:{id:$data.dataTemplate.dataName}"></div>
-                  </div>
-                <!-- /ko -->
 
                 <!-- ko if: $data.dataTemplate.label -->
                   <div class="label blockCell" data-bind="text:$data.dataTemplate.label"></div>
@@ -136,46 +286,12 @@
           </div>
           <div data-bind="if:$data.scopeOut">
             <div class="scope blockRow">
-              <!-- ko template:'block-space-scope-top-template',data:$data -->
-              <!-- /ko -->
-              <svg class="scope blockCell">
-                <rect x="0.0em" y="0.0em" width="1.0em" height="0.5em" fill="red" stroke="green" />
-              </svg>
-              <!-- ko template:'block-space-scope-bottom-template',data:$data -->
-              <!-- /ko -->
             </div>
           </div>
           <div data-bind="if:$data.space">
-            <div class="space blockRow">
-              <div class="bg" data-bind="
-                    style:{width:$parent.blockWidth(),
-                           height:$data.rowHeight()},">
-              </div>
+            <div class="scope blockRow">
             </div>
           </div>
-        <!-- /ko -->
-
-        <!-- ko if:$data.blockTemplate.blockOpt.head=='start' -->
-          <!-- ko template:'block-space-start-template',data:$data -->
-          <!-- /ko -->
-        <!-- /ko -->
-        <!-- ko if:$data.blockTemplate.blockOpt.head=='in' -->
-          <!-- ko template:'block-space-in-template',data:$data -->
-          <!-- /ko -->
-        <!-- /ko -->
-        <!-- ko if:$data.blockTemplate.blockOpt.head=='value' -->
-          <div class="hitAreaOrigin">
-            <div class="hitAreaValueOut" style="top:0.0;left:0.0;"></div>
-          </div>
-        <!-- /ko -->
-
-        <!-- ko if:$data.blockTemplate.blockOpt.tail=='end' -->
-          <!-- ko template:'block-space-bottom-template',data:$data -->
-          <!-- /ko -->
-        <!-- /ko -->
-        <!-- ko if:$data.blockTemplate.blockOpt.tail=='out' -->
-          <!-- ko template:'block-space-out-template',data:$data -->
-          <!-- /ko -->
         <!-- /ko -->
       </div>
   </script>
