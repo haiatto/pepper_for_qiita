@@ -487,6 +487,18 @@ function Block(blockManager, blockTemplate, callback) {
                   else{
                       self.blockManager.moveStart(self, ui.position);
                   }
+                  if(self.in){
+                      $(".hitAreaOut").addClass("hitAreaDragging");
+                      $(".hitAreaScopeOut").addClass("hitAreaDragging");
+                  }
+                  if(self.out){
+                      $(".hitAreaIn").addClass("hitAreaDragging");
+                  }
+                  if(self.valueOut)
+                  {
+                      $(".hitAreaValueIn").addClass("hitAreaDragging");
+                      $(".hitAreaValueOut").addClass("hitAreaDragging");
+                  }
               },
               drag:function(event, ui){
                   //console.log("drag ");
@@ -498,6 +510,7 @@ function Block(blockManager, blockTemplate, callback) {
                   }
               },
               stop:function(event, ui){
+                  $(".hitAreaDragging").removeClass("hitAreaDragging");
                   //console.log("drag stop");
                   if(self.isCloneDragMode){
                       self.blockManager.moveStop(cloneBlock, ui.position);
