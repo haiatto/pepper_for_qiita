@@ -90,6 +90,10 @@
 }
 .block .svg_basic{ 
   position:absolute; 
+  pointer-events: none;　
+}
+.block .svg_draggable{ 
+  pointer-events: visiblePainted;　
 }
 .block .blockRow{
     position:absolute; 
@@ -204,6 +208,10 @@
   visibility: visible;
   border-style:solid;
   border-width:1px;
+}
+
+.noDrag{
+
 }
 
 .curEditMode{

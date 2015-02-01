@@ -468,6 +468,7 @@ function Block(blockManager, blockTemplate, callback) {
               //containment:$(".blockBox"),
               //scope:'toOriginalBlock',
               scroll:false,
+              cancel:".noDrag,input,textarea,button,select,option",
               helper:function(e){
                   if(self.isCloneDragMode){
                       cloneBlock = self.cloneThisBlock();

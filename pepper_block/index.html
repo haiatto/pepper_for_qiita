@@ -162,7 +162,8 @@
                    fill:  $data.blockColor(),
                 }"/>
           <!--   取っ手(ドラッグし易いようにつけてみる) -->
-          <rect fill="red"
+          <!-- ko if:!$data.valueOut -->
+          <rect class="svg_draggable" fill="red"
                 data-bind="attr:{
                    x:  $data.blockWidth()+2.5/$data.pix2em,
                    y:  2.5/$data.pix2em,
@@ -170,6 +171,17 @@
                    height:'1em',
                    fill:  $data.blockColor(),
                 }"/>
+          <!-- /ko -->
+          <!-- ko if:$data.valueOut -->
+          <rect class="svg_draggable" fill="red"
+                data-bind="attr:{
+                   x:  $data.blockWidth() + 1.5/$data.pix2em,
+                   y:  3.2/$data.pix2em,
+                   width: '2.2em',
+                   height:'1.2em',
+                   fill:  $data.blockColor(),
+                }"/>
+          <!-- /ko -->
         </svg>
         <!-- ko if:$data.blockTemplate.blockOpt.head=='start' -->
           <!-- ko template:'block-shape-start-template',data:$data -->
