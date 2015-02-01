@@ -485,6 +485,7 @@ function Block(blockManager, blockTemplate, callback) {
                   //console.log("drag stop");
                   if(self.isCloneDragMode){
                       self.blockManager.moveStop(cloneBlock, ui.position);
+                      self.blockManager.removeBlock(cloneBlock);
                       cloneBlock = null;
                   }
                   else{
@@ -618,10 +619,21 @@ function Block(blockManager, blockTemplate, callback) {
 
     // 外側につながるブロックをセットします
     self.connectOut = function(block){
+        var oldConnect = self.out.blockObsv()
         self.clearOut();
         block.clearIn();
         self.out.blockObsv(block);
         self.out.blockObsv().in.blockObsv(self);
+        if(oldConnect)
+        {
+            var bottomBlock = self.out.blockObsv();
+            while(bottomBlock.out && bottomBlock.out.blockObsv()){
+                bottomBlock = bottomBlock.out.blockObsv();
+            }
+            if(bottomBlock.out){
+                bottomBlock.connectOut(oldConnect);
+            }
+        }
     };
 
     // 値の入力のブロックをセットします
@@ -663,6 +675,16 @@ function Block(blockManager, blockTemplate, callback) {
         return ins;
     };
 }
+
+
+// 設計メモ
+// 管理リスト＋グローバルなブロックという形で実装
+// ブロック間はグローバルにつなぎ、相互に接続も自由。
+// 管理エリア毎にリストを作ってそこに格納するだけ。
+
+//TODO:
+// 今はリストは固定名だけど、動的に作れるようにする。
+// 動的になれば、タブ実装とかが簡単にできるはず
 
 function BlockManager(){
     var self = this;
@@ -718,6 +740,7 @@ function BlockManager(){
             valueBlock = block;
         }
         // ヒットチェックをします
+        // TODO:所属リストのチェックをするべき
         $.each(self.blockList,function(k,tgtBlock){
             if(tgtBlock.isNoConnectMode){
                 return;
@@ -890,16 +913,23 @@ function BlockManager(){
         block.posY(position.top );
         self.updatePositionLayout(block);
                    
-        var hit = getHitBlock(block);
-        if(hit)
-        {
-        }
+        self.dropGuideUpdate(block);
     };
     self.moveStop = function(block,position){
         block.posX(position.left);
         block.posY(position.top );
         self.updatePositionLayout(block);
-        
+                
+        self.dropConnectUpdate(block);
+    };
+
+    // ドロップする場所のガイドを更新します
+    self.dropGuideUpdate = function(block){
+
+    };
+    // ドロップした際の接続の更新を行います
+    self.dropConnectUpdate = function(block)
+    {        
         var hit = getHitBlock(block);
         if(hit)
         {
@@ -915,10 +945,16 @@ function BlockManager(){
             else{
                 hit.srcBlock.connectOut(hit.hitBlock);
             }
-            //TODO:blockのほうをくっつくように移動させる処理を書く
             self.updatePositionLayout(block);
         }
+        // zIndexを振りなおします
+        var zIndex = 100;
+        $.each(self.blockList,function(k,block){
+            $(block.element).css({zIndex:zIndex});
+            zIndex+=1;
+        });
     };
+
 
     // ブロック用のカスタムバインド
     ko.bindingHandlers.blockSetup = {
@@ -934,7 +970,7 @@ function BlockManager(){
         init: function(element, valueAccessor) {
         },
         update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-            console.log("updateBlockSizeLayout");
+            //console.log("updateBlockSizeLayout");
              
             var block = ko.utils.unwrapObservable(valueAccessor());
             // ブロック内のデータの通知を受けることを伝えます
@@ -1022,6 +1058,11 @@ function BlockManager(){
     };
 
     // ブロックリスト管理など
+
+    // ブロックを破棄
+    self.removeBlock = function(removeBlock){
+
+    };
 
     // 素材リストに追加
     self.addMaterialBlock = function(newBlock){
@@ -1246,31 +1287,37 @@ $(function(){
             
         };
 
+        //■ 各作業場の作成 ■
+        var dropAction_ = function(ui, targetArea, addFunc){
+            var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+            var dropBlock = findBlock.cloneThisBlock();
+            addFunc(dropBlock);//TODO:リストを汎用化する
+            var areaOffset = $(targetArea).offset();
+            var scrollTop  = $(targetArea).scrollTop();
+            var scrollLeft = $(targetArea).scrollLeft();
+            dropBlock.posX(ui.offset.left - areaOffset.left + scrollLeft);
+            dropBlock.posY(ui.offset.top  - areaOffset.top  + scrollTop);
+            self.blockManager.dropConnectUpdate( dropBlock );
+        };
         $(".materialBox").droppable({
             scope: 'toMaterialBlock',
         });
         $(".toyBox").droppable({
             scope: 'toCloneBlock',
             drop: function(e, ui) {
-                var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
-                var dropBlock = findBlock.cloneThisBlock();
-                self.blockManager.addToyBlock(dropBlock);
-                var areaOffset = $(".toyBox").offset();
-                dropBlock.posX(ui.offset.left - areaOffset.left);
-                dropBlock.posY(ui.offset.top  - areaOffset.top);
+                dropAction_(ui,$(".toyBox"),self.blockManager.addToyBlock);
             },
         });
         $(".factoryBox").droppable({
             scope: 'toCloneBlock',
             drop: function(e, ui) {
-                var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
-                self.blockManager.addFactoryBlock(findBlock);
+                dropAction_(ui,$(".factoryBox"),self.blockManager.addFactoryBlock);
             },
         });
 
+
         //■ ブロック管理を作成 ■
         self.blockManager = new BlockManager();
-
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
 
