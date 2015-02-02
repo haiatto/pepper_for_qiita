@@ -227,8 +227,10 @@
             />
             <path fill="red" data-bind="attr:{
               d:$parent.makeSvgPath(
-                   'M  %l,     %t(0.25em) '
-                  +'L  %l,     %b(-0.15em) '
+                   'M  %l(0.0em),     %t(0.25em) '
+                  +'L  %l(-0.1em),    %t(0.35em) '
+                  +'L  %l(-0.1em),    %b(-0.25em) '
+                  +'L  %l(0.0em),     %b(-0.15em) '
               ,{top:-2.0,left:-2.0}),
               fill:$parent.blockColor(),
               stroke:'black',
