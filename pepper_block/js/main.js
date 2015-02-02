@@ -192,16 +192,19 @@ function Block(blockManager, blockTemplate, callback) {
     });
 
     // SVG要素作成のための補助
-    self.makeSvgPath = function(templ)
+    self.makeSvgPath = function(templ,offs)
     {
-        templ = templ.replace(/%blockW/g, ""+self.blockWidth() );
-        templ = templ.replace(/%blockH/g, ""+self.blockHeight() );
         templ = templ.replace(/([0-9]+(\.[0-9]+)?)em/g, function(s,a){
             return (parseFloat(a) / self.pix2em);
         } );
-        templ = templ.replace(/([+-]?[0-9]+(\.[0-9]+)?)([+-])([0-9]+(\.[0-9]+)?)/g, function(s,a,x,op,b){
-            return ""+(op=='+'?(parseFloat(a)+parseFloat(b)): 
-                               (parseFloat(a)-parseFloat(b)));
+        
+        templ = templ.replace(/%([tlbr])(\(([+-]?[0-9]+(\.[0-9]+)?)\))?/g, function(s,a,x,b){
+            var pix = 0;
+            if(a=='t') pix = (-offs.top /self.pix2em);
+            if(a=='l') pix = (-offs.left/self.pix2em);
+            if(a=='b') pix = (-offs.top /self.pix2em + self.blockHeight());
+            if(a=='r') pix = (-offs.left/self.pix2em + self.blockWidth() );
+            return "" + (pix + (b?parseFloat(b):0) );
         } );
         return templ;
     };
@@ -333,7 +336,7 @@ function Block(blockManager, blockTemplate, callback) {
             self.element = null;
         }
         self.element = element;
-        self.pix2em  = 1.0 / $('#pix2em').outerHeight();
+        self.pix2em  = 1.0 / ($('#pix2em').outerHeight()/100.0);
         self.minimumRowHeight = self.minimumRowHeightEm / self.pix2em;
         self.indentWidth      = self.indentWidthEm      / self.pix2em;
         if(self.in)
