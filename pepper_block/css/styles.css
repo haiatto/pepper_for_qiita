@@ -199,7 +199,7 @@
 .block .hitAreaScopeOut{
   position:absolute;
   width: 1.5em;
-  height: 1.8em;
+  height: 1.0em;
   background:blue;
   opacity: 0.5;
   z-index: 99999;  

@@ -875,9 +875,9 @@ function BlockManager(){
                 if(scope.scopeOut.blockObsv()){
                     var blockA = block;
                     var blockB = scope.scopeOut.blockObsv();
-                    //var marginConnector = 0.5 / blockB.pix2em;
+                    var blkConnectorHalfMargin = 0.25 / block.pix2em;
                     blockB.posY(
-                        blockA.posY() + scope.rowBlockLocalY()// + marginConnector
+                        blockA.posY() + scope.rowBlockLocalY() + blkConnectorHalfMargin
                     );
                     blockB.posX(
                         blockA.posX() + blockA.indentWidth
@@ -1050,7 +1050,7 @@ function BlockManager(){
                         if(dataName)
                         {
                             valueIn = block.valueInTbl[dataName];
-                            var nestValueMargin = 0.2 / block.pix2em;
+                            var nestValueMargin = 0.20 / block.pix2em;
                             if(valueIn.blockObsv())
                             {
                                 cellW = Math.max(cellW, valueIn.blockObsv().blockWidth()  + nestValueMargin);
@@ -1075,6 +1075,8 @@ function BlockManager(){
                             tmpOutBlock = null;
                         }
                     }
+                    //上辺の出力コネクタ用のマージンを加えます
+                    scopeBlocksH += blkConnectorHalfMargin;
                     rowSizeH = Math.max( rowSizeH, scopeBlocksH );
                 }
                 else if(rowContent.space){

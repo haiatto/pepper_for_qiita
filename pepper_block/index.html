@@ -17,102 +17,16 @@
 </head>
 <body>
   <!-- 図形と当たりのテンプレ -->
-  <script type="text/html" id="block-shape-start-template">
-      <div class="hitAreaOrigin">
-        <div class="hitAreaOut" style="top:-0.5em;left:1em;"></div>
-      </div>
-
-      <svg class="head_margin" data-bind="style:{
-            top:  -0.5+'em',
-            left:  0.0+'em',
-            width:$parent.blockWidth()
-        }">
-        <rect x="0em" y="0.0em" width="5em" height="1.0em" fill="red" stroke="green" />
-        <rect x="5em" y="0.9em" width="1em" height="0.1em" fill="red" stroke="green" data-bind="attr:{width:$parent.blockWidth()}" />
-      </svg>
-
-  </script>
-  <script type="text/html" id="block-shape-in-template">
-      <div class="hitAreaOrigin" data-bind="style:{
-            top:  -0.5+'em',
-            left:  0.0+'em',
-        }">
-        <div class="hitAreaIn" style="top:-0.5em;left:0.5em;"></div>
-      </div>
-      <svg class="svg_basic" data-bind="style:{
-            top:  -0.25+'em',
-            left:  0.0+'em',
-            width: $parent.blockWidth(),
-            height:$parent.blockHeight(),
-        }">
-<!--
-        <path fill="red" data-bind="attr:{
-          d:$parent.makeSvgPath(
-               'M 0.0em,  0.5em'  
-              +'  0.0em  ,0.1em'
-              +'  1.0em  ,0.1em'
-              +'  1.0em  ,0.35em'
-              +'  2.0em  ,0.35em'
-              +'  2.0em  ,0.1em'
-              +'  %blockW,0.1em'
-              +'  %blockW,0.5em'
-              +'  0.0em  ,0.5em'
-          ),
-          fill:$parent.blockColor(),
-          }"
-        />
--->
-      </svg>
-  </script>
-  <script type="text/html" id="block-shape-out-template">
-      <div class="hitAreaOrigin" data-bind="style:{
-            top:  $parent.blockHeight(),
-            left:  0.0+'em',
-        }">
-        <div class="hitAreaOut" style="top:0.0em;left:0.5em;"></div>
-      </div>
-      <svg class="svg_basic" data-bind="style:{
-            top:   0.0+'em',
-            left:  0.0+'em',
-            width: $parent.blockWidth(),
-            height:$parent.blockHeight()+32,
-        }">
-<!--
-        <path fill="red" data-bind="attr:{
-          d:$parent.makeSvgPath(
-               'M 0.0em,  %blockH-0.25em'
-              +'L 0.0em,  %blockH-0.15em'  
-              +'  1.0em  ,%blockH-0.15em'
-              +'  1.0em  ,%blockH+0.25em'
-              +'  2.0em  ,%blockH+0.25em'
-              +'  2.0em  ,%blockH-0.15em'
-              +'  %blockW,%blockH-0.15em'
-              +'  %blockW,%blockH-0.25em'
-              +'  0.0em,  %blockH-0.25em'
-          ),
-          fill:$parent.blockColor(),
-          }"
-        />
--->
-      </svg>
-  </script>
-  <script type="text/html" id="block-shape-top-template">
-<!--
-      <svg class="svg_basic" data-bind="style:{width:$parent.blockWidth()}">
-        <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
-      </svg>
--->
-  </script>
-  <script type="text/html" id="block-shape-bottom-template">
-<!--
-      <svg class="svg_basic" data-bind="style:{width:$parent.blockWidth()}">
-        <rect x="0.0em" y="0.0em" width="3.0em" height="0.5em" fill="red" stroke="green" />
-      </svg>
--->
-  </script>
   <script type="text/html" id="block-shape-scope-template">
       <div class="hitAreaOrigin">
-        <div class="hitAreaScopeOut" data-bind="attr:{id:$data.contentTemplate.scope.scopeName},style:{left:'1.75em'}"></div>
+        <div class="hitAreaScopeOut" data-bind="attr:{
+                id: $data.contentTemplate.scope.scopeName,
+            },
+            style:{
+                left:'1.75em',
+                top:$data.rowBlockLocalY(),
+            }">
+      </div>
       </div>
       <svg class="svg_basic" data-bind="style:{
             top:   $data.rowBlockLocalY(),
@@ -120,23 +34,22 @@
             height:$parent.blockHeight()+32,
             }"
         }">
-<!--
-        <path fill="red" data-bind="attr:{
-          d:$parent.makeSvgPath(
-               'M 0.0em+1em,  -0.25em+0.25em'
-              +'L 0.0em+1em,  -0.15em+0.25em'  
-              +'  1.0em+1em  ,-0.15em+0.25em'
-              +'  1.0em+1em  ,+0.25em+0.25em'
-              +'  2.0em+1em  ,+0.25em+0.25em'
-              +'  2.0em+1em  ,-0.15em+0.25em'
-              +'  %blockW    ,-0.15em+0.25em'
-              +'  %blockW    ,-0.25em+0.25em'
-              +'  0.0em+1em,  -0.25em+0.25em'
-          ),
-          fill:$parent.blockColor(),
-          }"
-        />
--->
+            <!--   出力コネクタ -->
+            <path fill="red" data-bind="attr:{
+              d:$parent.makeSvgPath(
+                   'M  1.0em,   %t(-0.10em) '
+                  +'l  0.0em,   0.10em '  
+                  +'   1.0em,   0.00em '
+                  +'   0.0em,   0.40em '
+                  +'   1.0em,   0.00em '
+                  +'   0.0em,  -0.40em '
+                  +'L  %r,      %t(0.00em) '
+                  +'   %r,      %t(-0.10em) '
+              ,{top:0.0,left:0.0}),
+              fill:$parent.blockColor(),
+              stroke:'black',
+              }"
+            />
       </svg>
   </script>
 
@@ -161,10 +74,10 @@
           <!--   ヒットエリア要素 -->
           <div class="hitAreaOrigin">
             <!-- ko if:$data.in -->
-              <div class="hitAreaIn"  style="top:-0.5em;left:0.5em;"></div>
+              <div class="hitAreaIn"  style="top:-1.0em;left:0.5em;"></div>
             <!-- /ko -->
             <!-- ko if:$data.out -->
-              <div class="hitAreaOut" style="top:-0.5em;left:0.5em;"
+              <div class="hitAreaOut" style="top: 0.0em;left:0.5em;"
                    data-bind="style:{
                      top:$data.blockHeight()}"></div>
             <!-- /ko -->
@@ -259,6 +172,41 @@
             <div class="hitAreaValueOut" style="top:0.0;left:0.0;"></div>
           </div>
 
+          <!--   SVG -->
+          <svg class="svg_basic" data-bind="style:{
+                top:  -2.0 +'em',
+                left: -2.0 +'em',
+                width: $data.blockWidth() +4.0/$data.pix2em,
+                height:$data.blockHeight()+4.0/$data.pix2em,
+            }">
+
+            <!--   フレーム -->
+            <path class="svg_draggable" data-bind="attr:{
+              d:$parent.makeSvgPath(
+                   'M  %l,     %t(0.25em) '
+                  +'l  0.0em,  -0.40em '  
+                  +'L  %r,      %t(-0.15em) '
+                  +'   %r,      %b(0.15em) '
+                  +'   %l,      %b(0.15em) '
+                  +'   %l,      %t(0.15em) '
+              ,{top:-2.0,left:-2.0}),
+              fill:$parent.blockColor(),
+              stroke:'black',
+              }"
+            />
+            <!--   取っ手(ドラッグし易いようにつけてみる) -->
+            <path fill="red" class="svg_draggable" data-bind="attr:{
+              d:$parent.makeSvgPath(
+                   'M  %r(0.0em),     %b(0.00em) '
+                  +'L  %r(0.2em),     %b(0.30em) '
+                  +'A  1.00em, 0.60em, 0, 1, 1, %r(0.1em), %b(0.50em) '
+                  +'L  %r(-1.0em),     %b(0.00em) '
+              ,{top:-2.0,left:-2.0}),
+              fill:$parent.blockColor(),
+              stroke:'black',
+              }"
+            />
+          </svg>
 
         <!-- /ko -->
 
