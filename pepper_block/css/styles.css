@@ -74,6 +74,7 @@
     position:absolute;
     top:0.0em;
     left:0.0em;
+    text-shadow:none;
 }
 .executeNow{
   box-shadow: 0 0 1em 0.5em red;
@@ -133,11 +134,13 @@
 .block .expressions .string{ 
     border-style:solid;
     background: white;
+    color:black;
     min-width:1em; 
     white-space: nowrap;
     border-width: 1px;
     border-radius: 2px;
-    padding: 0.1em;
+    padding-left: 0.1em;
+    padding-right: 0.1em;
     z-index:1;
 }
 .block .expressions .number{ 
@@ -145,6 +148,13 @@
 }
 .block .expressions .bool{ 
     border-style:solid;
+    border-width:1px;
+    height: 1.2em;
+    width:1.5em;
+    border-style:solid;
+    border-radius: 0.4em;
+    background: white;
+    color:black;
 }
 .block .expressions .options{ 
     border-style:solid;
@@ -161,6 +171,7 @@
 
   background:blue;
   opacity: 0.5;
+  z-index: 99999;
 
   visibility: hidden;
 }
@@ -171,14 +182,14 @@
 
   background: blueviolet;
   opacity: 0.5;
+  z-index: 99999;
 
   visibility: hidden;
 }
 .block .hitAreaValueIn{
   position:absolute;
   width: 1.5em;
-  height: 1.8em;
-
+  height: 1.4em;
   background:yellow;
   opacity: 0.5;
   z-index: 99999;

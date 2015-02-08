@@ -108,7 +108,8 @@ function Camera(alVideoDevice) {
 //   sys_version
 //     'システムバージョン'
 //   blockWorldId
-//     '世界共通の重複しない識別子'
+//     'シリアライズで使う世界共通(各言語共通)の重複しない識別子' 
+//      たとえば 'talkBlock' 'haiatto.talkBlock' '0x00AABBCCDDEEFF99' とか自由
 //   lang
 //     'jp' 'en'
 //   color
@@ -117,6 +118,9 @@ function Camera(alVideoDevice) {
 //     'start' 'in' ’value’
 //   tail
 //     'end' 'out' ’value’
+//   types:
+//      ["","",...]
+
 // blockContents
 //   expressions
 //     ***下記参照***
@@ -142,10 +146,19 @@ function Camera(alVideoDevice) {
 //   options
 // [
 //   {label:"ここに"}.
-//   {string:{default:"",},dataName:'dataA'},
-//   {string:{default:"",},dataName:'dataB'},
+//   {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
+//   {string:{default:"",},dataName:'dataB', acceptTypes:["*"]},
+//   {string:{default:"",},dataName:'dataC'},
 //   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC'},
 // ],
+//
+//-- データフォーマット --
+// {string:""},
+// {bool:true},
+// {number:123},
+// {string_list:["A","B"]},
+// {miscABC:{version:,dataA:,dataB:,}},
+
 
 //■■■■■ 多言語対応案 ■■■■■ 
 //  blockWorldId と lang で多言語対応
@@ -185,6 +198,7 @@ function Block(blockManager, blockTemplate, callback) {
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
     self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
+    self.textColor   = ko.observable(self.blockTemplate.blockOpt.textColor||"white");
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
@@ -218,7 +232,8 @@ function Block(blockManager, blockTemplate, callback) {
         self.valueOut = {
             block:null, 
             tgtDataName:null, 
-            hitArea:null
+            hitArea:null,
+            types: self.blockTemplate.blockOpt.types,
         };
     }
     else{
@@ -256,29 +271,43 @@ function Block(blockManager, blockTemplate, callback) {
             $.each(contentTemplate.expressions,function(key,dataTemplate){
                 var expression = {
                     dataTemplate:dataTemplate,
-                    blockLocalX:0,
-                    blockLocalY:0,
+                    blockLocalX:ko.observable(0),
+                    blockLocalY:ko.observable(0),
                 };
                 if(dataTemplate.dataName){
-                    expression.blockObsv = ko.observable();
-                    expression.hitArea   = null;
-                    expression.valueObsv = ko.observable();
+                    expression.acceptTypes = dataTemplate.acceptTypes;
+                    expression.blockObsv   = ko.observable();
+                    expression.hitArea     = null;
+                    expression.valueObsv   = ko.observable();
                     self.valueInTbl[dataTemplate.dataName] = expression;
                     self.valueDataTbl[dataTemplate.dataName] = expression.valueObsv;
                     if(dataTemplate.bool)
                     {
+                        if(!expression.acceptTypes){
+                            //受け入れ型指定が無い場合はデフォルトをセットします
+                            expression.acceptTypes = ["bool"];
+                        }
                         expression.valueObsv(dataTemplate.bool.default||false);
                     }
                     if(dataTemplate.string)
                     {
+                        if(!expression.acceptTypes){
+                            //受け入れ型指定が無い場合はデフォルトをセットします
+                            expression.acceptTypes = ["string"];//HACK: 何でもありにするかも？
+                        }
                         expression.valueObsv(dataTemplate.string.default||"");
                     }
                     if(dataTemplate.number)
                     {
+                        if(!expression.acceptTypes){
+                            //受け入れ型指定が無い場合はデフォルトをセットします
+                            expression.acceptTypes = ["number"];//HACK: 何でもありにするかも？
+                        }
                         expression.valueObsv(dataTemplate.number.default||0);
                     }
                     if(dataTemplate.options)
                     {
+                        //ここはデフォルトの受け入れ型指定は 無し です
                         expression.valueObsv(dataTemplate.options.default||"");
                     }
                 }
@@ -303,6 +332,38 @@ function Block(blockManager, blockTemplate, callback) {
         self.rowContents.push(rowContent);
     });
 
+    // ■
+
+    // 値用ブロックが指定のデータにつなげられる場合、型名を返します
+    self.getTypeAccept = function(tgtDataName,valueBlock){
+        if(valueBlock.valueOut && self.valueInTbl[tgtDataName])
+        {
+            if(!self.valueInTbl[tgtDataName].acceptTypes)
+            {
+                //受け側の無指定は受け入れ無しという扱いにします
+                return null;
+            }
+            if(!valueBlock.valueOut.types)
+            {
+               // 渡す側の無指定は、受け側が何でもありの場合のみ受け入れます
+               if(self.valueInTbl[tgtDataName].acceptTypes[0]=='*')
+               {
+                   return '*';
+               }
+               return null
+            }
+            var acceptType = null;
+            $.each(self.valueInTbl[tgtDataName].acceptTypes,function(k,v){
+                if(valueBlock.valueOut.types.indexOf(v)>=0)
+                {
+                    acceptType = v;
+                }
+            });
+            return acceptType;
+        }
+    };
+
+    // ■UI関連の処理
     
     // クローンするドラッグモード
     self.isCloneDragMode = false;
@@ -327,7 +388,6 @@ function Block(blockManager, blockTemplate, callback) {
     {
         self.isNoConnectMode = enable;
     };
-
 
     // 要素関連のセットアップ
     self.setup = function(element){
@@ -357,6 +417,9 @@ function Block(blockManager, blockTemplate, callback) {
         $.each(self.scopeTbl, function(scopeName,scope){
             scope.scopeOut.hitArea = $(".hitAreaScopeOut#"+scopeName, element);
         });
+
+
+
 
         //TODO:押して少し経ったら編集モード、その間に動かされたらドラッグモードが良いはず
         var cloneBlock = null;
@@ -491,6 +554,7 @@ function Block(blockManager, blockTemplate, callback) {
                   else{
                       self.blockManager.moveStart(self, ui.position);
                   }
+                  // ドラッグ先のガイド表示をします
                   if(self.in){
                       $(".hitAreaOut").addClass("hitAreaDragging");
                       $(".hitAreaScopeOut").addClass("hitAreaDragging");
@@ -500,8 +564,20 @@ function Block(blockManager, blockTemplate, callback) {
                   }
                   if(self.valueOut)
                   {
-                      $(".hitAreaValueIn").addClass("hitAreaDragging");
-                      $(".hitAreaValueOut").addClass("hitAreaDragging");
+                      $(".hitAreaValueIn").each(function(k,elm){
+                          var tgtElm = $(elm).parents(".block");
+                          var tgtBlock = self.blockManager.elementBlockLookupTbl[$(tgtElm).data("blockId")];
+                          var tgtDataName = $(elm).attr("id");
+                          if(tgtBlock)
+                          {
+                              if(tgtBlock.getTypeAccept(tgtDataName,self))
+                              {
+                                  $(elm).addClass("hitAreaDragging");
+                              }
+                          }
+                      });
+                      //$(".hitAreaValueIn").addClass("hitAreaDragging");
+                      $(".hitAreaValueOut",ui.helper).addClass("hitAreaDragging");
                   }
               },
               drag:function(event, ui){
@@ -534,9 +610,13 @@ function Block(blockManager, blockTemplate, callback) {
               self.deferred();
           });
 
+
+
         // 要素が出来たので再度設定します(内部でdraggableなどをいじります)
         self.setCloneDragMode(self.isCloneDragMode);
     };
+
+    // ■実行関連の処理
     
     // Deferred の promise作って返します
     self.deferred = function()
@@ -601,6 +681,8 @@ function Block(blockManager, blockTemplate, callback) {
             }
         });
     };
+
+    //■ 接続関連の処理
 
     self.clearOut = function()
     {
@@ -674,12 +756,19 @@ function Block(blockManager, blockTemplate, callback) {
         var valueIn = self.valueInTbl[dataName];
         if(valueIn)
         {
+            if(self.valueOut && 
+               self.valueOut.block == valueBlock)
+            {
+                //自身が値タイプで繋いだ先にこれから繋ぐブロックが居る場合クリアします
+                self.clearValueOut();
+            }
+
             self.clearValueIn(dataName);
             valueBlock.clearValueOut();
 
-            valueIn.blockObsv(valueBlock);
             valueBlock.valueOut.block       = self;
             valueBlock.valueOut.tgtDataName = dataName;
+            valueIn.blockObsv(valueBlock);
         }
     };
 
@@ -690,13 +779,23 @@ function Block(blockManager, blockTemplate, callback) {
             console.log("error:" + scopeName);
             return;
         }
-        if(self.scopeTbl[scopeName].scopeOut.blockObsv())
-        {
-            self.scopeTbl[scopeName].scopeOut.blockObsv().in.blockObsv(null);
-        }
+        var oldConnectOut = self.scopeTbl[scopeName].scopeOut.blockObsv();
+        self.clearScopeOut();
+
         self.scopeTbl[scopeName].scopeOut.blockObsv(block);
         block.in.blockObsv(self);
         block.in.srcScopeName = scopeName;
+        
+        if(oldConnectOut)
+        {
+            var bottomBlock = block;
+            while(bottomBlock.out && bottomBlock.out.blockObsv()){
+                bottomBlock = bottomBlock.out.blockObsv();
+            }
+            if(bottomBlock.out){
+                bottomBlock.connectOut(oldConnectOut);
+            }
+        }
     };
 
     // 複製します(内側のブロックは複製されません)
@@ -719,9 +818,14 @@ function Block(blockManager, blockTemplate, callback) {
 // 今はリストは固定名だけど、動的に作れるようにする。
 // 動的になれば、タブ実装とかが簡単にできるはず
 
+// リファクタリングメモ
+// ドロップ先とリストをセットで管理
+
+
 function BlockManager(){
     var self = this;
     self.blockList = [];
+    self.elementBlockLookupTbl = {};
     self.floatDraggingList = ko.observableArray();
     self.materialList = ko.observableArray();
     self.toyList      = ko.observableArray();
@@ -745,6 +849,41 @@ function BlockManager(){
             return Math.sqrt(vx*vx + vy*vy);
         }
     };
+    // 指定のブロックがブロックの塊の中に含まれているかチェックします
+    var checkContainLumpBlock = function(checkBlock,lumbBlock)
+    {
+        // 一番上のブロックを探します
+        var topBlock = lumbBlock;
+        while(topBlock.valueOut && topBlock.valueOut.block)
+        {
+            topBlock = topBlock.valueOut.block;
+        }
+        //通常用ブロックの場合は接続元を辿ります
+        while(topBlock.in && topBlock.in.blockObsv())
+        {
+            topBlock = topBlock.in.blockObsv();
+        }
+        var bFind = false;
+        var recv = function(block){
+            if(block == checkBlock){
+                bFind = true;
+                return;
+            }
+            if(block.valueInTbl){
+               $.each(block.valueInTbl,function(k,valueIn){
+                   if(valueIn.blockObsv()){
+                       recv(valueIn.blockObsv());
+                   }
+               });
+            }
+            if(block.out && block.out.blockObsv()){
+                recv(block.out.blockObsv());
+            }
+        };
+        recv(topBlock);
+        return bFind;
+    };
+
     var getHitBlock = function(block){
         var nearDist = 99999999;
         var hitBlock = null;
@@ -821,12 +960,26 @@ function BlockManager(){
                 $.each(tgtBlock.valueInTbl,function(name,valueIn){
                     dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
                     if(dist && dist < nearDist){
-                        nearDist = dist;
-                        hitBlock = tgtBlock;
-                        srcBlock = valueBlock;
-                        isSrcIn  = false;
-                        valueName = name;
-                        scopeName = null;
+                        if(tgtBlock.valueInTbl[name].blockObsv())
+                        {
+                            //値ブロックの場合接続済みな場合は無視します
+                            //(上に乗っかったものでUIが塞がっているので)
+                            return;
+                        }
+                        if(checkContainLumpBlock(valueBlock, tgtBlock))
+                        {
+                            //自身が接続しているブロックの塊内は無視します
+                            return;
+                        }
+                        if(tgtBlock.getTypeAccept(name,valueBlock))
+                        {
+                            nearDist = dist;
+                            hitBlock = tgtBlock;
+                            srcBlock = valueBlock;
+                            isSrcIn  = false;
+                            valueName = name;
+                            scopeName = null;
+                        }
                     }
                 });
             }
@@ -863,10 +1016,10 @@ function BlockManager(){
                     var blockA = block;
                     var blockB = valueIn.blockObsv();
                     blockB.posX(
-                        blockA.posX() + valueIn.blockLocalX
+                        blockA.posX() + valueIn.blockLocalX()
                     );
                     blockB.posY(
-                        blockA.posY() + valueIn.blockLocalY
+                        blockA.posY() + valueIn.blockLocalY()
                     );
                     recv(valueIn.blockObsv());
                 }
@@ -990,10 +1143,16 @@ function BlockManager(){
 
 
     // ブロック用のカスタムバインド
+    var blockIdSeed_ = 1;
     ko.bindingHandlers.blockSetup = {
         init: function(element, valueAccessor) {
+            // ユーザーデータにIDを付加します
+            $(element).data("blockId",blockIdSeed_++);
+            // ブロックの要素生成時の初期化を行います
             var blockIns = ko.unwrap(valueAccessor());
             blockIns.setup(element);
+            // ブロックを要素から引くためにテーブルに追加します
+            self.elementBlockLookupTbl[$(element).data("blockId")] = blockIns;
         },
         update: function(element, valueAccessor) {
         }
@@ -1028,18 +1187,24 @@ function BlockManager(){
             $(".blockRow",element).each(function(rowIndex,elemR){
                 var rowContent = block.rowContents[rowIndex];
                 var rowSizeH   = block.minimumRowHeight;
+                var cellXMargin = 0.10 / block.pix2em;
                 var blkLocalPosX = 0;
                 if(rowContent.expressions)
                 {
                     $(".blockCell",elemR).each(function(k,elemCell){
+                        
+                        if(k!=0){
+                            blkLocalPosX += cellXMargin;
+                        }
                         var valueln;
                         var dataName = $(elemCell).attr("id");
                         if(dataName)
                         {
                             valueIn = block.valueInTbl[dataName];
-                            valueIn.blockLocalX = blkLocalPosX ;
-                            valueIn.blockLocalY = blkLocalPosY ;
-                            $(".hitAreaValueIn#"+dataName,block.element).css(
+                            valueIn.blockLocalX( blkLocalPosX );
+                            valueIn.blockLocalY( blkLocalPosY );
+                            $(".hitAreaValueIn#"+dataName,block.element).
+                            css(
                                  {left:blkLocalPosX,
                                   top :blkLocalPosY,}
                             );
@@ -1109,7 +1274,7 @@ function BlockManager(){
 
     };
 
-    // 素材リストに追加
+    // 素材リストに追加 TODO: 後でリスト汎用化
     self.addMaterialBlock = function(newBlock){
         // 素材リスト内はクローンドラッグモード＆接続禁止モードに設定します
         self.blockList.push(newBlock);
@@ -1168,6 +1333,9 @@ function BlockManager(){
         }
     };
 }
+
+
+
 
 $(function(){
     // -- カスタムバインド --
@@ -1364,16 +1532,23 @@ $(function(){
         //■ ブロック管理を作成 ■
         self.blockManager = new BlockManager();
 
+
+
+
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
 
         // 会話ブロック
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
-                      {string:{default:"こんにちわ"},dataName:'talkText0',},
+                      {string:{default:"こんにちわ"},dataName:'talkText0'},
                       {label:'と　しゃべる'},
                   ]},
               ],
@@ -1395,18 +1570,58 @@ $(function(){
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{color:'orange',head:'value',tail:'value'},
+              blockOpt:{color:'orange',head:'value',tail:'value',types:["string"]},
               blockContents:[
                   {expressions:[
-                      {string:{default:"AAAA"},dataName:'text0',},
+                      {string:{default:"あい"},dataName:'text0',acceptTypes:["string"]},
                       {label:'と'},
-                      {string:{default:"BBBB"},dataName:'text1',},
+                      {string:{default:"うえお"},dataName:'text1',acceptTypes:["string"]},
                   ]},
               ],
           },
           function(valueDataTbl){
               var dfd = $.Deferred();
               var output = valueDataTbl.text0() + valueDataTbl.text1();
+              dfd.resolve(output);
+              return dfd.promise();
+          }
+        ));
+        // 文字列リストブロック
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["string_list"]
+              },
+              blockContents:[
+                  {expressions:[
+                      {string:{default:"ひとつ"},dataName:'text0',acceptTypes:["string","string_list"]},
+                      {label:'とか'},
+                      {string:{default:"ふたつ"},dataName:'text1',acceptTypes:["string","string_list"]},
+                  ]},
+              ],
+          },
+          function(valueDataTbl){
+              var dfd = $.Deferred();
+              var output = {
+                  string_list:[],
+              };
+              var txtLst=[valueDataTbl.text0(), valueDataTbl.text1()];
+              for(var ii=0; ii < txtLst.length; ii++){
+                  if(!txtLst[ii]){
+                      continue;
+                  }
+                  if(txtLst[ii].string_list){
+                      output.string_list =
+                       output.string_list.concat(txtLst[ii].string_list);
+                  }
+                  else{
+                      output.string_list.push(txtLst[ii]);
+                  }
+              }
               dfd.resolve(output);
               return dfd.promise();
           }
@@ -1419,7 +1634,7 @@ $(function(){
               blockContents:[
                   {expressions:[
                       {label:'もし'},
-                      {bool:{default:false},dataName:'checkFlag0',},
+                      {bool:{default:false},dataName:'checkFlag0'},
                       {label:'なら'},
                   ]},
                   {scope:{scopeName:"scope0"}},
@@ -1576,7 +1791,12 @@ $(function(){
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{color:'orange',head:'value',tail:'value'},
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["bool"],
+              },
               blockContents:[
                   {expressions:[
                       {label:'物が正面にある'}
@@ -1606,10 +1826,18 @@ $(function(){
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
-              blockOpt:{color:'orange',head:'value',tail:'value'},
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["bool"],
+              },
               blockContents:[
                   {expressions:[
-                      {string:{default:"はい"},dataName:'recoText',},
+                      {string:{default:"はい"},
+                       dataName:'recoText',
+                       acceptTypes:["string","string_list"]
+                      },
                       {label:'と聞こえたら'},
                   ]}
               ],
@@ -1621,11 +1849,19 @@ $(function(){
               var onFailPass = function(e) {
                   console.log('fail:' + e); 
                   return $.Deferred().resolve();};
+              var recoTextVal = valueDataTbl["recoText"]();
+              var recoTextLst = [];
+              if(recoTextVal.string_list){
+                  recoTextLst = recoTextVal.string_list;
+              }
+              else{
+                  recoTextLst.push(recoTextVal);
+              }
               if(self.qims){
                   $.when( self.qims.service("ALMemory"),
                           self.qims.service('ALSpeechRecognition')
                   ).then(function(alMemory, asr){
-                      var vocabulary = [valueDataTbl["recoText"]()];
+                      var vocabulary = recoTextLst;
                       var resultValue = null;
                       var dfd2 = $.Deferred();
                       dfd2

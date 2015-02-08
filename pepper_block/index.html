@@ -222,10 +222,7 @@
                          data-bind="attr:{
                            id:$data.dataTemplate.dataName,
                          },
-                         style:{
-                           top: $data.blockLocalX+"px",
-                           left:$data.blockLocalY+"px",
-                         }"></div>
+                         "></div>
                   </div>
                 <!-- /ko -->
 
@@ -272,7 +269,11 @@
         <!-- UI的な要素(プログラム寄りな部分) -->
         <!-- ko foreach:$data.rowContents -->
           <div data-bind="if:$data.expressions">
-            <div class="expressions blockRow" data-bind="style:{background:$parent.blockColor()}">
+            <div class="expressions blockRow" 
+                 data-bind="style:{
+                   background:$parent.blockColor(),
+                   color:$parent.textColor(),
+              }">
               <!-- ko foreach:$data.expressions -->
 
                 <!-- ko if: $data.dataTemplate.label -->
@@ -288,7 +289,7 @@
                 <!-- /ko -->
 
                 <!-- ko if: $data.dataTemplate.bool -->
-                  <div class="bool blockCell" data-bind="attr:{id:$data.dataTemplate.dataName}">ブール</div>
+                  <div class="bool blockCell" data-bind="attr:{id:$data.dataTemplate.dataName}"></div>
                 <!-- /ko -->
                 
                 <!-- ko if: $data.dataTemplate.options -->
