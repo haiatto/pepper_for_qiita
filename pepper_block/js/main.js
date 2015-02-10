@@ -54,7 +54,7 @@ function checkAgent_NeedDragUnselect()
     return false;
 }
 
-function Camera(alVideoDevice) {
+function PepperCamera(alVideoDevice) {
     var self = this;
     self.subscribe = function(){
         self.nameId = alVideoDevice.subscribeCamera(
@@ -447,6 +447,27 @@ function Block(blockManager, blockTemplate, callback) {
                 // 外れた要素のドラッグを有効化します
                 nowEditableDraggableElm.draggable('enable');
             };
+            // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
+            function setEndOfContenteditable_(contentEditableElement)
+            {
+                var range,selection;
+                if(document.createRange)//Firefox, Chrome, Opera, Safari, IE 9+
+                {
+                    range = document.createRange();//Create a range (a range is a like the selection but invisible)
+                    range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
+                    range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+                    selection = window.getSelection();//get the selection object (allows you to change selection)
+                    selection.removeAllRanges();//remove any selections already made
+                    selection.addRange(range);//make the range you have just created the visible selection
+                }
+                else if(document.selection)//IE 8 and lower
+                { 
+                    range = document.body.createTextRange();//Create a range (a range is a like the selection but invisible)
+                    range.moveToElementText(contentEditableElement);//Select the entire contents of the element with the range
+                    range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+                    range.select();//Select the range (make it the visible selection
+                }
+            }
             var clearEditableFocus_ = function(){
                 if(checkAgent_NeedDragUnselect())
                 {
@@ -502,6 +523,7 @@ function Block(blockManager, blockTemplate, callback) {
                         setEditMode_(draggableElem, editableElm);
                         // 編集対象へフォーカスをあてます
                         editableElm[0].focus();
+                        setEndOfContenteditable_(editableElm[0]);
                         $(editableElm[0]).blur(function(){
                             //console.log("edit mode blur");
                             clearAllEditMode_();
@@ -647,7 +669,7 @@ function Block(blockManager, blockTemplate, callback) {
                     // 自身の処理を実行します
                     $(self.element).removeClass("executeError"); 
                     $(self.element).addClass("executeNow");
-                    self.callback(self.valueDataTbl, self.scopeTbl)
+                    self.callback(self.blockManager.execContext, self.valueDataTbl, self.scopeTbl)
                     .then(
                       function(){
                         // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
@@ -668,7 +690,7 @@ function Block(blockManager, blockTemplate, callback) {
             else{
                 $(self.element).removeClass("executeError"); 
                 $(self.element).addClass("executeNow");
-                return self.callback(self.valueDataTbl, self.scopeTbl)
+                return self.callback(self.blockManager.execContext, self.valueDataTbl, self.scopeTbl)
                     .then(function(v){
                         $(self.element).removeClass("executeNow"); 
                         return v;
@@ -830,6 +852,7 @@ function BlockManager(){
     self.materialList = ko.observableArray();
     self.toyList      = ko.observableArray();
     self.factoryList  = ko.observableArray();
+    self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
 
     // コリジョン判定
     var checkHitDist = function(area0, area1){
@@ -1396,7 +1419,101 @@ $(function(){
     function MyModel() {
         var self = this;
 
+        //■ ＵＩ関連の準備など ■
+
+        self.wakeupPepper = function(){
+          if(self.qims){
+              self.qims.service("ALMotion")
+              .then(function(alMotion){
+                  return alMotion.wakeUp();
+              });
+          }
+        };
+        self.restPepper = function(){
+          if(self.qims){
+              self.qims.service("ALMotion")
+              .then(function(alMotion){
+                  return alMotion.rest();
+              });
+          }
+        };
+        
+        // 起動ボタン
+        self.execBlock = function(){
+        };
+        // 停止
+        self.stopBlock = function(){
+            
+        };
+
+        //■ 各作業場の作成(TODO:あとでブロック管理にうつす) ■
+        var dropAction_ = function(ui, targetArea, addFunc){
+            var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+            var dropBlock = findBlock.cloneThisBlock();
+            addFunc(dropBlock);//TODO:リストを汎用化する
+            var areaOffset = $(targetArea).offset();
+            var scrollTop  = $(targetArea).scrollTop();
+            var scrollLeft = $(targetArea).scrollLeft();
+            dropBlock.posX(ui.offset.left - areaOffset.left + scrollLeft);
+            dropBlock.posY(ui.offset.top  - areaOffset.top  + scrollTop);
+            self.blockManager.dropConnectUpdate( dropBlock );
+        };
+        $(".materialBox").droppable({
+            scope: 'toMaterialBlock',
+        });
+        $(".toyBox").droppable({
+            scope: 'toCloneBlock',
+            drop: function(e, ui) {
+                dropAction_(ui,$(".toyBox"),self.blockManager.addToyBlock);
+            },
+        });
+        $(".factoryBox").droppable({
+            scope: 'toCloneBlock',
+            drop: function(e, ui) {
+                dropAction_(ui,$(".factoryBox"),self.blockManager.addFactoryBlock);
+            },
+        });
+
+
+        //■ ブロック管理を作成 ■
+        self.blockManager = new BlockManager();
+
+        //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
+        var exeContext = self.blockManager.execContext;
+
+        // バージョン
+        exeContext.contextVersion = "0.01";
+        
+        // 最後に認識した単語データ
+        exeContext.lastRecoData   = {rawData:null,};
+
+        // qiMessaging経由のインスタンス   
+        var setupExecContextFromQim_ = function(qims){
+            exeContext.qims      = qims;
+            exeContext.alIns     = {};
+            exeContext.cameraIns = null;
+            exeContext.qims.service("ALTextToSpeech").done(function(ins){
+              exeContext.alIns.alTextToSpeech = ins;
+            });
+            exeContext.qims.service("ALAudioDevice").done(function(ins){
+              exeContext.alIns.alAudioDevice = ins;
+            });
+            exeContext.qims.service("ALMotion").done(function(ins){
+              exeContext.alIns.alMotion = ins;
+            });
+            exeContext.qims.service("ALRobotPosture").done(function(ins){
+              exeContext.alIns.alRobotPosture = ins;
+            });
+            exeContext.qims.service("ALVideoDevice").done(function(ins){
+              exeContext.alIns.alVideoDevice = ins;
+              exeContext.pepperCameraIns = new PepperCamera(ins);
+            });
+        };
+
+
         // ■ 接続処理 ■
+
+        // IP入力部分
         self.ipXXX_000_000_000 = ko.observable(192);
         self.ip000_XXX_000_000 = ko.observable(168);
         self.ip000_000_XXX_000 = ko.observable(1);
@@ -1430,109 +1547,30 @@ $(function(){
         self.ip000_000_XXX_000.subscribe(updatePepperIp);
         self.ip000_000_000_XXX.subscribe(updatePepperIp);
 
+        // 接続部分
         self.nowState = ko.observable("未接続");
-
-        var setupIns_ = function(){
-            self.qims.service("ALTextToSpeech").done(function(ins){
-              self.alTextToSpeech = ins;
-            });
-            self.qims.service("ALAudioDevice").done(function(ins){
-              self.alAudioDevice = ins;
-            });
-            self.qims.service("ALMotion").done(function(ins){
-              self.alMotion = ins;
-            });
-            self.qims.service("ALRobotPosture").done(function(ins){
-              self.alRobotPosture = ins;
-            });
-            self.qims.service("ALVideoDevice").done(function(ins){
-              self.alVideoDevice = ins;
-              self.cameraIns = new Camera(self.alVideoDevice);
-            });  
-        };
-        self.qims = null;
         self.connect = function() 
         {
+            var pepper_ip = JSON.parse(localStorage.getItem("pepper_ip"));
             var ip = 
-            self.ipXXX_000_000_000() + "." +
-            self.ip000_XXX_000_000() + "." +
-            self.ip000_000_XXX_000() + "." +
-            self.ip000_000_000_XXX();
-            self.qims = new QiSession(ip);
-            self.qims.socket()
+            pepper_ip[0] + "." +
+            pepper_ip[1] + "." +
+            pepper_ip[2] + "." +
+            pepper_ip[3];
+            var qims = new QiSession(ip);
+            qims
             .on('connect', function () {
-              self.nowState("接続中");
-              self.qims.service("ALTextToSpeech")
+              self.nowState("接続中");              
+              qims.service("ALTextToSpeech")
               .done(function (tts) {
                   tts.say("せつぞく、ぺっぷ");
               });
-              setupIns_();
+              setupExecContextFromQim_(qims);
             })
             .on('disconnect', function () {
               self.nowState("切断");
             });
         };
-
-        //■ ＵＩ関連の準備など ■
-
-        self.wakeupPepper = function(){
-          if(self.qims){
-              self.qims.service("ALMotion")
-              .then(function(alMotion){
-                  return alMotion.wakeUp();
-              });
-          }
-        };
-        self.restPepper = function(){
-          if(self.qims){
-              self.qims.service("ALMotion")
-              .then(function(alMotion){
-                  return alMotion.rest();
-              });
-          }
-        };
-        
-        // 起動ボタン
-        self.execBlock = function(){
-        };
-        // 停止
-        self.stopBlock = function(){
-            
-        };
-
-        //■ 各作業場の作成 ■
-        var dropAction_ = function(ui, targetArea, addFunc){
-            var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
-            var dropBlock = findBlock.cloneThisBlock();
-            addFunc(dropBlock);//TODO:リストを汎用化する
-            var areaOffset = $(targetArea).offset();
-            var scrollTop  = $(targetArea).scrollTop();
-            var scrollLeft = $(targetArea).scrollLeft();
-            dropBlock.posX(ui.offset.left - areaOffset.left + scrollLeft);
-            dropBlock.posY(ui.offset.top  - areaOffset.top  + scrollTop);
-            self.blockManager.dropConnectUpdate( dropBlock );
-        };
-        $(".materialBox").droppable({
-            scope: 'toMaterialBlock',
-        });
-        $(".toyBox").droppable({
-            scope: 'toCloneBlock',
-            drop: function(e, ui) {
-                dropAction_(ui,$(".toyBox"),self.blockManager.addToyBlock);
-            },
-        });
-        $(".factoryBox").droppable({
-            scope: 'toCloneBlock',
-            drop: function(e, ui) {
-                dropAction_(ui,$(".factoryBox"),self.blockManager.addFactoryBlock);
-            },
-        });
-
-
-        //■ ブロック管理を作成 ■
-        self.blockManager = new BlockManager();
-
-
 
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
@@ -1553,9 +1591,9 @@ $(function(){
                   ]},
               ],
           },
-          function(valueDataTbl){
-              if(self.qims){
-                  return self.qims.service("ALTextToSpeech").then(function(ins){
+          function(ctx,valueDataTbl){
+              if(ctx.qims){
+                  return ctx.qims.service("ALTextToSpeech").then(function(ins){
                       return ins.say(valueDataTbl.talkText0());
                   });
               }
@@ -1579,7 +1617,7 @@ $(function(){
                   ]},
               ],
           },
-          function(valueDataTbl){
+          function(ctx,valueDataTbl){
               var dfd = $.Deferred();
               var output = valueDataTbl.text0() + valueDataTbl.text1();
               dfd.resolve(output);
@@ -1604,7 +1642,7 @@ $(function(){
                   ]},
               ],
           },
-          function(valueDataTbl){
+          function(ctx,valueDataTbl){
               var dfd = $.Deferred();
               var output = {
                   string_list:[],
@@ -1641,7 +1679,7 @@ $(function(){
                   {space:{}},
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               if(valueDataTbl.checkFlag0()){
                   //HACK: scopeOutが微妙なのでなんとかしたい。
                   if(scopeTbl.scope0.scopeOut.blockObsv())
@@ -1671,7 +1709,7 @@ $(function(){
                   {space:{}},
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               // スコープの先頭ブロックからpromiseを返します
               // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
               var dfd = $.Deferred();
@@ -1707,7 +1745,7 @@ $(function(){
                   ]}
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               var time = valueDataTbl["waitSec"]();
               var wait_time =  function(time){
                   return (function(){
@@ -1741,7 +1779,7 @@ $(function(){
                   ]}
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               var onFail = function(e) {console.error('fail:' + e);};
               var ratio_x = 0.5;
               var ratio_y = 0.5;
@@ -1773,8 +1811,8 @@ $(function(){
               var angPitch = (0.6371 + 0.7068) * ratio_y + -0.7068;
               var angle = [angYaw, angPitch];
               var alMotion;
-              if(self.qims){
-                  return self.qims.service('ALMotion')
+              if(ctx.qims){
+                  return ctx.qims.service('ALMotion')
 //                       .then(function(s){
 //                           alMotion = s;
 //                           return alMotion.wakeUp();
@@ -1803,13 +1841,13 @@ $(function(){
                   ]}
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
               var onFail = function(e) {console.error('fail:' + e);};
               var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
               var LIMIT = 0.5;
-              if(self.qims){
-                  self.qims.service('ALMemory').then(function(s){
+              if(ctx.qims){
+                  ctx.qims.service('ALMemory').then(function(s){
                       s.getData(FRONT_KEY).then(function(v){
                           console.log('value:' + v);
                           dfd.resolve(v < LIMIT);
@@ -1842,7 +1880,7 @@ $(function(){
                   ]}
               ],
           },
-          function(valueDataTbl,scopeTbl){
+          function(ctx,valueDataTbl,scopeTbl){
               var dfd = $.Deferred();
               var onFail = function(e) {
                   console.error('fail:' + e);};
@@ -1857,9 +1895,9 @@ $(function(){
               else{
                   recoTextLst.push(recoTextVal);
               }
-              if(self.qims){
-                  $.when( self.qims.service("ALMemory"),
-                          self.qims.service('ALSpeechRecognition')
+              if(ctx.qims){
+                  $.when( ctx.qims.service("ALMemory"),
+                          ctx.qims.service('ALSpeechRecognition')
                   ).then(function(alMemory, asr){
                       var vocabulary = recoTextLst;
                       var resultValue = null;
