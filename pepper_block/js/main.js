@@ -1479,36 +1479,60 @@ $(function(){
         self.blockManager = new BlockManager();
 
         //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
-        var exeContext = self.blockManager.execContext;
+        var makeExecContext = function()
+        {
+            var exeContext = {};
+            // バージョン
+            exeContext.contextVersion = "0.01";
 
-        // バージョン
-        exeContext.contextVersion = "0.01";
-        
-        // 最後に認識した単語データ
-        exeContext.lastRecoData   = {rawData:null,};
+            // 最後に認識した単語データ
+            exeContext.lastRecoData   = {rawData:null,};
 
-        // qiMessaging経由のインスタンス   
-        var setupExecContextFromQim_ = function(qims){
-            exeContext.qims      = qims;
-            exeContext.alIns     = {};
-            exeContext.cameraIns = null;
-            exeContext.qims.service("ALTextToSpeech").done(function(ins){
-              exeContext.alIns.alTextToSpeech = ins;
-            });
-            exeContext.qims.service("ALAudioDevice").done(function(ins){
-              exeContext.alIns.alAudioDevice = ins;
-            });
-            exeContext.qims.service("ALMotion").done(function(ins){
-              exeContext.alIns.alMotion = ins;
-            });
-            exeContext.qims.service("ALRobotPosture").done(function(ins){
-              exeContext.alIns.alRobotPosture = ins;
-            });
-            exeContext.qims.service("ALVideoDevice").done(function(ins){
-              exeContext.alIns.alVideoDevice = ins;
-              exeContext.pepperCameraIns = new PepperCamera(ins);
-            });
-        };
+            // qiMessaging経由のインスタンス   
+            exeContext.setupExecContextFromQim = function(qims)
+            {
+                exeContext.qims      = qims;
+                exeContext.alIns     = {};
+                exeContext.cameraIns = null;
+                exeContext.qims.service("ALTextToSpeech").done(function(ins){
+                  exeContext.alIns.alTextToSpeech = ins;
+                });
+                exeContext.qims.service("ALAudioDevice").done(function(ins){
+                  exeContext.alIns.alAudioDevice = ins;
+                });
+                exeContext.qims.service("ALMotion").done(function(ins){
+                  exeContext.alIns.alMotion = ins;
+                });
+                exeContext.qims.service("ALRobotPosture").done(function(ins){
+                  exeContext.alIns.alRobotPosture = ins;
+                });
+                exeContext.qims.service("ALVideoDevice").done(function(ins){
+                  exeContext.alIns.alVideoDevice = ins;
+                  exeContext.pepperCameraIns = new PepperCamera(ins);
+                });
+                exeContext.qims.service('ALMemory').then(function(ins){
+                  exeContext.alIns.alMemory = ins;
+                });
+            };
+
+            //■便利そうな補助関数など
+            exeContext.onFail = function(e) {
+                //dfd向けエラー関数
+                console.error('fail:' + e);
+            };
+            exeContext.onFailPass = function(e) {
+                //dfd向けエラー関数 スルー付
+                //MEMO: 
+                // チェイン時のおそらくお望みの動作は、
+                //  処理A.then(処理B,fail).then(null,onFailPass)
+                // かも。thenの仕様は処理Aの結果を分岐するので、処理Bのエラーをスルーする際自分は勘違いしたことあり。
+                console.log('fail:' + e); 
+                return $.Deferred().resolve();
+            };
+
+            return exeContext;
+        }
+        self.blockManager.execContext = makeExecContext();
 
 
         // ■ 接続処理 ■
@@ -1553,19 +1577,19 @@ $(function(){
         {
             var pepper_ip = JSON.parse(localStorage.getItem("pepper_ip"));
             var ip = 
-            pepper_ip[0] + "." +
-            pepper_ip[1] + "." +
-            pepper_ip[2] + "." +
-            pepper_ip[3];
+            pepper_ip.ip[0] + "." +
+            pepper_ip.ip[1] + "." +
+            pepper_ip.ip[2] + "." +
+            pepper_ip.ip[3];
             var qims = new QiSession(ip);
-            qims
+            qims.socket()
             .on('connect', function () {
               self.nowState("接続中");              
               qims.service("ALTextToSpeech")
               .done(function (tts) {
                   tts.say("せつぞく、ぺっぷ");
               });
-              setupExecContextFromQim_(qims);
+              self.blockManager.execContext.setupExecContextFromQim(qims);
             })
             .on('disconnect', function () {
               self.nowState("切断");
@@ -1592,10 +1616,39 @@ $(function(){
               ],
           },
           function(ctx,valueDataTbl){
+              var onFail = function(e) {console.error('fail:' + e);};
               if(ctx.qims){
-                  return ctx.qims.service("ALTextToSpeech").then(function(ins){
-                      return ins.say(valueDataTbl.talkText0());
-                  });
+                  var dfd = $.Deferred();
+                  ctx.qims.service("ALTextToSpeech").then(function(tss){
+                      ctx.alIns.alMemory.subscriber("ALTextToSpeech/TextDone")
+                      //deferred不慣れで勘違いした結果のコード。ここでは不要だったけど参考のため残してきます
+                      //.then(
+                      //    function (subscriber) {
+                      //        var id = null;
+                      //        return subscriber.signal.connect(
+                      //            function (value) 
+                      //            {
+                      //                //ALMemoryのイベントハンドラです(deferredのハンドラではないので混乱注意)
+                      //                subscriber.signal.disconnect(id);
+                      //                id = null;
+                      //                dfd.resolve();
+                      //            }
+                      //        )
+                      //        .then(function(id_){
+                      //            id = id_;
+                      //        });
+                      //    }
+                      //)
+                      .then(
+                         function(){
+                             tss.say(valueDataTbl.talkText0()).done(function()
+                             {
+                                 dfd.resolve();
+                             });
+                         }
+                      );
+                  },onFail);
+                  return dfd.promise();
               }
               else{
                   var dfd = $.Deferred();
@@ -1664,7 +1717,7 @@ $(function(){
               return dfd.promise();
           }
         ));
-        // 分岐ブロック
+        // 分岐ブロックIF
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
@@ -1676,6 +1729,41 @@ $(function(){
                       {label:'なら'},
                   ]},
                   {scope:{scopeName:"scope0"}},
+                  {space:{}},
+              ],
+          },
+          function(ctx,valueDataTbl,scopeTbl){
+              if(valueDataTbl.checkFlag0()){
+                  //HACK: scopeOutが微妙なのでなんとかしたい。
+                  if(scopeTbl.scope0.scopeOut.blockObsv())
+                  {
+                      // スコープの先頭ブロックからpromiseを返します
+                      // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
+                      return scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                  }
+              }
+              //分岐なかったので即resolveするpromiseを返します
+              return $.Deferred(function(dfd){
+                  dfd.resolve();
+              });
+          }
+        ));
+        // 分岐ブロックIF ELSE
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockContents:[
+                  {expressions:[
+                      {label:'もし'},
+                      {bool:{default:false},dataName:'checkFlag0'},
+                      {label:'なら'},
+                  ]},
+                  {scope:{scopeName:"scope0"}},
+                  {expressions:[
+                      {label:'でなければ'},
+                  ]},
+                  {scope:{scopeName:"scope1"}},
                   {space:{}},
               ],
           },
@@ -1719,7 +1807,8 @@ $(function(){
                   var cnt = 99;
                   var loopFunc = function(){
                       console.log("loop " + cnt);
-                      if(cnt-->0){
+                      // 実行中にブロック外された場合もあるので毎回接続をチェックします
+                      if(cnt-->0 && scopeTbl.scope0.scopeOut.blockObsv()){
                          dfd
                          .then(scopeTbl.scope0.scopeOut.blockObsv().deferred)
                          .then(loopFunc);
@@ -1872,6 +1961,7 @@ $(function(){
               },
               blockContents:[
                   {expressions:[
+                      {label:'５秒内に'},
                       {string:{default:"はい"},
                        dataName:'recoText',
                        acceptTypes:["string","string_list"]
@@ -1940,6 +2030,10 @@ $(function(){
                       })
                       .then(function(value){
                           resultValue = value;
+                          if(resultValue)
+                          {
+                              ctx.lastRecoData.rawData = resultValue;
+                          }
                           return asr.unsubscribe("PepperBLockASR");},
                           onFail )
                       .then(function(){
@@ -1954,6 +2048,36 @@ $(function(){
               return dfd.promise();
           }
         ));
+        // 最後に聞こえた言葉
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["string"],
+              },
+              blockContents:[
+                  {expressions:[
+                      {label:'さいごに聞こえた言葉'}
+                  ]}
+              ],
+          },
+          function(ctx,valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              if(ctx.lastRecoData.rawData)
+              {
+                  dfd.resolve(ctx.lastRecoData.rawData[0]);
+              }
+              else
+              {
+                  dfd.resolve("");
+              }
+              return dfd.promise();
+          }
+        ));
+
         // 配置を更新します
         self.blockManager.materialBlockLayoutUpdate();
     }
