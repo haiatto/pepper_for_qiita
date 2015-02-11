@@ -1776,8 +1776,16 @@ $(function(){
                       // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
                       return scopeTbl.scope0.scopeOut.blockObsv().deferred();
                   }
+              }else
+              {
+                  if(scopeTbl.scope1.scopeOut.blockObsv())
+                  {
+                      // スコープの先頭ブロックからpromiseを返します
+                      // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
+                      return scopeTbl.scope1.scopeOut.blockObsv().deferred();
+                  }
               }
-              //分岐なかったので即resolveするpromiseを返します
+              //分岐先なかったので即resolveするpromiseを返します
               return $.Deferred(function(dfd){
                   dfd.resolve();
               });
