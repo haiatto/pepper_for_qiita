@@ -1830,6 +1830,35 @@ $(function(){
           }
         ));
 
+        // 等しいか判定
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["bool"],
+              },
+              blockContents:[
+                  {expressions:[
+                      {string:{default:'A'}, dataName:'valueA',acceptTypes:["string","number"]},
+                      {label:'と'},
+                      {string:{default:'B'}, dataName:'valueB',acceptTypes:["string","number"]},
+                      {label:'が同じ'},
+                  ]}
+              ],
+          },
+          function(ctx,valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              var a = valueDataTbl["valueA"]();
+              var b = valueDataTbl["valueB"]();
+              dfd.resolve(a==b);
+              return dfd.promise();
+          }
+        ));
+
+
         // Ｎ秒まつブロック
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
@@ -1855,7 +1884,7 @@ $(function(){
           }
         ));
         
-        // モーションブロック
+        // 顔を動かすモーションブロック
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
@@ -1922,7 +1951,7 @@ $(function(){
               return $.Deferred().reject().promise();
           }
         ));
-        // センサーブロック
+        // ソナーセンサーブロック
         self.blockManager.addMaterialBlock(new Block(
           self.blockManager,
           {
@@ -2076,12 +2105,42 @@ $(function(){
               var dfd = $.Deferred();
               if(ctx.lastRecoData.rawData)
               {
-                  dfd.resolve(ctx.lastRecoData.rawData[0]);
+                  //<...> ろん <...>などの文字列できたので対処
+                  var text = ctx.lastRecoData.rawData[0];
+                  text = text.replace("<...> ","");
+                  text = text.replace(" <...>","");
+                  dfd.resolve(text);
               }
               else
               {
                   dfd.resolve("");
               }
+              return dfd.promise();
+          }
+        ));
+
+        // 時刻を返すブロック
+        self.blockManager.addMaterialBlock(new Block(
+          self.blockManager,
+          {
+              blockOpt:{
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["string"],
+              },
+              blockContents:[
+                  {expressions:[
+                      {label:'いまの時間'}
+                  ]}
+              ],
+          },
+          function(ctx,valueDataTbl,scopeTbl){
+              var dfd = $.Deferred();
+              var date = new Date();
+              var h = date.getHours();
+              var m = date.getMinutes();
+              dfd.resolve(h+"時"+m+"分");
               return dfd.promise();
           }
         ));
