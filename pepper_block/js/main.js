@@ -616,7 +616,7 @@ function Block(blockManager, blockTemplate, callback) {
                   //console.log("drag stop");
                   if(self.isCloneDragMode){
                       self.blockManager.moveStop(cloneBlock, ui.position);
-                      self.blockManager.removeBlock(cloneBlock);
+                      //self.blockManager.removeBlock(cloneBlock);
                       cloneBlock = null;
                   }
                   else{
@@ -848,10 +848,6 @@ function BlockManager(){
     var self = this;
     self.blockList = [];
     self.elementBlockLookupTbl = {};
-    self.floatDraggingList = ko.observableArray();
-    self.materialList = ko.observableArray();
-    self.toyList      = ko.observableArray();
-    self.factoryList  = ko.observableArray();
     self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
 
     // コリジョン判定
@@ -1290,7 +1286,9 @@ function BlockManager(){
         }
     };
 
-    // ■ブロック生成元登録など
+
+    // ■ブロック定義の登録とインスタンス生成など
+
     self.blockDefTbl = {};
 
     // ブロック定義の登録をしますテンプレートとコールバックの登録
@@ -1322,8 +1320,99 @@ function BlockManager(){
         return newBlockIns;
     };
 
-    // ■ブロックリスト管理など
 
+    // ■ブロック作業場管理など
+
+    self.floatDraggingList = ko.observableArray();
+
+    self.materialList = ko.observableArray();
+    self.toyList      = ko.observableArray();
+    self.factoryList  = ko.observableArray();
+
+    var BlockWorkSpace = function (blockManager, dragScopeName){
+        var self = this;
+        
+        self.blockManager    = blockManager;
+        self.blockListObsv   = ko.observableArray();
+        self.workAreaElement = null;
+        self.dragScopeName   = dragScopeName;
+
+        self.addBlock = function(newBlock)
+        {
+            self.blockListObsv.push(ko.observable(newBlock));
+            newBlock.setCloneDragMode(false);
+            newBlock.setNoConnectMode(false);
+        };
+        self.addCloneDragBlock = function(newBlock)
+        {
+            self.blockListObsv.push(ko.observable(newBlock));
+            newBlock.setCloneDragMode(true);
+            newBlock.setNoConnectMode(true);
+        };
+
+        // ブロックを並べるレイアウトを行います
+        self.arrayBlockLayout = function(){
+            var posX = 10;
+            var posY = 20;
+            $.each(self.blockListObsv(),function(key,blockInsObsv){
+                blockIns = blockInsObsv();
+                blockIns.posX(posX);
+                blockIns.posY(posY);
+                posX += 130;
+            });
+        };
+
+        self.setup = function(workAreaElement){
+            self.workAreaElement = workAreaElement;
+
+            //■ 作業場の作成 ■
+            var dropAction_ = function(ui){
+                var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+                var dropBlock = findBlock.cloneThisBlock();
+                self.addBlock( dropBlock );
+                var areaOffset = $(self.workAreaElement).offset();
+                var scrollTop  = $(self.workAreaElement).scrollTop();
+                var scrollLeft = $(self.workAreaElement).scrollLeft();
+                dropBlock.posX(ui.offset.left - areaOffset.left + scrollLeft);
+                dropBlock.posY(ui.offset.top  - areaOffset.top  + scrollTop);
+                self.blockManager.dropConnectUpdate( dropBlock );
+            };
+            $(self.workAreaElement).droppable({
+                scope: self.dragScopeName,
+                drop: function(e, ui) {
+                    dropAction_(ui);
+                },
+            });
+        };
+    };
+
+    // ブロックの作業場のインスタンスを生成します
+    self.createBlockWorkSpaceIns = function(dragScopeName){
+        var blkWsIns = new BlockWorkSpace(self, dragScopeName);
+        return blkWsIns;
+    };
+
+    self.elementBlockWsLookupTbl = {};
+
+    // ブロック作業場用のカスタムバインド
+    var blockWsIdSeed_ = 1;
+    ko.bindingHandlers.blockWorkSpaceSetup = {
+        init: function(element, valueAccessor) {
+            // ユーザーデータにIDを付加します
+            $(element).data("blockWorkSpaceId",blockWsIdSeed_++);
+            // ブロックの要素生成時の初期化を行います
+            var blockWsIns = ko.unwrap(valueAccessor());
+            blockWsIns.setup( element );
+            // ブロックを要素から引くためにテーブルに追加します
+            self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
+        },
+        update: function(element, valueAccessor) {
+        }
+    };
+
+
+
+/*
     // ブロックを破棄
     self.removeBlock = function(removeBlock){
 
@@ -1363,6 +1452,8 @@ function BlockManager(){
             posX += 130;
         });
     };
+*/
+
 
     // 別ボックスへ移動するためのドラッグ向けのリストに追加
     self.addFloatDraggingList = function(newBlock){
@@ -1478,6 +1569,7 @@ $(function(){
             
         };
 
+/*
         //■ 各作業場の作成(TODO:あとでブロック管理にうつす) ■
         var dropAction_ = function(ui, targetArea, addFunc){
             var findBlock = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
@@ -1505,7 +1597,7 @@ $(function(){
                 dropAction_(ui,$(".factoryBox"),self.blockManager.addFactoryBlock);
             },
         });
-
+*/
 
         //■ ブロック管理を作成 ■
         self.blockManager = new BlockManager();
@@ -1628,11 +1720,17 @@ $(function(){
             });
         };
 
-
-
-
-
-
+        // ■ 作業場の構築をします ■
+        self.materialBoxWs  = ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        );
+        self.toyBoxWs = ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
+        ); 
+        self.factoryBoxWs = ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
+        ); 
+        
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
 
@@ -2209,22 +2307,22 @@ $(function(){
         );
 
         // 素材リスト生成をします
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("talkBlock@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("stringCat@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("stringLst@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("if@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("if_else@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("loop@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("eq@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("waitNSec@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("faceMotion@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("recoTalk@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
-        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("nowTime@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("talkBlock@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("stringCat@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("stringLst@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("if@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("if_else@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("loop@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("eq@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("waitNSec@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("faceMotion@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("recoTalk@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
+        self.materialBoxWs().addCloneDragBlock(self.blockManager.createBlockIns("nowTime@basicBlk"));
 
         // 素材リストの配置を更新します
-        self.blockManager.materialBlockLayoutUpdate();
+        self.materialBoxWs().arrayBlockLayout();
     }
     myModel = new MyModel();
     ko.applyBindings( myModel );

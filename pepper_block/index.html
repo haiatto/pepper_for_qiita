@@ -349,24 +349,33 @@
               </div>
           </div>
 
-          <div class="materialBox">
+          <div class="materialBox"
+               data-bind="with: $root.materialBoxWs, 
+                          blockWorkSpaceSetup: $root.materialBoxWs">          
               そざい
-              <div data-bind="foreach:$root.blockManager.materialList">
+              <div data-bind="foreach:$data.blockListObsv">
                 <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
-          <div class="toyBox">
+          <div class="toyBox"
+               data-bind="with: $root.toyBoxWs, 
+                          blockWorkSpaceSetup: $root.toyBoxWs">          
               とい
-              <div data-bind="foreach:$root.blockManager.toyList">
+              <div data-bind="foreach:$data.blockListObsv">
                 <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
-          <div class="factoryBox">
+          <div class="factoryBox"
+               data-bind="with: $root.factoryBoxWs, 
+                          blockWorkSpaceSetup: $root.factoryBoxWs">          
               ふぁくとり
-              <div data-bind="foreach:$root.blockManager.factoryList">
+              <div data-bind="foreach:$data.blockListObsv">
                 <div data-bind="template:'block-template',data:$data"></div>
               </div>
           </div>
+
+
+
         <div>
 
     </div><!-- /content -->
