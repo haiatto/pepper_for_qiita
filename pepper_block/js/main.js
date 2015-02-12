@@ -822,7 +822,7 @@ function Block(blockManager, blockTemplate, callback) {
 
     // 複製します(内側のブロックは複製されません)
     self.cloneThisBlock = function(){
-        var ins = new Block(self.blockManager, self.blockTemplate, self.callback);
+        var ins = self.blockManager.createBlockIns(self.blockTemplate.blockOpt.blockWorldId);
         $.each(self.valueDataTbl,function(key,value){
             ins.valueDataTbl[key](value());
         });
@@ -1290,7 +1290,39 @@ function BlockManager(){
         }
     };
 
-    // ブロックリスト管理など
+    // ■ブロック生成元登録など
+    self.blockDefTbl = {};
+
+    // ブロック定義の登録をしますテンプレートとコールバックの登録
+    self.registBlockDef = function(blockTemplate, callback){
+        if(!blockTemplate.blockOpt.blockWorldId){
+            alert("テンプレートにblockWorldIdがありません。"+JSON.stringify(blockTemplate));
+            return;
+        }
+        if(self.blockDefTbl[blockTemplate.blockOpt.blockWorldId]){
+            //TODO:多言語対応時には重なる事あり
+            alert("定義登録でblockWorldIdが重なりました。id:"+blockTemplate.blockOpt.blockWorldId);
+            return;
+        }
+        self.blockDefTbl[blockTemplate.blockOpt.blockWorldId] = {
+            blockTemplate:blockTemplate, 
+            callback:     callback,
+        };
+    };
+
+    // ブロックの世界対応IDからブロックのインスタンスを作ります
+    self.createBlockIns = function(blockWorldId){
+        var blockDef = self.blockDefTbl[blockWorldId];
+        if(!blockDef){
+            alert("blockWorldIdに一致する定義がありません。id:"+blockWorldId);
+            return;
+        }
+        var newBlockIns = new Block(self, blockDef.blockTemplate, blockDef.callback);
+        self.blockList.push(newBlockIns);
+        return newBlockIns;
+    };
+
+    // ■ブロックリスト管理など
 
     // ブロックを破棄
     self.removeBlock = function(removeBlock){
@@ -1300,21 +1332,21 @@ function BlockManager(){
     // 素材リストに追加 TODO: 後でリスト汎用化
     self.addMaterialBlock = function(newBlock){
         // 素材リスト内はクローンドラッグモード＆接続禁止モードに設定します
-        self.blockList.push(newBlock);
+        //self.blockList.push(newBlock);
         self.materialList.push(ko.observable(newBlock));
         newBlock.setCloneDragMode(true);
         newBlock.setNoConnectMode(true);
     };    
     // オモチャリストに追加
     self.addToyBlock = function(newBlock){
-        self.blockList.push(newBlock);
+        //self.blockList.push(newBlock);
         self.toyList.push(ko.observable(newBlock));
         newBlock.setCloneDragMode(false);
         newBlock.setNoConnectMode(false);
     };
     // 工場リストに追加
     self.addFactoryBlock = function(newBlock){
-        self.blockList.push(newBlock);
+        //self.blockList.push(newBlock);
         self.factoryList.push(ko.observable(newBlock));
         newBlock.setCloneDragMode(false);
         newBlock.setNoConnectMode(false);
@@ -1336,9 +1368,8 @@ function BlockManager(){
     self.addFloatDraggingList = function(newBlock){
         newBlock.setCloneDragMode(false);
         newBlock.setNoConnectMode(false);
-        self.blockList.push(newBlock);
+        //self.blockList.push(newBlock);
         self.floatDraggingList.push(ko.observable(newBlock));
-
     };
     self.popFloatDraggingListByElem = function(elem){
         for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
@@ -1349,8 +1380,9 @@ function BlockManager(){
                 self.floatDraggingList.splice(ii,1);
 
                 var block = blockObsv();
-                self.blockList.splice( self.blockList.indexOf(block), 1 );
-                self.blockList.push(block);
+                //描画順入れ替えは別でやることにしました
+                //self.blockList.splice( self.blockList.indexOf(block), 1 );
+                //self.blockList.push(block);
                 return block;
             }
         }
@@ -1597,13 +1629,18 @@ $(function(){
         };
 
 
+
+
+
+
+
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
 
         // 会話ブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"talkBlock@basicBlk",
                   color:'red',
                   head:'in',
                   tail:'out'
@@ -1656,12 +1693,17 @@ $(function(){
                   return dfd.promise();
               }
           }
-        ));
+        );
         // 文字列連結ブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'orange',head:'value',tail:'value',types:["string"]},
+              blockOpt:{
+                  blockWorldId:"stringCat@basicBlk",
+                  color:'orange',
+                  head:'value',
+                  tail:'value',
+                  types:["string"]
+              },
               blockContents:[
                   {expressions:[
                       {string:{default:"あい"},dataName:'text0',acceptTypes:["string"]},
@@ -1676,12 +1718,12 @@ $(function(){
               dfd.resolve(output);
               return dfd.promise();
           }
-        ));
+        );
         // 文字列リストブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"stringLst@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -1716,12 +1758,16 @@ $(function(){
               dfd.resolve(output);
               return dfd.promise();
           }
-        ));
+        );
         // 分岐ブロックIF
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  blockWorldId:"if@basicBlk",
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
                       {label:'もし'},
@@ -1747,12 +1793,16 @@ $(function(){
                   dfd.resolve();
               });
           }
-        ));
+        );
         // 分岐ブロックIF ELSE
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  blockWorldId:"if_else@basicBlk",
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
                       {label:'もし'},
@@ -1790,12 +1840,16 @@ $(function(){
                   dfd.resolve();
               });
           }
-        ));
+        );
         // ループブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  blockWorldId:"loop@basicBlk",
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
                       //{label:'ずっと繰り返す'}
@@ -1828,13 +1882,13 @@ $(function(){
               dfd.resolve();
               return dfd.promise();
           }
-        ));
+        );
 
         // 等しいか判定
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"eq@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -1856,14 +1910,17 @@ $(function(){
               dfd.resolve(a==b);
               return dfd.promise();
           }
-        ));
-
+        );
 
         // Ｎ秒まつブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  blockWorldId:"waitNSec@basicBlk",
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
                       {string:{default:'1.0'}, dataName:'waitSec',},
@@ -1882,13 +1939,17 @@ $(function(){
               };              
               return wait_time(parseFloat(time))();
           }
-        ));
+        );
         
         // 顔を動かすモーションブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
-              blockOpt:{color:'red',head:'in',tail:'out'},
+              blockOpt:{
+                  blockWorldId:"faceMotion@basicBlk",
+                  color:'red',
+                  head:'in',
+                  tail:'out'
+              },
               blockContents:[
                   {expressions:[
                       //{string:{default:'正面'}, dataName:'angle',},
@@ -1950,12 +2011,13 @@ $(function(){
               }
               return $.Deferred().reject().promise();
           }
-        ));
+        );
+
         // ソナーセンサーブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"sonarSimple@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -1984,13 +2046,13 @@ $(function(){
               }
               return dfd.promise();
           }
-        ));
+        );
 
         // 音声認識ブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"recoTalk@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -2084,12 +2146,13 @@ $(function(){
               }
               return dfd.promise();
           }
-        ));
+        );
+
         // 最後に聞こえた言葉
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"lastRecoWord@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -2117,13 +2180,13 @@ $(function(){
               }
               return dfd.promise();
           }
-        ));
+        );
 
         // 時刻を返すブロック
-        self.blockManager.addMaterialBlock(new Block(
-          self.blockManager,
+        self.blockManager.registBlockDef(
           {
               blockOpt:{
+                  blockWorldId:"nowTime@basicBlk",
                   color:'orange',
                   head:'value',
                   tail:'value',
@@ -2143,9 +2206,24 @@ $(function(){
               dfd.resolve(h+"時"+m+"分");
               return dfd.promise();
           }
-        ));
+        );
 
-        // 配置を更新します
+        // 素材リスト生成をします
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("talkBlock@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("stringCat@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("stringLst@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("if@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("if_else@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("loop@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("eq@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("waitNSec@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("faceMotion@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("recoTalk@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
+        self.blockManager.addMaterialBlock(self.blockManager.createBlockIns("nowTime@basicBlk"));
+
+        // 素材リストの配置を更新します
         self.blockManager.materialBlockLayoutUpdate();
     }
     myModel = new MyModel();
