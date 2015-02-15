@@ -321,6 +321,9 @@
     </div><!-- /header -->
     <div data-role="content">
         <div>version 0.101</div>
+        <!-- ko if:self.lunchPepper -->
+          <div>ペッパーから起動</div>
+        <!-- /ko -->
         <div>
           <div data-bind="text:$root.nowState"></div>
         </div>

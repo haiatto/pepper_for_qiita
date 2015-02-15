@@ -21,6 +21,19 @@ function _arrayBufferToBase64(buffer) {
     }
     return window.btoa( binary );
 }
+function getUrlParameter(sParam)
+{
+    var sPageURL = window.location.search.substring(1);
+    var sURLVariables = sPageURL.split('&');
+    for (var i = 0; i < sURLVariables.length; i++) 
+    {
+        var sParameterName = sURLVariables[i].split('=');
+        if (sParameterName[0] == sParam) 
+        {
+            return sParameterName[1];
+        }
+    }
+}    
 
 var userAgent = window.navigator.userAgent.toLowerCase();
 var appVersion = window.navigator.appVersion.toLowerCase();
@@ -777,6 +790,8 @@ function BlockManager(){
     };
 
     //■ シリアライズ回り
+
+    // ブロックの塊(指定ブロック以下全て)をJSON用データに変換します
     self.toJSON_LumpBlocks = function(block){
         var recv = function(block){
             var json={
@@ -807,7 +822,9 @@ function BlockManager(){
         json.posY=block.posY()*block.pix2em;
         return json;
     };
-    self.fromJSON_LumpBlocks = function(json){
+
+    // JSON用データからブロックの塊を復元します(塊でなくてもフォーマットは変わりません)
+    self.fromJSON = function(json){
         var recv = function(json){
             var block = self.createBlockIns( json.blockWorldId );
             $.each(json.valTbl,function(k,valJson){
@@ -831,8 +848,8 @@ function BlockManager(){
             return block;
         };
         var block = recv(json);
-        block.posX(json.posX/block.pix2em);
-        block.posY(json.posY/block.pix2em);
+        if(json.posX)block.posX(json.posX/block.pix2em);
+        if(json.posY)block.posY(json.posY/block.pix2em);
         return block;
     };
 
@@ -1321,7 +1338,7 @@ function BlockManager(){
         {
             self.clearAllBlocks();
             $.each(json,function(k,topBlockJson){
-                var block = self.blockManager.fromJSON_LumpBlocks(topBlockJson);
+                var block = self.blockManager.fromJSON(topBlockJson);
                 self.addBlock( block );
                 block.posX(block.posX()/block.pix2em);
                 block.posY(block.posY()/block.pix2em);
@@ -1850,6 +1867,14 @@ $(function(){
     // -- MVVMのモデル(このアプリの中枢です) --
     function MyModel() {
         var self = this;
+
+        //■ URLパラメータより ■
+        if(getUrlParameter("lunchPepper")){
+            self.lunchPepper = true;
+        }
+        else{
+            self.lunchPepper = false;
+        }
 
         //■ ＵＩ関連の準備など ■
 
