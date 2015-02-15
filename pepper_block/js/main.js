@@ -1355,6 +1355,12 @@ function BlockManager(){
             });
         };
 
+        // UI関連です
+        
+        self.tabSelect = function(data,e){
+            console.log("ttt");
+        };
+
         // 作業場のリスト操作関連です
         self.addBlock = function(newBlock)
         {
@@ -1448,22 +1454,6 @@ function BlockManager(){
         };
     };
 
-    // ブロックの作業場のインスタンスを生成します
-    self.createBlockWorkSpaceIns = function(dragScopeName){
-        var blkWsIns = new BlockWorkSpace(self, dragScopeName);
-        self.blockWorkSpaceList.push(blkWsIns);
-        return blkWsIns;
-    };
-
-    // ブロックからブロックの作業場を探します
-    self.findBlockWorkSpaceByBlock = function(block){
-        for(var ii=0; ii < self.blockWorkSpaceList.length ; ii++){
-            if(self.blockWorkSpaceList[ii].isContainsBlock(block)){
-                return self.blockWorkSpaceList[ii];
-            }
-        }
-    };
-
     // ブロック作業場用のカスタムバインド
     var blockWsIdSeed_ = 1;
     ko.bindingHandlers.blockWorkSpaceSetup = {
@@ -1477,6 +1467,221 @@ function BlockManager(){
             self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
         },
         update: function(element, valueAccessor) {
+        }
+    };
+
+    // ブロック作業場向けのタブUI用カスタムバインド
+    ko.bindingHandlers.boxTabs = {
+        init: function(boxElement, valueAccessor) {
+            var blockWsLst = ko.unwrap(valueAccessor());
+            var boxElem    = $(boxElement);
+            var tabsElem   = $(".box-tabs",boxElem);
+            var panelElm   = $(".box-tabs-panel",boxElem);
+
+            var tabLayoutUpdate = function(){
+                tabsElem.css({
+                   left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
+                   top: boxElem.scrollTop() +"px",
+                   overflow:"hidden"
+               });
+            };
+            // パネル部分
+            $(boxElement).scroll(function(e){
+                tabLayoutUpdate();
+            });
+            tabLayoutUpdate();
+
+            var lastPosX=0;
+            var lastPosY=0;
+            var accVX=0;
+            var accVY=0;
+            var tabMenuY=0;
+            var mouseDownFlg = false;
+            var accIntervalId = null;
+            var startTouchEvent = null;
+            var startTouchTime  = null;
+            tabsElem.on({
+                'touchstart mousedown': function (event) {
+                    event.preventDefault();
+                    var target = $(this);
+                    if(event.originalEvent.touches){
+                        var touch = event.originalEvent.touches[0];
+                        lastPosX = touch.pageX;
+                        lastPosY = touch.pageY;
+                        startTouch = touch;
+                        startTouchTime = event.originalEvent.timeStamp;            
+                    }
+                    else{
+                        lastPosX = event.pageX;
+                        lastPosY = event.pageY;
+                        mouseDownFlg = true;
+                    }
+                    if(accIntervalId){
+                        clearInterval(accIntervalId);
+                        accIntervalId = null;
+                    }
+                    return false;
+                },
+                'touchmove mousemove': function (event) {
+                    event.preventDefault();
+                    var target = $(this);
+                    var moveX = 0;
+                    var moveY = 0;
+                    if(event.originalEvent.touches){
+                        var touch = event.originalEvent.touches[0];
+                        moveX = touch.pageX - lastPosX;
+                        moveY = touch.pageY - lastPosY;
+                        lastPosX = touch.pageX;
+                        lastPosY = touch.pageY;
+                    }
+                    else{
+                        if(mouseDownFlg){
+                            moveX = event.pageX - lastPosX;
+                            moveY = event.pageY - lastPosY;
+                            lastPosX = event.pageX;
+                            lastPosY = event.pageY;
+                        }
+                    }
+                    accVX = moveX*0.3 + accVX*0.7;            
+                    accVY = moveY*0.3 + accVY*0.7;
+                    if(moveY!=0){
+                        tabMenuY += moveY;
+                        if(tabMenuY < -panelElm.outerHeight()){
+                            tabMenuY = $(boxElement).height();
+                        }
+                        else if(tabMenuY > $(boxElement).height()){
+                            tabMenuY = -panelElm.height();
+                        }
+                        $(".box-tabs-panel",boxElement).css({
+                            top:tabMenuY,
+                        });
+                    }
+                    //console.log(moveY);
+                    return false;
+                },
+                'touchend mouseup': function (event) {
+                    event.preventDefault();
+                    var target = $(this);
+                    if(event.originalEvent.touches){
+                        var touch = event.originalEvent.touches[0];
+                        if(!touch){
+                            touch = event.originalEvent.changedTouches[0];
+                        }
+                        if(touch){
+                            lastPosX = touch.pageX;
+                            lastPosY = touch.pageY;
+                            if(startTouch)
+                            {
+                                var moveTime = event.originalEvent.timeStamp - startTouchTime;
+                                if(moveTime<300)
+                                {
+                                    var touchMoveX = touch.pageX - startTouch.pageX;
+                                    var touchMoveY = touch.pageY - startTouch.pageY;
+                                    var threshold  = tabsElem.width();
+                                    if(touchMoveX<-threshold){
+                                        tabsElem.removeClass("box-tabs-close");
+                                        tabsElem.addClass("box-tabs-open");
+                                        tabLayoutUpdate();
+                                    }
+                                    else if(touchMoveX > threshold/2){
+                                        tabsElem.removeClass("box-tabs-open");
+                                        tabsElem.addClass("box-tabs-close");
+                                        tabLayoutUpdate();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else{
+                        lastPosX = event.pageX;
+                        lastPosY = event.pageY;
+                        mouseDownFlg = false;
+                    }
+                    accIntervalId = setInterval(function(){
+                        tabMenuY += accVY;
+
+                        accVY = accVY - (accVY>0?0.03:-0.03);
+                        if(tabMenuY < -panelElm.outerHeight()){
+                            tabMenuY = boxElem.height();
+                        }
+                        else if(tabMenuY > boxElem.height()){
+                            tabMenuY = -panelElm.height();
+                        }
+                        panelElm.css({
+                            top:tabMenuY,
+                        });
+                        if(Math.abs(accVY)<0.1){
+                            clearInterval(accIntervalId);
+                            accIntervalId = null;
+                        }
+                    })
+
+                    return false;
+                },
+            });
+            // スクロールガイド(移動の操作しやすくするためのもの＋そのうちタブ向けのボタンになるかも)
+            var guidElem = $(".box-scroll-guide",boxElem);
+            var guidLayoutUpdate = function(){
+                guidElem.css({
+                    left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
+                    top: boxElem[0].clientHeight- guidElem.outerHeight() + boxElem.scrollTop()  +"px",
+                    overflow:"hidden"
+                });
+            };
+            boxElem.scroll(function(e){
+                guidLayoutUpdate();
+            });
+            guidLayoutUpdate();
+
+            var guidX=0;
+            var guidY=0;
+            guidElem.on({
+                'touchstart': function (event) {
+                    event.preventDefault();
+                    var touch = event.originalEvent.touches[0];
+                    guidX = touch.screenX;
+                    guidY = touch.screenY;
+                    $(this).css({
+                        opacity:1.0,
+                    });
+                    return false;
+                },
+                'touchmove': function (event) {
+                    event.preventDefault();
+                    var touch = event.originalEvent.touches[0];
+                    var moveX = touch.screenX - guidX;
+                    var moveY = touch.screenY - guidY;
+                    guidX = touch.screenX;
+                    guidY = touch.screenY;
+                    $("#page").scrollTop($("#page").scrollTop()-moveY);
+                    return false;
+                },
+                'touchend': function (event) {
+                    event.preventDefault();
+                    $(this).css({
+                        opacity:"0.2",
+                    });
+                    return false;
+                },
+            });
+        },
+        update: function(element, valueAccessor) {
+        }
+    };
+
+    // ブロックの作業場のインスタンスを生成します
+    self.createBlockWorkSpaceIns = function(dragScopeName){
+        var blkWsIns = new BlockWorkSpace(self, dragScopeName);
+        self.blockWorkSpaceList.push(blkWsIns);
+        return blkWsIns;
+    };
+
+    // ブロックからブロックの作業場を探します
+    self.findBlockWorkSpaceByBlock = function(block){
+        for(var ii=0; ii < self.blockWorkSpaceList.length ; ii++){
+            if(self.blockWorkSpaceList[ii].isContainsBlock(block)){
+                return self.blockWorkSpaceList[ii];
+            }
         }
     };
 
@@ -2127,200 +2332,14 @@ $(function(){
             self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
         ));
 
-
-        self.toyBoxWs = ko.observable(
+        self.toyBoxWsList = ko.observableArray();
+        self.toyBoxWsList.push(ko.observable(
             self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
-        ); 
+        ));
+         
         self.factoryBoxWs = ko.observable(
             self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
         ); 
-
-
-var tabLayoutUpdate = function(){
-    var boxElem = $(".materialBox");
-    var tabsElem = $(".box-tabs",boxElem);
-    tabsElem.css({
-       left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
-       top:$(".materialBox").scrollTop() +"px",
-       overflow:"hidden"
-   });
-};
-$(".materialBox").scroll(function(e){
-    tabLayoutUpdate();
-});
-var lastPosX=0;
-var lastPosY=0;
-var accVX=0;
-var accVY=0;
-var tabMenuY=0;
-var mouseDownFlg = false;
-var accIntervalId = null;
-var startTouchEvent = null;
-var startTouchTime  = null;
-$(".box-tabs",".materialBox").on({
-    'touchstart mousedown': function (event) {
-        event.preventDefault();
-        var target = $(this);
-        if(event.originalEvent.touches){
-            var touch = event.originalEvent.touches[0];
-            lastPosX = touch.pageX;
-            lastPosY = touch.pageY;
-            startTouch = touch;
-            startTouchTime = event.originalEvent.timeStamp;            
-        }
-        else{
-            lastPosX = event.pageX;
-            lastPosY = event.pageY;
-            mouseDownFlg = true;
-        }
-        if(accIntervalId){
-            clearInterval(accIntervalId);
-            accIntervalId = null;
-        }
-        return false;
-    },
-    'touchmove mousemove': function (event) {
-        event.preventDefault();
-        var target = $(this);
-        var moveX = 0;
-        var moveY = 0;
-        if(event.originalEvent.touches){
-            var touch = event.originalEvent.touches[0];
-            moveX = touch.pageX - lastPosX;
-            moveY = touch.pageY - lastPosY;
-            lastPosX = touch.pageX;
-            lastPosY = touch.pageY;
-        }
-        else{
-            if(mouseDownFlg){
-                moveX = event.pageX - lastPosX;
-                moveY = event.pageY - lastPosY;
-                lastPosX = event.pageX;
-                lastPosY = event.pageY;
-            }
-        }
-        accVX = moveX*0.3 + accVX*0.7;            
-        accVY = moveY*0.3 + accVY*0.7;
-        if(moveY!=0){
-            var panelElm = $(".box-tabs-panel",".materialBox");
-
-            tabMenuY += moveY;
-            if(tabMenuY < -panelElm.outerHeight()){
-                tabMenuY = $(".materialBox").height();
-            }
-            else if(tabMenuY > $(".materialBox").height()){
-                tabMenuY = -panelElm.height();
-            }
-            $(".box-tabs-panel",".materialBox").css({
-                top:tabMenuY,
-            });
-        }
-        //console.log(moveY);
-        return false;
-    },
-    'touchend mouseup': function (event) {
-        event.preventDefault();
-        var target = $(this);
-        if(event.originalEvent.touches){
-            var touch = event.originalEvent.touches[0];
-            if(!touch){
-                touch = event.originalEvent.changedTouches[0];
-            }
-            if(touch){
-                lastPosX = touch.pageX;
-                lastPosY = touch.pageY;
-                if(startTouch)
-                {
-                    var moveTime = event.originalEvent.timeStamp - startTouchTime;
-                    if(moveTime<300)
-                    {
-                        var touchMoveX = touch.pageX - startTouch.pageX;
-                        var touchMoveY = touch.pageY - startTouch.pageY;
-                        var threshold  = $(".box-tabs",".materialBox").width();
-                        if(touchMoveX<-threshold){
-                            $(".box-tabs",".materialBox").removeClass("box-tabs-close");
-                            $(".box-tabs",".materialBox").addClass("box-tabs-open");
-                            tabLayoutUpdate();
-                        }
-                        else if(touchMoveX > threshold/2){
-                            $(".box-tabs",".materialBox").removeClass("box-tabs-open");
-                            $(".box-tabs",".materialBox").addClass("box-tabs-close");
-                            tabLayoutUpdate();
-                        }
-                    }
-                }
-            }
-        }
-        else{
-            lastPosX = event.pageX;
-            lastPosY = event.pageY;
-            mouseDownFlg = false;
-        }
-        accIntervalId = setInterval(function(){
-            var panelElm = $(".box-tabs-panel",".materialBox");
-            tabMenuY += accVY;
-            
-            accVY = accVY - (accVY>0?0.03:-0.03);
-            if(tabMenuY < -panelElm.outerHeight()){
-                tabMenuY = $(".materialBox").height();
-            }
-            else if(tabMenuY > $(".materialBox").height()){
-                tabMenuY = -panelElm.height();
-            }
-            $(".box-tabs-panel",".materialBox").css({
-                top:tabMenuY,
-            });
-            if(Math.abs(accVY)<0.1){
-                clearInterval(accIntervalId);
-                accIntervalId = null;
-            }
-        })
-
-        return false;
-    },
-});
-
-$(".materialBox").scroll(function(e){
-    var boxElem = $(".materialBox");
-    var guidElem = $(".box-scroll-guide",boxElem);
-    guidElem.css({
-        left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
-        top: boxElem[0].clientHeight- guidElem.outerHeight() + boxElem.scrollTop()  +"px",
-        overflow:"hidden"
-    });
-});
-
-var guidX=0;
-var guidY=0;
-$(".box-scroll-guide",".materialBox").on({
-    'touchstart': function (event) {
-        event.preventDefault();
-        var touch = event.originalEvent.touches[0];
-        guidX = touch.screenX;
-        guidY = touch.screenY;
-        $(this).css({
-            opacity:1.0,
-        });
-        return false;
-    },
-    'touchmove': function (event) {
-        event.preventDefault();
-        var touch = event.originalEvent.touches[0];
-        var moveX = touch.screenX - guidX;
-        var moveY = touch.screenY - guidY;
-        guidX = touch.screenX;
-        guidY = touch.screenY;
-        $("#page").scrollTop($("#page").scrollTop()-moveY);
-        return false;
-    },
-    'touchend': function (event) {
-        event.preventDefault();
-        $(this).css({
-            opacity:"0.2",
-        });
-        return false;
-    },
-});
 
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■

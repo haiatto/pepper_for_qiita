@@ -356,30 +356,37 @@
               </div>
           </div>
 
-          <div class="materialBox">
+          <script type="text/html" id="box-template">
             <div class="box-tabs">
-              <div class="box-tabs-panel" data-bind="foreach: $root.materialBoxWsList">
-                <div class="box-tabs-btn">タブ</div>
+              <div class="box-tabs-panel" data-bind="foreach: $data">
+                <div class="box-tabs-btn" data-bind="click:$data.tabSelect,event:{touchend:$data.tabSelect},">タブ</div>
               </div>
             </div>
+            
             <div class="box-scroll-guide">
             </div>
-            <div data-bind="foreach: $root.materialBoxWsList">
-               <div data-bind="blockWorkSpaceSetup: $data">
-                  そざい
+
+            そざい
+
+            <!-- ko foreach: $data -->
+               <div class="box-workspace" data-bind="blockWorkSpaceSetup: $data, attr{id:$data.id}">
                   <div data-bind="foreach:$data.blockListObsv">
                     <div data-bind="template:'block-template',data:$data"></div>
                   </div>
               </div>
-            </div>
+            <!-- /ko -->
+          </script>
+
+          <div class="materialBox" data-bind="with:$root.materialBoxWsList,
+                                              boxTabs:$root.materialBoxWsList">
+            <!-- ko template:'box-template', data:$data -->
+            <!-- /ko --> 
           </div>
-          <div class="toyBox"
-               data-bind="with: $root.toyBoxWs, 
-                          blockWorkSpaceSetup: $root.toyBoxWs">          
-              とい
-              <div data-bind="foreach:$data.blockListObsv">
-                <div data-bind="template:'block-template',data:$data"></div>
-              </div>
+
+          <div class="toyBox" data-bind="with:    $root.toyBoxWsList, 
+                                         boxTabs: $root.toyBoxWsList">          
+            <!-- ko template:'box-template', data:$data -->
+            <!-- /ko --> 
           </div>
           <div class="factoryBox"
                data-bind="with: $root.factoryBoxWs, 
