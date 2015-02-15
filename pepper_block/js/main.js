@@ -2135,7 +2135,8 @@ $(function(){
             self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
         ); 
 
-$(".materialBox").scroll(function(e){
+
+var tabLayoutUpdate = function(){
     var boxElem = $(".materialBox");
     var tabsElem = $(".box-tabs",boxElem);
     tabsElem.css({
@@ -2143,6 +2144,9 @@ $(".materialBox").scroll(function(e){
        top:$(".materialBox").scrollTop() +"px",
        overflow:"hidden"
    });
+};
+$(".materialBox").scroll(function(e){
+    tabLayoutUpdate();
 });
 var lastPosX=0;
 var lastPosY=0;
@@ -2151,6 +2155,8 @@ var accVY=0;
 var tabMenuY=0;
 var mouseDownFlg = false;
 var accIntervalId = null;
+var startTouchEvent = null;
+var startTouchTime  = null;
 $(".box-tabs",".materialBox").on({
     'touchstart mousedown': function (event) {
         event.preventDefault();
@@ -2158,7 +2164,9 @@ $(".box-tabs",".materialBox").on({
         if(event.originalEvent.touches){
             var touch = event.originalEvent.touches[0];
             lastPosX = touch.pageX;
-            lastPosY = touch.pageY;            
+            lastPosY = touch.pageY;
+            startTouch = touch;
+            startTouchTime = event.originalEvent.timeStamp;            
         }
         else{
             lastPosX = event.pageX;
@@ -2207,7 +2215,7 @@ $(".box-tabs",".materialBox").on({
                 top:tabMenuY,
             });
         }
-        console.log(moveY);
+        //console.log(moveY);
         return false;
     },
     'touchend mouseup': function (event) {
@@ -2215,9 +2223,29 @@ $(".box-tabs",".materialBox").on({
         var target = $(this);
         if(event.originalEvent.touches){
             var touch = event.originalEvent.touches[0];
+            if(!touch){
+                touch = event.originalEvent.changedTouches[0];
+            }
             if(touch){
                 lastPosX = touch.pageX;
                 lastPosY = touch.pageY;
+                if(startTouch)
+                {
+                    var moveTime = event.originalEvent.timeStamp - startTouchTime;
+                    var touchMoveX = touch.pageX - startTouch.pageX;
+                    var touchMoveY = touch.pageY - startTouch.pageY;
+                    var deltaX = touchMoveX/moveTime;
+                    if(deltaX<-0.2){
+                        $(".box-tabs",".materialBox").removeClass("box-tabs-close");
+                        $(".box-tabs",".materialBox").addClass("box-tabs-open");
+                        setTimeout(tabLayoutUpdate,50);
+                    }
+                    else if(deltaX>0.4){
+                        $(".box-tabs",".materialBox").removeClass("box-tabs-open");
+                        $(".box-tabs",".materialBox").addClass("box-tabs-close");
+                        setTimeout(tabLayoutUpdate,50);
+                    }
+                }
             }
         }
         else{
@@ -2267,6 +2295,9 @@ $(".box-scroll-guide",".materialBox").on({
         var touch = event.originalEvent.touches[0];
         guidX = touch.screenX;
         guidY = touch.screenY;
+        $(this).css({
+            opacity:1.0,
+        });
         return false;
     },
     'touchmove': function (event) {
@@ -2281,6 +2312,9 @@ $(".box-scroll-guide",".materialBox").on({
     },
     'touchend': function (event) {
         event.preventDefault();
+        $(this).css({
+            opacity:"0.2",
+        });
         return false;
     },
 });
