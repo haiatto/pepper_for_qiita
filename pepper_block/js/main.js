@@ -2027,6 +2027,12 @@ $(function(){
             pepper_ip.ip[1] + "." +
             pepper_ip.ip[2] + "." +
             pepper_ip.ip[3];
+            var qims;
+            if(self.lunchPepper){
+                 qims = new QiSession();
+            }else{
+                 qims = new QiSession(ip);
+            }
             var qims = new QiSession(ip);
             qims.socket()
             .on('connect', function () {
