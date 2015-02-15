@@ -2136,10 +2136,10 @@ $(function(){
         ); 
 
 $(".materialBox").scroll(function(e){
-   $(".box-tabs",".materialBox").css({
-       left:$(".materialBox").width()/4.0*3 + 
-            $(".materialBox").scrollLeft()
-            +"px",
+    var boxElem = $(".materialBox");
+    var tabsElem = $(".box-tabs",boxElem);
+    tabsElem.css({
+       left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
        top:$(".materialBox").scrollTop() +"px",
        overflow:"hidden"
    });
@@ -2249,6 +2249,41 @@ $(".box-tabs",".materialBox").on({
     },
 });
 
+$(".materialBox").scroll(function(e){
+    var boxElem = $(".materialBox");
+    var guidElem = $(".box-scroll-guide",boxElem);
+    guidElem.css({
+        left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
+        top: boxElem[0].clientHeight- guidElem.outerHeight() + boxElem.scrollTop()  +"px",
+        overflow:"hidden"
+    });
+});
+
+var guidX=0;
+var guidY=0;
+$(".box-scroll-guide",".materialBox").on({
+    'touchstart': function (event) {
+        event.preventDefault();
+        var touch = event.originalEvent.touches[0];
+        guidX = touch.screenX;
+        guidY = touch.screenY;
+        return false;
+    },
+    'touchmove': function (event) {
+        event.preventDefault();
+        var touch = event.originalEvent.touches[0];
+        var moveX = touch.screenX - guidX;
+        var moveY = touch.screenY - guidY;
+        guidX = touch.screenX;
+        guidY = touch.screenY;
+        $("#page").scrollTop($("#page").scrollTop()-moveY);
+        return false;
+    },
+    'touchend': function (event) {
+        event.preventDefault();
+        return false;
+    },
+});
 
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■

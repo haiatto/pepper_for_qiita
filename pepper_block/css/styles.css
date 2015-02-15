@@ -244,7 +244,7 @@
   position: absolute;
   overflow:hidden;
   height:80%;
-  padding: 1em;  
+  /* padding: 1em; */  
   width: 10em;
   z-index: 10000;
 }
@@ -256,6 +256,15 @@
   
     padding: 0.5em;
     opacity: 0.9;
+}
+.box-scroll-guide{
+  position:absolute;
+  display:block;
+  background:blue;
+  opacity:0.2;
+  z-index:99999;
+  height:2em;
+  width: 10em;
 }
 
 /* Vertical Tabs

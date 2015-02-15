@@ -315,7 +315,7 @@
   </script>
 
 
-  <div data-role="page"> 
+  <div data-role="page" id="page"> 
     <div data-role="header">
       <h1>ペッパーＢＬＯＣＫ</h1>
     </div><!-- /header -->
@@ -361,6 +361,8 @@
               <div class="box-tabs-panel" data-bind="foreach: $root.materialBoxWsList">
                 <div class="box-tabs-btn">タブ</div>
               </div>
+            </div>
+            <div class="box-scroll-guide">
             </div>
             <div data-bind="foreach: $root.materialBoxWsList">
                <div data-bind="blockWorkSpaceSetup: $data">
