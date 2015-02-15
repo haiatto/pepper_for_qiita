@@ -356,13 +356,20 @@
               </div>
           </div>
 
-          <div class="materialBox"
-               data-bind="with: $root.materialBoxWs, 
-                          blockWorkSpaceSetup: $root.materialBoxWs">          
-              そざい
-              <div data-bind="foreach:$data.blockListObsv">
-                <div data-bind="template:'block-template',data:$data"></div>
+          <div class="materialBox">
+            <div class="box-tabs">
+              <div class="box-tabs-panel" data-bind="foreach: $root.materialBoxWsList">
+                <div class="box-tabs-btn">タブ</div>
               </div>
+            </div>
+            <div data-bind="foreach: $root.materialBoxWsList">
+               <div data-bind="blockWorkSpaceSetup: $data">
+                  そざい
+                  <div data-bind="foreach:$data.blockListObsv">
+                    <div data-bind="template:'block-template',data:$data"></div>
+                  </div>
+              </div>
+            </div>
           </div>
           <div class="toyBox"
                data-bind="with: $root.toyBoxWs, 

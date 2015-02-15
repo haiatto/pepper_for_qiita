@@ -1309,9 +1309,14 @@ function BlockManager(){
     // ■ブロック作業場管理など
 
     self.floatDraggingList = ko.observableArray();
+    self.floatDraggingInfo = {
+        fromWs:null,
+        droppedWs:null,
+    };
 
     self.blockWorkSpaceList = [];
     self.elementBlockWsLookupTbl = {};
+    var blockWsIdSeed_ = 1;
 
     var BlockWorkSpace = function (blockManager, dragScopeName){
         var self = this;
@@ -1320,6 +1325,7 @@ function BlockManager(){
         self.blockListObsv   = ko.observableArray();
         self.workAreaElement = null;
         self.dragScopeName   = dragScopeName;
+        self.id              = blockWsIdSeed_++;
 
         // シリアライズ関連です
         self.toJSON = function()
@@ -1410,7 +1416,8 @@ function BlockManager(){
                 blockIns = blockInsObsv();
                 blockIns.posX(posX);
                 blockIns.posY(posY);
-                posX += 130;
+                //posX += 130;
+                posY += 80;
             });
         };
 
@@ -1419,6 +1426,8 @@ function BlockManager(){
 
             //■ ドロップ処理 ■
             var dropAction_ = function(ui){
+                self.blockManager.floatDraggingInfo.droppedWs = self;
+                
                 var findBlockTop = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
                 var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
                 self.addBlock( dropBlockTop );
@@ -1459,11 +1468,11 @@ function BlockManager(){
     var blockWsIdSeed_ = 1;
     ko.bindingHandlers.blockWorkSpaceSetup = {
         init: function(element, valueAccessor) {
-            // ユーザーデータにIDを付加します
-            $(element).data("blockWorkSpaceId",blockWsIdSeed_++);
             // ブロックの要素生成時の初期化を行います
             var blockWsIns = ko.unwrap(valueAccessor());
             blockWsIns.setup( element );
+            // ユーザーデータにIDを付加します
+            $(element).data("blockWorkSpaceId",blockWsIns.id);
             // ブロックを要素から引くためにテーブルに追加します
             self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
         },
@@ -1602,18 +1611,30 @@ function BlockManager(){
             editModeTimeId = null;
         };
         // ■ホールド検知を開始します
-        self.lazyHoldModeStart = function(){
+        self.holdModeFlag = true;
+        var holdEndCb = null;
+        self.lazyHoldModeStart = function(startCb,endCb){
             if(holdModeTimeId){
                 clearTimeout(holdModeTimeId);
-                holdModeTimeId = null;   
+                holdModeTimeId = null;
             }
+            holdEndCb = endCb;
             holdModeTimeId = setTimeout(function(){
                 self.lazyEditModeCancel();
+                self.holdModeFlag = true;
+                if(startCb){
+                    startCb();
+                }
             },1000);
         };
         self.lazyHoldModeCancel = function(){
             clearTimeout(holdModeTimeId);
             holdModeTimeId = null;
+            if(holdEndCb){
+                holdEndCb();
+            }
+            holdEndCb = null;
+            self.holdModeFlag = false;
         };
     };
     var editMode = new EditMode();
@@ -1624,25 +1645,38 @@ function BlockManager(){
     self.setupBlockTouchAndMouseAction = function(block)
     {
         var fromBlkWs = null;
+        var droppedWs = null;
         var cloneBlock = null;
         var draggableDiv =$(block.element);
+        var ignoreMouseDown = false;
 
         draggableDiv
           .mousedown(function(ev) {
+              if(ignoreMouseDown)return;
               if(editMode.isNowLazyEditModeStartWait()){
                   //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
                   editMode.lazyEditModeCancel();                  
               }
               else{
                   editMode.lazyEditModeStart(this,ev.target);
-                  editMode.lazyHoldModeStart();
+
+                  draggableDiv.addClass("holdModeStart");
+                  editMode.lazyHoldModeStart(function(){
+                      isFloatDragMode = true;
+                      ignoreMouseDown = true;
+                      draggableDiv.trigger(ev);
+                      ignoreMouseDown = false;
+                      draggableDiv.removeClass("holdModeStart");
+                      draggableDiv.addClass("holdMode"); 
+                  },function(){
+                      draggableDiv.removeClass("holdModeStart");
+                      draggableDiv.removeClass("holdMode");
+                  });
               }
           })
           .mouseup(function(ev) {
-              if(editMode.isNowLazyEditModeStartWait()){
-                  //アップを検知したらホールドモードはキャンセルされます
-                  editMode.lazyHoldModeCancel();                  
-              }
+              //アップを検知したらホールドモードはキャンセルされます
+              editMode.lazyHoldModeCancel();
           })
           .draggable({
               //containment:$(".blockBox"),
@@ -1650,6 +1684,7 @@ function BlockManager(){
               scroll:false,
               cancel:".noDrag,input,textarea,button,select,option",
               helper:function(e){
+                  editMode.lazyHoldModeCancel();
                   if(block.isCloneDragMode){
                       // ドロップ先の設定を行います
                       $(draggableDiv).draggable("option", "scope", "toCloneBlock");
@@ -1660,6 +1695,9 @@ function BlockManager(){
                       return cloneBlock.element;
                   }
                   else{
+                      if(!editMode.holdModeFlag){
+                          editMode.lazyHoldModeCancel();
+                      }
                       if(isFloatDragMode){
                           // 自ボックスの外にも移動できるモード
                           //HACK: テスト中。今後の標準の予定
@@ -1682,9 +1720,11 @@ function BlockManager(){
               },
               start:function(event, ui){
                   editMode.lazyEditModeCancel();
+
                   self.moveStart(cloneBlock||block, ui.position);
                   
-                  fromBlkWs = self.findBlockWorkSpaceByBlock(block);
+                  self.floatDraggingInfo.droppedWs = null;
+                  self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
 
                   if(block.isCloneDragMode){
                       //draggableDiv.show();
@@ -1745,18 +1785,25 @@ function BlockManager(){
                   }
                   else{
                       if(isFloatDragMode){
-                          //draggableDiv.show();
-
-                          //self.traverseUnderBlock(block,{
-                          //    blockCb:function(block){
-                          //        $(block.element).show();
-                          //    },
-                          //});
-                          fromBlkWs.removeBlock(block);
+                          //どっちがいいかテスト中
+                          if(self.floatDraggingInfo.fromWs != self.floatDraggingInfo.droppedWs){
+                              //コピーモード
+                              self.traverseUnderBlock(block,{
+                                  blockCb:function(block){
+                                      block.setNoConnectMode(false);
+                                      $(block.element).css({opacity:1.0});
+                                      $(block.element).show();
+                                  },
+                              });
+                          }else{
+                              //移動モード
+                              self.floatDraggingInfo.fromWs.removeBlock(block);
+                          }
                       }
                       else{
                       }
                   }
+                  isFloatDragMode = false;
               },
           })
           //.dblclick(function(){
@@ -2033,7 +2080,6 @@ $(function(){
             }else{
                  qims = new QiSession(ip);
             }
-            var qims = new QiSession(ip);
             qims.socket()
             .on('connect', function () {
               self.nowState("接続中");              
@@ -2049,15 +2095,160 @@ $(function(){
         };
 
         // ■ 作業場の構築をします ■
-        self.materialBoxWs  = ko.observable(
+        self.materialBoxWsList = ko.observableArray();
+        self.materialBoxWsList.push(ko.observable(
             self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        );
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+        self.materialBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
+        ));
+
+
         self.toyBoxWs = ko.observable(
             self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
         ); 
         self.factoryBoxWs = ko.observable(
             self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
         ); 
+
+$(".materialBox").scroll(function(e){
+   $(".box-tabs",".materialBox").css({
+       left:$(".materialBox").width()/4.0*3 + 
+            $(".materialBox").scrollLeft()
+            +"px",
+       top:$(".materialBox").scrollTop() +"px",
+       overflow:"hidden"
+   });
+});
+var lastPosX=0;
+var lastPosY=0;
+var accVX=0;
+var accVY=0;
+var tabMenuY=0;
+var mouseDownFlg = false;
+var accIntervalId = null;
+$(".box-tabs",".materialBox").on({
+    'touchstart mousedown': function (event) {
+        event.preventDefault();
+        var target = $(this);
+        if(event.originalEvent.touches){
+            var touch = event.originalEvent.touches[0];
+            lastPosX = touch.pageX;
+            lastPosY = touch.pageY;            
+        }
+        else{
+            lastPosX = event.pageX;
+            lastPosY = event.pageY;
+            mouseDownFlg = true;
+        }
+        if(accIntervalId){
+            clearInterval(accIntervalId);
+            accIntervalId = null;
+        }
+        return false;
+    },
+    'touchmove mousemove': function (event) {
+        event.preventDefault();
+        var target = $(this);
+        var moveX = 0;
+        var moveY = 0;
+        if(event.originalEvent.touches){
+            var touch = event.originalEvent.touches[0];
+            moveX = touch.pageX - lastPosX;
+            moveY = touch.pageY - lastPosY;
+            lastPosX = touch.pageX;
+            lastPosY = touch.pageY;
+        }
+        else{
+            if(mouseDownFlg){
+                moveX = event.pageX - lastPosX;
+                moveY = event.pageY - lastPosY;
+                lastPosX = event.pageX;
+                lastPosY = event.pageY;
+            }
+        }
+        accVX = moveX*0.3 + accVX*0.7;            
+        accVY = moveY*0.3 + accVY*0.7;
+        if(moveY!=0){
+            var panelElm = $(".box-tabs-panel",".materialBox");
+
+            tabMenuY += moveY;
+            if(tabMenuY < -panelElm.outerHeight()){
+                tabMenuY = $(".materialBox").height();
+            }
+            else if(tabMenuY > $(".materialBox").height()){
+                tabMenuY = -panelElm.height();
+            }
+            $(".box-tabs-panel",".materialBox").css({
+                top:tabMenuY,
+            });
+        }
+        console.log(moveY);
+        return false;
+    },
+    'touchend mouseup': function (event) {
+        event.preventDefault();
+        var target = $(this);
+        if(event.originalEvent.touches){
+            var touch = event.originalEvent.touches[0];
+            if(touch){
+                lastPosX = touch.pageX;
+                lastPosY = touch.pageY;
+            }
+        }
+        else{
+            lastPosX = event.pageX;
+            lastPosY = event.pageY;
+            mouseDownFlg = false;
+        }
+        accIntervalId = setInterval(function(){
+            var panelElm = $(".box-tabs-panel",".materialBox");
+            tabMenuY += accVY;
+            
+            accVY = accVY - (accVY>0?0.03:-0.03);
+            if(tabMenuY < -panelElm.outerHeight()){
+                tabMenuY = $(".materialBox").height();
+            }
+            else if(tabMenuY > $(".materialBox").height()){
+                tabMenuY = -panelElm.height();
+            }
+            $(".box-tabs-panel",".materialBox").css({
+                top:tabMenuY,
+            });
+            if(Math.abs(accVY)<0.1){
+                clearInterval(accIntervalId);
+                accIntervalId = null;
+            }
+        })
+
+        return false;
+    },
+});
+
 
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
@@ -2635,22 +2826,23 @@ $(function(){
         );
 
         // 素材リスト生成をします
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("talkBlock@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("stringCat@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("stringLst@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("if@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("if_else@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("loop@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("eq@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("waitNSec@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("faceMotion@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("recoTalk@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
-        self.materialBoxWs().addBlock_CloneDragMode(self.blockManager.createBlockIns("nowTime@basicBlk"));
+        var materialBoxWs = self.materialBoxWsList()[0]();
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("talkBlock@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("stringCat@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("stringLst@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("if@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("if_else@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("loop@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("eq@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("waitNSec@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("faceMotion@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("recoTalk@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("nowTime@basicBlk"));
 
         // 素材リストの配置を更新します
-        self.materialBoxWs().arrayBlockLayout();
+        materialBoxWs.arrayBlockLayout();
     }
     myModel = new MyModel();
     ko.applyBindings( myModel );
