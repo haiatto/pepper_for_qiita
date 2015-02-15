@@ -185,9 +185,12 @@ function PepperCamera(alVideoDevice) {
 //
 
 $(function(){
-    $(window).on('beforeunload', function() {
-        return 'このまま移動しますか？';
-    });
+    if(!getUrlParameter("lunchPepper"))
+    {
+        $(window).on('beforeunload', function() {
+            return 'このまま移動しますか？';
+        });
+    }
 });
 
 function Block(blockManager, blockTemplate, callback) {
