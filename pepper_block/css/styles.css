@@ -250,12 +250,10 @@
 }
 .box-tabs-open{
   width: 10em;
-  transition-duration: 0.05s;
 }
 .box-tabs-close{
   background:gray;  
   width: 2em;
-  transition-duration: 0.05s;
 }
 .box-tabs-panel{
   position: relative;

@@ -2232,18 +2232,21 @@ $(".box-tabs",".materialBox").on({
                 if(startTouch)
                 {
                     var moveTime = event.originalEvent.timeStamp - startTouchTime;
-                    var touchMoveX = touch.pageX - startTouch.pageX;
-                    var touchMoveY = touch.pageY - startTouch.pageY;
-                    var deltaX = touchMoveX/moveTime;
-                    if(deltaX<-0.2){
-                        $(".box-tabs",".materialBox").removeClass("box-tabs-close");
-                        $(".box-tabs",".materialBox").addClass("box-tabs-open");
-                        setTimeout(tabLayoutUpdate,50);
-                    }
-                    else if(deltaX>0.4){
-                        $(".box-tabs",".materialBox").removeClass("box-tabs-open");
-                        $(".box-tabs",".materialBox").addClass("box-tabs-close");
-                        setTimeout(tabLayoutUpdate,50);
+                    if(moveTime<300)
+                    {
+                        var touchMoveX = touch.pageX - startTouch.pageX;
+                        var touchMoveY = touch.pageY - startTouch.pageY;
+                        var threshold  = $(".box-tabs",".materialBox").width();
+                        if(touchMoveX<-threshold){
+                            $(".box-tabs",".materialBox").removeClass("box-tabs-close");
+                            $(".box-tabs",".materialBox").addClass("box-tabs-open");
+                            tabLayoutUpdate();
+                        }
+                        else if(touchMoveX > threshold/2){
+                            $(".box-tabs",".materialBox").removeClass("box-tabs-open");
+                            $(".box-tabs",".materialBox").addClass("box-tabs-close");
+                            tabLayoutUpdate();
+                        }
                     }
                 }
             }
