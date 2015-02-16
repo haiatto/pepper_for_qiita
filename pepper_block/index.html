@@ -359,7 +359,8 @@
           <script type="text/html" id="box-template">
             <div class="box-tabs">
               <div class="box-tabs-panel" data-bind="foreach: $data">
-                <div class="box-tabs-btn" data-bind="click:$data.tabSelect,event:{touchend:$data.tabSelect},">タブ</div>
+                <div class="box-tabs-btn" data-bind="boxTabsBtn:{lst:$parent,ws:$data},
+                                                     text:$data.workspaceNameObsv,"></div>
               </div>
             </div>
             

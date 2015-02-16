@@ -1318,14 +1318,15 @@ function BlockManager(){
     self.elementBlockWsLookupTbl = {};
     var blockWsIdSeed_ = 1;
 
-    var BlockWorkSpace = function (blockManager, dragScopeName){
+    var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
         var self = this;
         
-        self.blockManager    = blockManager;
-        self.blockListObsv   = ko.observableArray();
-        self.workAreaElement = null;
-        self.dragScopeName   = dragScopeName;
-        self.id              = blockWsIdSeed_++;
+        self.blockManager      = blockManager;
+        self.workspaceNameObsv = ko.observable(workspaceName||"あたらしいエリア");
+        self.blockListObsv     = ko.observableArray();
+        self.workAreaElement   = null;
+        self.dragScopeName     = dragScopeName;
+        self.id                = blockWsIdSeed_++;
 
         // シリアライズ関連です
         self.toJSON = function()
@@ -1478,6 +1479,12 @@ function BlockManager(){
             var tabsElem   = $(".box-tabs",boxElem);
             var panelElm   = $(".box-tabs-panel",boxElem);
 
+            //タブの初期状態をセット
+            $(".box-workspace",boxElem).addClass("box-workspace-hide");
+            $($(".box-workspace",boxElem)[0]).removeClass("box-workspace-hide");
+            $($(".box-workspace",boxElem)[0]).addClass("box-workspace-disp");
+            $($(".box-tabs-btn",boxElem)[0]).addClass("box-tabs-btn-sel")
+
             var tabLayoutUpdate = function(){
                 tabsElem.css({
                    left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
@@ -1558,6 +1565,9 @@ function BlockManager(){
                     }
                     //console.log(moveY);
                     return false;
+                },
+                'mouseout': function (event) {
+                    mouseDownFlg = false;
                 },
                 'touchend mouseup': function (event) {
                     event.preventDefault();
@@ -1668,10 +1678,65 @@ function BlockManager(){
         update: function(element, valueAccessor) {
         }
     };
+    ko.bindingHandlers.boxTabsBtn = {
+        init: function(btnElement, valueAccessor) {
+            var data       = ko.unwrap(valueAccessor());
+            var btnElem    = $(btnElement);
+            var startTime  = null;
+            var startPosX  = 0;
+            var startPosY  = 0;
+            var tapAct = function(){
+                $.each(data.lst,function(k,wsObsv){                  
+                    var ws = wsObsv();
+                    if(ws == data.ws){
+                        //表示
+                        $(ws.workAreaElement).removeClass("box-workspace-hide");
+                        $(ws.workAreaElement).addClass("box-workspace-disp");
+                    }
+                    else{
+                        //非表示
+                        $(ws.workAreaElement).removeClass("box-workspace-disp");
+                        $(ws.workAreaElement).addClass("box-workspace-hide");
+                    }
+                });
+                $(".box-tabs-btn",btnElem.parent()).removeClass("box-tabs-btn-sel");
+                btnElem.addClass("box-tabs-btn-sel");
+            };
+            $(btnElement).on({
+                'touchstart mousedown': function (event) {
+                    event.preventDefault();
+                    startTime = +new Date();
+                    startPosX  = event.pageX||event.originalEvent.touches[0].pageX;
+                    startPosY  = event.pageY||event.originalEvent.touches[0].pageY;
+                },
+                'touchmove mousemove': function (event) {
+                    event.preventDefault();
+                },
+                'touchend mouseup': function (event) {
+                    event.preventDefault();
+                    var lastTime = +new Date();
+                    if((lastTime - startTime) < 500){
+                        var lastPosX  = event.pageX||event.originalEvent.changedTouches[0].pageX;
+                        var lastPosY  = event.pageY||event.originalEvent.changedTouches[0].pageY;
+                        var mvX = lastPosX - startPosX;
+                        var mvY = lastPosY - startPosY;
+                        if(Math.sqrt(mvX*mvX+mvY*mvY) < $(btnElement).height()){
+                            tapAct();
+                        }
+                    }
+                },
+            });
+            //data.ws.tabSelect();
+            //click:$data.tabSelect,
+            //event:{touchend:$data.tabSelect},
+        },
+        update: function(element, valueAccessor) {
+        }
+    };
 
     // ブロックの作業場のインスタンスを生成します
-    self.createBlockWorkSpaceIns = function(dragScopeName){
-        var blkWsIns = new BlockWorkSpace(self, dragScopeName);
+    self.createBlockWorkSpaceIns = function(dragScopeName,workspaceName){
+        var blkWsIns = new BlockWorkSpace(self, dragScopeName, workspaceName);
         self.blockWorkSpaceList.push(blkWsIns);
         return blkWsIns;
     };
@@ -1892,7 +1957,7 @@ function BlockManager(){
                   editMode.lazyHoldModeCancel();
                   if(block.isCloneDragMode){
                       // ドロップ先の設定を行います
-                      $(draggableDiv).draggable("option", "scope", "toCloneBlock");
+                      $(draggableDiv).draggable("option", "scope", "droppableScope");
                       $(draggableDiv).draggable("option", "containment", (".blockBox"));
                       // ブロックの複製をして浮遊ドラッグリスト(専用作業場)に追加します
                       cloneBlock = block.cloneThisBlock();
@@ -1905,8 +1970,7 @@ function BlockManager(){
                       }
                       if(isFloatDragMode){
                           // 自ボックスの外にも移動できるモード
-                          //HACK: テスト中。今後の標準の予定
-                          $(draggableDiv).draggable("option", "scope", "toCloneBlock");
+                          $(draggableDiv).draggable("option", "scope", "droppableScope");
                           $(draggableDiv).draggable("option", "containment", (".blockBox"));
                           cloneBlock = block.cloneThisBlockAndConnectBlock();
                           self.addFloatDraggingList(cloneBlock);
@@ -1914,9 +1978,7 @@ function BlockManager(){
                       }
                       else{
                           //自ボックスの内限定で移動できるモード
-                          //HACK: 今後は特別モードになる予定。
-                          //      なぜなら画面端スクロールがかなり操作がし辛かったので廃止にした結果余りこだわる必要なくなったため。
-                          $(draggableDiv).draggable("option", "scope", "toOriginalBlock");
+                          $(draggableDiv).draggable("option", "scope", "innerScope");//※ドロップ出来ないようにしてます
                           $(draggableDiv).draggable("option", "containment", null);
                           return this;
                       }
@@ -2301,44 +2363,18 @@ $(function(){
 
         // ■ 作業場の構築をします ■
         self.materialBoxWsList = ko.observableArray();
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
-        self.materialBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toMaterialBlock")
-        ));
 
         self.toyBoxWsList = ko.observableArray();
         self.toyBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
+            self.blockManager.createBlockWorkSpaceIns("droppableScope")
         ));
+        self.toyBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("droppableScope")
+        ));
+
          
         self.factoryBoxWs = ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("toCloneBlock")
+            self.blockManager.createBlockWorkSpaceIns("droppableScope")
         ); 
 
 
@@ -2733,7 +2769,9 @@ $(function(){
               },
               blockContents:[
                   {expressions:[
-                      {label:'物が正面にある'}
+                      {label:'物が正面'},
+                      {string:{default:'0.5'}, dataName:'dist',acceptTypes:["number"]},
+                      {label:'ｍ内にある'},
                   ]}
               ],
           },
@@ -2741,7 +2779,7 @@ $(function(){
               var dfd = $.Deferred();
               var onFail = function(e) {console.error('fail:' + e);};
               var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
-              var LIMIT = 0.5;
+              var LIMIT = valueDataTbl["dist"]();
               if(ctx.qims){
                   ctx.qims.service('ALMemory').then(function(s){
                       s.getData(FRONT_KEY).then(function(v){
@@ -2917,23 +2955,39 @@ $(function(){
         );
 
         // 素材リスト生成をします
-        var materialBoxWs = self.materialBoxWsList()[0]();
+        var materialBoxWs;
+        materialBoxWs = self.blockManager.createBlockWorkSpaceIns("noDroppable","かいわ");
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("talkBlock@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("recoTalk@basicBlk"));
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
+        self.materialBoxWsList.push(ko.observable(materialBoxWs));
+
+        materialBoxWs = self.blockManager.createBlockWorkSpaceIns("noDroppable","うごき");
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("faceMotion@basicBlk"));
+        self.materialBoxWsList.push(ko.observable(materialBoxWs));
+
+        materialBoxWs = self.blockManager.createBlockWorkSpaceIns("noDroppable","あたい");
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("stringCat@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("stringLst@basicBlk"));
+        self.materialBoxWsList.push(ko.observable(materialBoxWs));
+
+        materialBoxWs = self.blockManager.createBlockWorkSpaceIns("noDroppable","ながれ");
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("if@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("if_else@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("loop@basicBlk"));
-        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("eq@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("waitNSec@basicBlk"));
-        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("faceMotion@basicBlk"));
+        self.materialBoxWsList.push(ko.observable(materialBoxWs));
+
+        materialBoxWs = self.blockManager.createBlockWorkSpaceIns("noDroppable","調べる");
+        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("eq@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("sonarSimple@basicBlk"));
-        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("recoTalk@basicBlk"));
-        materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("lastRecoWord@basicBlk"));
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("nowTime@basicBlk"));
+        self.materialBoxWsList.push(ko.observable(materialBoxWs));
 
         // 素材リストの配置を更新します
-        materialBoxWs.arrayBlockLayout();
+        $.each(self.materialBoxWsList(),function(k,ws){
+            ws().arrayBlockLayout();
+        });
     }
     myModel = new MyModel();
     ko.applyBindings( myModel );
