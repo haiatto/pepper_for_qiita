@@ -33,7 +33,7 @@ function getUrlParameter(sParam)
             return sParameterName[1];
         }
     }
-}    
+}
 
 var userAgent = window.navigator.userAgent.toLowerCase();
 var appVersion = window.navigator.appVersion.toLowerCase();
@@ -1563,7 +1563,7 @@ function BlockManager(){
                             top:tabMenuY,
                         });
                     }
-                    //console.log(moveY);
+                    console.log(""+moveY+","+moveX);
                     return false;
                 },
                 'mouseout': function (event) {
@@ -1577,6 +1577,7 @@ function BlockManager(){
                         if(!touch){
                             touch = event.originalEvent.changedTouches[0];
                         }
+                        console.log("end");
                         if(touch){
                             lastPosX = touch.pageX;
                             lastPosY = touch.pageY;

@@ -15,6 +15,17 @@
     visibility: hidden;
 }
 
+.debugLogBox{
+    display:block;
+    opacity: 1.0;
+    background:black;
+    height: 2em;
+    margin-bottom: 0.4em;
+    border-radius: 0.3em;
+    border-style: double;
+    border-color: white;
+}
+
 body{
   overflow:hidden;
 }

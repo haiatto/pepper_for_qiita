@@ -347,9 +347,9 @@
           <button data-bind="click: $root.saveBlock">きろく</button>
           <button data-bind="click: $root.loadBlock">ふっかつ</button>
         </div>
+        <div class="debugLogBox" id="debugLogBox"></div>
         <div class="blockBox">
           <div id="pix2em" class="pix2em"></div>
-
           <div class="floatDraggingArea">
               <div data-bind="foreach:$root.blockManager.floatDraggingList">
                 <div data-bind="template:'block-template',data:$data"></div>
