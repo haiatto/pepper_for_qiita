@@ -60,8 +60,8 @@
   <script type="text/html" id="block-template">
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
-                      style:{left:   $data.posX(),
-                             top:    $data.posY(),
+                      style:{left:   $data.posX()+($parent.offsetX?$parent.offsetX():0),
+                             top:    $data.posY()+($parent.offsetY?$parent.offsetY():0),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
                       updateBlockSizeLayout:$data,">
@@ -366,33 +366,32 @@
             
             <div class="box-scroll-guide">
             </div>
-
-            そざい
-
             <!-- ko foreach: $data -->
                <div class="box-workspace" data-bind="blockWorkSpaceSetup: $data, attr{id:$data.id}">
-                  <div data-bind="foreach:$data.blockListObsv">
-                    <div data-bind="template:'block-template',data:$data"></div>
-                  </div>
+                  <!-- ko foreach:$data.blockListObsv -->
+                    <!-- ko template:'block-template',data:$data -->
+                    <!-- /ko -->
+                  <!-- /ko -->
               </div>
             <!-- /ko -->
           </script>
 
           <div class="materialBox" data-bind="with:$root.materialBoxWsList,
                                               boxTabs:$root.materialBoxWsList">
+            <div class="box-title" data-bind>そざいBOX</div>
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
 
           <div class="toyBox" data-bind="with:    $root.toyBoxWsList, 
                                          boxTabs: $root.toyBoxWsList">          
+            <div class="box-title" data-bind>といBOX</div>
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
-          <div class="factoryBox"
-               data-bind="with: $root.factoryBoxWs, 
-                          blockWorkSpaceSetup: $root.factoryBoxWs">          
-              ふぁくとり
+          <div class="factoryBox" data-bind="with: $root.factoryBoxWs, 
+                                             blockWorkSpaceSetup: $root.factoryBoxWs">          
+              <div class="box-title" data-bind>ふぁくとりBOX</div>
               <div data-bind="foreach:$data.blockListObsv">
                 <div data-bind="template:'block-template',data:$data"></div>
               </div>

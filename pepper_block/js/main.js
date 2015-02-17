@@ -1328,6 +1328,11 @@ function BlockManager(){
         self.dragScopeName     = dragScopeName;
         self.id                = blockWsIdSeed_++;
 
+        self.offsetX = ko.observable(0);
+        self.offsetY = ko.observable(0);
+        self.scale   = ko.observable(1.0);
+        self.scrollLock = false;
+
         // シリアライズ関連です
         self.toJSON = function()
         {
@@ -1439,8 +1444,8 @@ function BlockManager(){
                 var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
                 self.addBlock( dropBlockTop );
                 var areaOffset = $(self.workAreaElement).offset();
-                var scrollTop  = $(self.workAreaElement).scrollTop();
-                var scrollLeft = $(self.workAreaElement).scrollLeft();
+                var scrollTop  = -self.offsetY();//$(self.workAreaElement).scrollTop();
+                var scrollLeft = -self.offsetX();//$(self.workAreaElement).scrollLeft();
                 dropBlockTop.posX(ui.offset.left - areaOffset.left + scrollLeft);
                 dropBlockTop.posY(ui.offset.top  - areaOffset.top  + scrollTop);
                 self.blockManager.updatePositionLayout( dropBlockTop );
@@ -1462,10 +1467,70 @@ function BlockManager(){
             // ブロックの要素生成時の初期化を行います
             var blockWsIns = ko.unwrap(valueAccessor());
             blockWsIns.setup( element );
+
             // ユーザーデータにIDを付加します
             $(element).data("blockWorkSpaceId",blockWsIns.id);
             // ブロックを要素から引くためにテーブルに追加します
             self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
+
+            // ワークスペースのUI操作を構築します
+            var isMouseEvent = function(e){
+                if(e.originalEvent.touches)return false;
+                return true;
+            };
+            var getOnePosition = function(e){
+                if(e.originalEvent.touches){
+                    var touch = e.originalEvent.touches[0];
+                    if(!touch){
+                        touch = e.originalEvent.changedTouches[0];
+                    }
+                    return {x:touch.pageX,
+                            y:touch.pageY};
+                }
+                else{
+                    return {x:e.pageX,
+                            y:e.pageY};
+                }
+            };
+            var mouseDownFlg = false;
+            var startPos = null;
+            var lastPos  = null;
+            $(element).on({
+                'touchstart mousedown': function (e) {
+                    e.preventDefault();
+                    var target = $(this);
+                    if(isMouseEvent(e)){
+                        mouseDownFlg = true;
+                    }
+                    lastPos = startPos = getOnePosition(e);
+                },
+                'touchmove mousemove': function (e) {
+                    event.preventDefault();
+                    var target = $(this);
+                    if(isMouseEvent(e) && !mouseDownFlg){
+                        return;
+                    }
+                    var nowPos = getOnePosition(e);
+                    var vX = nowPos.x - lastPos.x;
+                    var vY = nowPos.y - lastPos.y;
+                    lastPos = nowPos;
+                    if(!blockWsIns.scrollLock){
+                        blockWsIns.offsetX(vX + blockWsIns.offsetX());
+                        blockWsIns.offsetY(vY + blockWsIns.offsetY());
+                    }
+                    //console.log(""+blockWsIns.offsetX()+","+blockWsIns.offsetY())
+                },
+                'mouseout': function (e) {
+                    mouseDownFlg = false;
+                },
+                'touchend mouseup': function (e) {
+                    event.preventDefault();
+                    var target = $(this);
+                    var nowPos = getOnePosition(e);
+
+                    mouseDownFlg = false;
+                },
+            });
         },
         update: function(element, valueAccessor) {
         }
@@ -1564,7 +1629,6 @@ function BlockManager(){
                             top:tabMenuY,
                         });
                     }
-                    console.log(""+moveY+","+moveX);
                     return false;
                 },
                 'mouseout': function (event) {
@@ -1578,7 +1642,6 @@ function BlockManager(){
                         if(!touch){
                             touch = event.originalEvent.changedTouches[0];
                         }
-                        console.log("end");
                         if(touch){
                             lastPosX = touch.pageX;
                             lastPosY = touch.pageY;
@@ -1587,11 +1650,9 @@ function BlockManager(){
                                 var moveTime = event.originalEvent.timeStamp - startTouchTime;
                                 if(moveTime<300)
                                 {
-                                    console.log("end2");
                                     var touchMoveX = touch.pageX - startTouch.pageX;
                                     var touchMoveY = touch.pageY - startTouch.pageY;
                                     var threshold  = tabsElem.width();
-                                    console.log(threshold+","+touchMoveX);
                                     if(touchMoveX<-threshold){
                                         tabsElem.removeClass("box-tabs-close");
                                         tabsElem.addClass("box-tabs-open");
@@ -1947,6 +2008,7 @@ function BlockManager(){
                       draggableDiv.removeClass("holdMode");
                   });
               }
+              return false;
           })
           .mouseup(function(ev) {
               //アップを検知したらホールドモードはキャンセルされます
@@ -1996,6 +2058,9 @@ function BlockManager(){
                   
                   self.floatDraggingInfo.droppedWs = null;
                   self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
+
+                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
+                  self.floatDraggingInfo.fromWs.scrollLock = true;
 
                   if(block.isCloneDragMode){
                       //draggableDiv.show();
@@ -2075,6 +2140,9 @@ function BlockManager(){
                       }
                   }
                   isFloatDragMode = false;
+
+                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
+                  self.floatDraggingInfo.fromWs.scrollLock = false;
               },
           })
           //.dblclick(function(){
