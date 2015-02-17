@@ -1515,7 +1515,8 @@ function BlockManager(){
                         var touch = event.originalEvent.touches[0];
                         lastPosX = touch.pageX;
                         lastPosY = touch.pageY;
-                        startTouch = touch;
+                        startTouch = {pageX:touch.pageX,
+                                      pageY:touch.pageY};
                         startTouchTime = event.originalEvent.timeStamp;            
                     }
                     else{
