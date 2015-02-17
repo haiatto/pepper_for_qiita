@@ -1586,9 +1586,11 @@ function BlockManager(){
                                 var moveTime = event.originalEvent.timeStamp - startTouchTime;
                                 if(moveTime<300)
                                 {
+                                    console.log("end2");
                                     var touchMoveX = touch.pageX - startTouch.pageX;
                                     var touchMoveY = touch.pageY - startTouch.pageY;
                                     var threshold  = tabsElem.width();
+                                    console.log(threshold+","+touchMoveX);
                                     if(touchMoveX<-threshold){
                                         tabsElem.removeClass("box-tabs-close");
                                         tabsElem.addClass("box-tabs-open");
