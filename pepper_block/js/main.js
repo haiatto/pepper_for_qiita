@@ -213,8 +213,17 @@ function Block(blockManager, blockTemplate, callback) {
     self.blockHeight = ko.observable(0);
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
+    self.dispPosX    = ko.observable(0);
+    self.dispPosY    = ko.observable(0);
     self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
     self.textColor   = ko.observable(self.blockTemplate.blockOpt.textColor||"white");
+
+    // パフォーマンスのために反映を遅延させます
+    //(反映の遅延のレスポンスに影響は殆どなく寧ろ処理が軽くなって反応あがる効果あるみたいです)
+//    TODO:ドロップ時のヒット判定の位置をUI要素から直に得ていたせいでうまくいかなかったのでひとまずカット
+//         ドロップ時に値を'読め'ば即反映されるはずなので後で試したい。(仕組み的に受動的な通知が遅延するだけとのこと)
+//    self.dispPosX.extend({ rateLimit: 1 });
+//    self.dispPosY.extend({ rateLimit: 1 });
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
@@ -657,13 +666,6 @@ function Block(blockManager, blockTemplate, callback) {
 // ブロック間はグローバルにつなぎ、相互に接続も自由。
 // 管理エリア毎にリストを作ってそこに格納するだけ。
 
-//TODO:
-// 今はリストは固定名だけど、動的に作れるようにする。
-// 動的になれば、タブ実装とかが簡単にできるはず
-
-// リファクタリングメモ
-// ドロップ先とリストをセットで管理
-
 
 function BlockManager(){
     var self = this;
@@ -857,112 +859,28 @@ function BlockManager(){
     };
 
     //■ 
-    var getHitBlock = function(block){
-        var nearDist = 99999999;
-        var hitBlock = null;
-        var srcBlock = null;
-        var isIn     = false;
-        var valueName= null;
-        // 入出力ブロックを取り出します
-        var inBlock  = null;
-        var outBlock = null;
-        var valueBlock = null;
-        if(block.in){
-            inBlock = block;
+    var getHitBlock = function(block,movePivotPos){
+        var tgtBlockWs = self.findBlockWorkSpaceByBlock(block);
+        if(!tgtBlockWs)
+        {
+            //所属してる作業場があったらその中で判定します
+            //所属が無いときは移動の中心(指とかマウス)が重なる作業場から判定します
+            $.each(self.blockWorkSpaceList,function(k,blockWs){
+                var offs1 = $(blockWs.workAreaElement).offset();
+                var w1    = $(blockWs.workAreaElement).width();
+                var h1    = $(blockWs.workAreaElement).height();
+                if(movePivotPos.y < offs1.top + h1&&
+                   offs1.top      < movePivotPos.y&&
+                   movePivotPos.x < offs1.left + w1&&
+                   offs1.left     < movePivotPos.x)
+                {
+                    tgtBlockWs = blockWs;
+                    return false;
+                }
+            });
         }
-        if(block.out){
-            outBlock = block;
-            while(outBlock.out){
-                if(outBlock.out.blockObsv()){
-                    outBlock = outBlock.out.blockObsv();
-                }
-                else{
-                    break; 
-                }
-            }
-        }
-        if(block.valueOut){
-            valueBlock = block;
-        }
-        // ヒットチェックをします
-        // TODO:所属リストのチェックをするべき
-        $.each(self.blockList,function(k,tgtBlock){
-            if(tgtBlock.isNoConnectMode){
-                return;
-            }
-            var dist;
-            if(tgtBlock == inBlock) return;
-            if(tgtBlock == outBlock) return;
-            if(tgtBlock == valueBlock) return;
-            if(tgtBlock.in && outBlock && outBlock.out){
-                dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
-                if(dist && dist < nearDist){
-                    nearDist = dist;
-                    hitBlock = tgtBlock;
-                    srcBlock = outBlock;
-                    isSrcIn  = false;
-                    valueName = null;
-                    scopeName = null;
-                }
-            }
-            if(tgtBlock.out && inBlock){
-                dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
-                if(dist && dist < nearDist){
-                    nearDist = dist;
-                    hitBlock = tgtBlock;
-                    srcBlock = inBlock;
-                    isSrcIn  = true;
-                    valueName = null;
-                    scopeName = null;
-                }
-            }
-            if(inBlock){
-                $.each(tgtBlock.scopeTbl,function(name,scope){
-                    dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
-                    if(dist && dist < nearDist){
-                        nearDist = dist;
-                        hitBlock = tgtBlock;
-                        srcBlock = inBlock;
-                        isSrcIn  = true;
-                        valueName = null;
-                        scopeName = name;
-                    }
-                });
-            }
-            if(valueBlock){
-                $.each(tgtBlock.valueInTbl,function(name,valueIn){
-                    dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
-                    if(dist && dist < nearDist){
-                        if(tgtBlock.valueInTbl[name].blockObsv())
-                        {
-                            //値ブロックの場合接続済みな場合は無視します
-                            //(上に乗っかったものでUIが塞がっているので)
-                            return;
-                        }
-                        if(self.checkContainLumpBlock(valueBlock, tgtBlock))
-                        {
-                            //自身が接続しているブロックの塊内は無視します
-                            return;
-                        }
-                        if(tgtBlock.getTypeAccept(name,valueBlock))
-                        {
-                            nearDist = dist;
-                            hitBlock = tgtBlock;
-                            srcBlock = valueBlock;
-                            isSrcIn  = false;
-                            valueName = name;
-                            scopeName = null;
-                        }
-                    }
-                });
-            }
-        });
-        if(hitBlock){
-            return {hitBlock:hitBlock,
-                    srcBlock:srcBlock,
-                    isSrcIn:isSrcIn,
-                    valueName:valueName,
-                    scopeName:scopeName,};
+        if(tgtBlockWs){
+            return tgtBlockWs.getHitBlock(block);
         }
     };
     
@@ -972,9 +890,24 @@ function BlockManager(){
 
         // 更新する一番上のブロックを探します
         var topBlock = self.getLumpTopBlock(updateBlock);
+        var workSpace = self.findBlockWorkSpaceByBlock(topBlock);
+        var offsetX = 0;
+        var offsetY = 0;
+        if(workSpace){
+            offsetX = workSpace.offsetX();
+            offsetY = workSpace.offsetY();
+        }
+
+//ぶろっくのローカルとスクリーン座標いれるさき分ける
+//すくりーん座標変更時のみDOM更新がかかればいいので
+//画面が居の扱いとかでなかなかいいかんじになるかも？
 
         // レイアウトします
         self.traverseUnderBlock(topBlock,{
+            blockCb:function(block){
+                block.dispPosX(Math.floor(block.posX()+offsetX));
+                block.dispPosY(Math.floor(block.posY()+offsetY));                
+            },
             // 位置のみなのでブロック内の処理順は自由にやれます
             valueInCb:function(block,k,valueInBlock,valueIn){
                 var blockA = block;
@@ -1011,58 +944,9 @@ function BlockManager(){
                 );
             },
         });
-/*
-        // レイアウトします
-        var recv = function(block){
-            // 位置のみなのでブロック内の処理順は自由にやれます
-            $.each(block.valueInTbl,function(k,valueIn){
-                if(valueIn.blockObsv()){
-                    var blockA = block;
-                    var blockB = valueIn.blockObsv();
-                    blockB.posX(
-                        blockA.posX() + valueIn.blockLocalX()
-                    );
-                    blockB.posY(
-                        blockA.posY() + valueIn.blockLocalY()
-                    );
-                    recv(valueIn.blockObsv());
-                }
-            });
-            $.each(block.scopeTbl,function(k,scope){
-                if(scope.scopeOut.blockObsv()){
-                    var blockA = block;
-                    var blockB = scope.scopeOut.blockObsv();
-                    var blkConnectorHalfMargin = 0.25 / block.pix2em;
-                    blockB.posY(
-                        blockA.posY() + scope.rowBlockLocalY() + blkConnectorHalfMargin
-                    );
-                    blockB.posX(
-                        blockA.posX() + blockA.indentWidth
-                    );
-                    recv(blockB);
-                }
-            });
-            if(block.out && block.out.blockObsv())
-            {
-                var blockA = block;
-                var blockB = block.out.blockObsv();
-                var elmA = blockA.element;
-                var elmB = blockB.element;
-                //var marginConnector = 0.5 / blockB.pix2em;
-                blockB.posY(
-                    blockA.posY() + blockA.blockHeight()// + marginConnector
-                );
-                blockB.posX(
-                    blockA.posX()
-                );
-                recv(blockB);
-            }
-        };
-        recv(topBlock);
-*/
     };
 
-    self.moveStart = function(block,position){
+    self.moveStart = function(block,offsPosition){
         block.clearIn();
         block.clearValueOut();
         // 動かすモノをつながっている順に後ろに付け替えます
@@ -1099,18 +983,40 @@ function BlockManager(){
             zIndex+=1;
         });
     };
-    self.move = function(block,position){
-        block.posX(position.left);
-        block.posY(position.top );
+    self.move = function(block,offsPosition){
+        var workSpace = self.findBlockWorkSpaceByBlock(block);
+        var offsetX = 0;
+        var offsetY = 0;
+        var posX = offsPosition.left;
+        var posY = offsPosition.top;
+        if(workSpace){
+            posX = posX - $(workSpace.workAreaElement).offset().left;
+            posY = posY - $(workSpace.workAreaElement).offset().top;
+            offsetX = workSpace.offsetX();
+            offsetY = workSpace.offsetY();
+        }
+        block.posX(posX - offsetX);
+        block.posY(posY - offsetY);
         self.updatePositionLayout(block);
-                   
         self.dropGuideUpdate(block);
     };
-    self.moveStop = function(block,position){
-        block.posX(position.left);
-        block.posY(position.top );
+    self.moveStop = function(block,offsPosition){
+        var workSpace = self.findBlockWorkSpaceByBlock(block);
+        var offsetX = 0;
+        var offsetY = 0;
+        var posX = offsPosition.left;
+        var posY = offsPosition.top;
+        if(workSpace){
+            posX = posX - $(workSpace.workAreaElement).offset().left;
+            posY = posY - $(workSpace.workAreaElement).offset().top;
+            offsetX = workSpace.offsetX();
+            offsetY = workSpace.offsetY();
+        }
+        block.posX(posX - offsetX);
+        block.posY(posY - offsetY);
         self.updatePositionLayout(block);               
-        self.dropConnectUpdate(block);
+        self.dropConnectUpdate(block,{x:offsPosition.left,
+                                      y:offsPosition.top });
     };
 
     // ドロップする場所のガイドを更新します
@@ -1119,9 +1025,9 @@ function BlockManager(){
     };
 
     // ドロップした際の接続の更新を行います
-    self.dropConnectUpdate = function(block)
+    self.dropConnectUpdate = function(block,movePivotPos)
     {        
-        var hit = getHitBlock(block);
+        var hit = getHitBlock(block,movePivotPos);
         if(hit)
         {
             if(hit.valueName){
@@ -1333,6 +1239,17 @@ function BlockManager(){
         self.scale   = ko.observable(1.0);
         self.scrollLock = false;
 
+        var updateBlockDispPositions_ = function(){
+            var topBlockList = [];
+            $.each(self.blockListObsv(),function(k,blockObsv){
+                var block = blockObsv();
+                block.dispPosX(Math.floor(block.posX()+self.offsetX()));
+                block.dispPosY(Math.floor(block.posY()+self.offsetY()));
+            });
+        };
+        self.offsetX.subscribe(updateBlockDispPositions_);
+        self.offsetY.subscribe(updateBlockDispPositions_);
+
         // シリアライズ関連です
         self.toJSON = function()
         {
@@ -1421,16 +1338,20 @@ function BlockManager(){
         };
 
         // ブロックを並べるレイアウトを行います
-        self.arrayBlockLayout = function(){
-            var posX = 10;
-            var posY = 20;
-            $.each(self.blockListObsv(),function(key,blockInsObsv){
-                blockIns = blockInsObsv();
-                blockIns.posX(posX);
-                blockIns.posY(posY);
-                //posX += 130;
-                posY += 80;
-            });
+        self.autoLayoutCb = null;
+        self.setAutoArrayLayout = function(){
+            self.autoLayoutCb = function(){
+                var posX = 10;
+                var posY = 20;
+                $.each(self.blockListObsv(),function(key,blockInsObsv){
+                    blockIns = blockInsObsv();
+                    blockIns.posX(posX);
+                    blockIns.posY(posY);
+                    posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
+                    //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
+                });
+                updateBlockDispPositions_();
+            };
         };
 
         self.setup = function(workAreaElement){
@@ -1457,6 +1378,136 @@ function BlockManager(){
                     dropAction_(ui);
                 },
             });
+        };
+
+        // コリジョン判定
+        var checkHitDist = function(area0, area1){
+            var offs0 = area0.offset();
+            var offs1 = area1.offset();
+            var w0    = area0.width();
+            var h0    = area0.height();
+            var w1    = area1.width();
+            var h1    = area1.height();
+            if(offs0.top < offs1.top + h1&&
+               offs1.top < offs0.top + h0&&
+               offs0.left < offs1.left + w1&&
+               offs1.left < offs0.left + w0)
+            {
+                var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
+                var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
+                return Math.sqrt(vx*vx + vy*vy);
+            }
+        };
+
+        //■ 作業場内のブロックとのヒット判定を行います(渡すブロックは作業場外のものでもOKです)
+        self.getHitBlock = function(block){
+            var nearDist = 99999999;
+            var hitBlock = null;
+            var srcBlock = null;
+            var isIn     = false;
+            var valueName= null;
+            // 入出力ブロックを取り出します
+            var inBlock  = null;
+            var outBlock = null;
+            var valueBlock = null;
+            if(block.in){
+                inBlock = block;
+            }
+            if(block.out){
+                outBlock = block;
+                while(outBlock.out){
+                    if(outBlock.out.blockObsv()){
+                        outBlock = outBlock.out.blockObsv();
+                    }
+                    else{
+                        break; 
+                    }
+                }
+            }
+            if(block.valueOut){
+                valueBlock = block;
+            }
+            // ヒットチェックをします
+            // TODO:所属リストのチェックをするべき
+            $.each(self.blockListObsv(),function(k,tgtBlockObsv){
+                var tgtBlock = tgtBlockObsv();
+                if(tgtBlock.isNoConnectMode){
+                    return;
+                }
+                var dist;
+                if(tgtBlock == inBlock) return;
+                if(tgtBlock == outBlock) return;
+                if(tgtBlock == valueBlock) return;
+                if(tgtBlock.in && outBlock && outBlock.out){
+                    dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                    if(dist && dist < nearDist){
+                        nearDist = dist;
+                        hitBlock = tgtBlock;
+                        srcBlock = outBlock;
+                        isSrcIn  = false;
+                        valueName = null;
+                        scopeName = null;
+                    }
+                }
+                if(tgtBlock.out && inBlock){
+                    dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                    if(dist && dist < nearDist){
+                        nearDist = dist;
+                        hitBlock = tgtBlock;
+                        srcBlock = inBlock;
+                        isSrcIn  = true;
+                        valueName = null;
+                        scopeName = null;
+                    }
+                }
+                if(inBlock){
+                    $.each(tgtBlock.scopeTbl,function(name,scope){
+                        dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                        if(dist && dist < nearDist){
+                            nearDist = dist;
+                            hitBlock = tgtBlock;
+                            srcBlock = inBlock;
+                            isSrcIn  = true;
+                            valueName = null;
+                            scopeName = name;
+                        }
+                    });
+                }
+                if(valueBlock){
+                    $.each(tgtBlock.valueInTbl,function(name,valueIn){
+                        dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                        if(dist && dist < nearDist){
+                            if(tgtBlock.valueInTbl[name].blockObsv())
+                            {
+                                //値ブロックの場合接続済みな場合は無視します
+                                //(上に乗っかったものでUIが塞がっているので)
+                                return;
+                            }
+                            if(self.blockManager.checkContainLumpBlock(valueBlock, tgtBlock))
+                            {
+                                //自身が接続しているブロックの塊内は無視します
+                                return;
+                            }
+                            if(tgtBlock.getTypeAccept(name,valueBlock))
+                            {
+                                nearDist = dist;
+                                hitBlock = tgtBlock;
+                                srcBlock = valueBlock;
+                                isSrcIn  = false;
+                                valueName = name;
+                                scopeName = null;
+                            }
+                        }
+                    });
+                }
+            });
+            if(hitBlock){
+                return {hitBlock:hitBlock,
+                        srcBlock:srcBlock,
+                        isSrcIn:isSrcIn,
+                        valueName:valueName,
+                        scopeName:scopeName,};
+            }
         };
     };
 
@@ -1495,6 +1546,9 @@ function BlockManager(){
             var mouseDownFlg = false;
             var startPos = null;
             var lastPos  = null;
+            var accsV    = {x:0,y:0};
+            var lastTime = null;
+            var timeId   = null;
             $(element).on({
                 'touchstart mousedown': function (e) {
                     e.preventDefault();
@@ -1503,6 +1557,11 @@ function BlockManager(){
                         mouseDownFlg = true;
                     }
                     lastPos = startPos = getOnePosition(e);
+                    lastTime = +new Date();
+                    if(timeId){
+                        clearInterval(timeId);
+                        timeId = null;
+                    }
                 },
                 'touchmove mousemove': function (e) {
                     event.preventDefault();
@@ -1511,12 +1570,24 @@ function BlockManager(){
                         return;
                     }
                     var nowPos = getOnePosition(e);
+                    var nowTime = +new Date();
                     var vX = nowPos.x - lastPos.x;
                     var vY = nowPos.y - lastPos.y;
+                    var delta = (nowTime - lastTime)/1000;
+                    if(delta==0){
+                        return;
+                    }
                     lastPos = nowPos;
+                    lastTime = nowTime;
                     if(!blockWsIns.scrollLock){
                         blockWsIns.offsetX(vX + blockWsIns.offsetX());
                         blockWsIns.offsetY(vY + blockWsIns.offsetY());
+                        accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
+                        accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
+                    }
+                    else{
+                        accsV.x = 0;
+                        accsV.y = 0;
                     }
                     //console.log(""+blockWsIns.offsetX()+","+blockWsIns.offsetY())
                 },
@@ -1525,14 +1596,54 @@ function BlockManager(){
                 },
                 'touchend mouseup': function (e) {
                     event.preventDefault();
-                    var target = $(this);
-                    var nowPos = getOnePosition(e);
-
                     mouseDownFlg = false;
+                    if(!blockWsIns.scrollLock){
+                        var nowPos = getOnePosition(e);
+                        var accLastTime = +new Date();
+                        if(timeId){
+                            clearInterval(timeId);
+                            timeId = null;
+                        }
+                        timeId = setInterval(function(){
+                            var accNowTime = +new Date();
+                            var delta = (accNowTime - accLastTime)/1000; 
+                            accLastTime = accNowTime;
+                            blockWsIns.offsetX(accsV.x*delta + blockWsIns.offsetX());
+                            blockWsIns.offsetY(accsV.y*delta + blockWsIns.offsetY());
+                            var len = Math.sqrt(accsV.x*accsV.x + accsV.y*accsV.y);
+                            if(len > 0.001){
+                                var vx = accsV.x / len;
+                                var vy = accsV.y / len;
+                                len = len - (len*50.3/1000);
+                                accsV.x = vx * len;
+                                accsV.y = vy * len;
+                            }else{
+                                accsV.x = accsV.y = 0;
+                                clearInterval(timeId);
+                                timeId = null;
+                            }
+                        });
+                    }
                 },
             });
         },
         update: function(element, valueAccessor) {
+        }
+    };
+    //ブロックのレイアウトの自動更新処理用バインドです(foreach:ブロックリストの後呼ばれるようにしています)
+    ko.bindingHandlers.blockWorkSpaceAutoLayout = {
+        init:function(element,valueAccessor)
+        {
+            var blockWs = ko.unwrap(valueAccessor());
+            if(blockWs.autoLayoutCb){
+                blockWs.autoLayoutCb();
+            }
+        },
+        update: function(element, valueAccessor) {
+            var blockWs = ko.unwrap(valueAccessor());
+            if(blockWs.autoLayoutCb){
+                blockWs.autoLayoutCb();
+            }
         }
     };
 
@@ -1559,6 +1670,9 @@ function BlockManager(){
             };
             // パネル部分
             $(boxElement).scroll(function(e){
+                tabLayoutUpdate();
+            });
+            $(window).resize(function(e){
                 tabLayoutUpdate();
             });
             tabLayoutUpdate();
@@ -1704,6 +1818,9 @@ function BlockManager(){
                 });
             };
             boxElem.scroll(function(e){
+                guidLayoutUpdate();
+            });
+            $(window).resize(function(e){
                 guidLayoutUpdate();
             });
             guidLayoutUpdate();
@@ -2054,7 +2171,7 @@ function BlockManager(){
               start:function(event, ui){
                   editMode.lazyEditModeCancel();
 
-                  self.moveStart(cloneBlock||block, ui.position);
+                  self.moveStart(cloneBlock||block, ui.offset);
                   
                   self.floatDraggingInfo.droppedWs = null;
                   self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
@@ -2108,11 +2225,11 @@ function BlockManager(){
                   }
               },
               drag:function(event, ui){
-                  self.move(cloneBlock||block, ui.position);
+                  self.move(cloneBlock||block, ui.offset);
               },
               stop:function(event, ui){
                   $(".hitAreaDragging").removeClass("hitAreaDragging");
-                  self.moveStop(cloneBlock||block, ui.position);
+                  self.moveStop(cloneBlock||block, ui.offset);
                   if(cloneBlock){
                       //self.blockManager.removeBlock(cloneBlock);
                       cloneBlock = null;
@@ -2444,10 +2561,12 @@ $(function(){
             self.blockManager.createBlockWorkSpaceIns("droppableScope")
         ));
 
+
+        self.factoryBoxWsList = ko.observableArray();
          
-        self.factoryBoxWs = ko.observable(
+        self.factoryBoxWsList.push(ko.observable(
             self.blockManager.createBlockWorkSpaceIns("droppableScope")
-        ); 
+        )); 
 
 
         //■ ブロックの実装(後でソース自体を適度に分離予定) ■
@@ -3056,9 +3175,9 @@ $(function(){
         materialBoxWs.addBlock_CloneDragMode(self.blockManager.createBlockIns("nowTime@basicBlk"));
         self.materialBoxWsList.push(ko.observable(materialBoxWs));
 
-        // 素材リストの配置を更新します
+        // 素材リストは配置の自動レイアウトを設定します
         $.each(self.materialBoxWsList(),function(k,ws){
-            ws().arrayBlockLayout();
+            ws().setAutoArrayLayout();
         });
     }
     myModel = new MyModel();

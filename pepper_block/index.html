@@ -60,8 +60,8 @@
   <script type="text/html" id="block-template">
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
-                      style:{left:   $data.posX()+($parent.offsetX?$parent.offsetX():0),
-                             top:    $data.posY()+($parent.offsetY?$parent.offsetY():0),
+                      style:{left:   $data.dispPosX(),
+                             top:    $data.dispPosY(),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
                       updateBlockSizeLayout:$data,">
@@ -368,10 +368,10 @@
             </div>
             <!-- ko foreach: $data -->
                <div class="box-workspace" data-bind="blockWorkSpaceSetup: $data, attr{id:$data.id}">
-                  <!-- ko foreach:$data.blockListObsv -->
+                  <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
                     <!-- ko template:'block-template',data:$data -->
                     <!-- /ko -->
-                  <!-- /ko -->
+                  </div>
               </div>
             <!-- /ko -->
           </script>
@@ -389,12 +389,11 @@
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
-          <div class="factoryBox" data-bind="with: $root.factoryBoxWs, 
-                                             blockWorkSpaceSetup: $root.factoryBoxWs">          
+          <div class="factoryBox" data-bind="with:    $root.factoryBoxWsList, 
+                                             boxTabs: $root.factoryBoxWsList">          
               <div class="box-title" data-bind>ふぁくとりBOX</div>
-              <div data-bind="foreach:$data.blockListObsv">
-                <div data-bind="template:'block-template',data:$data"></div>
-              </div>
+            <!-- ko template:'box-template', data:$data -->
+            <!-- /ko --> 
           </div>
 
 
