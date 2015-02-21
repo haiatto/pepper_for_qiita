@@ -18,11 +18,13 @@
     display:block;
     opacity: 1.0;
     background:black;
-    height: 2em;
+    min-height: 2em;
     margin-bottom: 0.4em;
     border-radius: 0.3em;
     border-style: double;
     border-color: white;
+    text-shadow: 0 0;
+    color: darkseagreen;
 }
 
 body{
@@ -51,8 +53,10 @@ body{
   position:absolute;
 }
 
-.blockBox{
+.blockBoxs{
     font-size:0.8em;
+}
+.blockBox{
 }
 .materialBox
 {

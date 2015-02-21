@@ -877,7 +877,7 @@ function BlockManager(){
     self.toJSON_LumpBlocks = function(block){
         var recv = function(block){
             var json={
-                blockWorldId:block.blockTemplate.blockOpt.blockWorldId,
+                blkWId:block.blockTemplate.blockOpt.blockWorldId,
                 valTbl:{},
                 scpTbl:{},
             };
@@ -908,7 +908,7 @@ function BlockManager(){
     // JSON用データからブロックの塊を復元します(塊でなくてもフォーマットは変わりません)
     self.fromJSON = function(json){
         var recv = function(json){
-            var block = self.createBlockIns( json.blockWorldId );
+            var block = self.createBlockIns( json.blkWId );
             $.each(json.valTbl,function(k,valJson){
                 if(block.valueInTbl[k]){
                     if(valJson.value){
@@ -1322,18 +1322,16 @@ function BlockManager(){
                 //});
 
                 setTimeout(function(){
-
-                    console.log("xxxxxx");
-                // curEditMode を割り当てます
-                $(editableElm).addClass("curEditMode");
-                // 編集対象へフォーカスをあてます
-                editableElm[0].focus();
-                // 最後にカーソルを持っていきます
-                setEndOfContenteditable_(editableElm[0]);
-                // イマイチ環境依存してうまく動かないのでカット
-                //$(editableElm[0]).blur(function(){
-                //    clearAllEditMode_();
-                //});
+                    // curEditMode を割り当てます
+                    $(editableElm).addClass("curEditMode");
+                    // 編集対象へフォーカスをあてます
+                    editableElm[0].focus();
+                    // 最後にカーソルを持っていきます
+                    setEndOfContenteditable_(editableElm[0]);
+                    // イマイチ環境依存してうまく動かないのでカット
+                    //$(editableElm[0]).blur(function(){
+                    //    clearAllEditMode_();
+                    //});
                 },300)
             }
         };
@@ -1522,7 +1520,7 @@ function BlockManager(){
                   if(block.isCloneDragMode){
                       // ドロップ先の設定を行います
                       blockElem.draggable("option", "scope", "droppableScope");
-                      blockElem.draggable("option", "containment", (".blockBox"));
+                      blockElem.draggable("option", "containment", (".blockBoxs"));
                       // ブロックの複製をして浮遊ドラッグリスト(専用作業場)に追加します
                       cloneBlock = block.cloneThisBlock();
                       self.addFloatDraggingList(cloneBlock);
@@ -1535,7 +1533,7 @@ function BlockManager(){
                       if(isFloatDragMode){
                           // 自ボックスの外にも移動できるモード
                           blockElem.draggable("option", "scope", "droppableScope");
-                          blockElem.draggable("option", "containment", (".blockBox"));
+                          blockElem.draggable("option", "containment", (".blockBoxs"));
                           cloneBlock = block.cloneThisBlockAndConnectBlock();
                           self.addFloatDraggingList(cloneBlock);
                           return cloneBlock.element;
@@ -1679,16 +1677,20 @@ function BlockManager(){
                     topBlockList.push( topBlock );
                 }
             });
-            var json = [];
+            var blocks = [];
             $.each(topBlockList,function(k,topBlock){
-                json.push(self.blockManager.toJSON_LumpBlocks(topBlock));
+                blocks.push(self.blockManager.toJSON_LumpBlocks(topBlock));
             });
-            return json;
+            return {
+                name:self.workspaceNameObsv(),
+                blocks:blocks,
+            };
         };
         self.fromJSON = function(json)
         {
             self.clearAllBlocks();
-            $.each(json,function(k,topBlockJson){
+            self.workspaceNameObsv(json.name);
+            $.each(json.blocks,function(k,topBlockJson){
                 var block = self.blockManager.fromJSON(topBlockJson);
                 self.addBlock( block );
                 block.posX(block.posX()/block.pix2em);
@@ -2098,18 +2100,35 @@ function BlockManager(){
     };
 
     // ブロック作業場向けのタブUI用カスタムバインド
-    ko.bindingHandlers.boxTabs = {
-        init: function(boxElement, valueAccessor) {
+    ko.bindingHandlers.boxCreate = {
+        init: function(boxElement, valueAccessor, allBindings, viewModel, bindingContext) {
+            var blockWsLst = valueAccessor();
+
+            // Make a modified binding context, with a extra properties, and apply it to descendant elements
+            var childBindingContext = bindingContext.createChildContext(
+                blockWsLst,
+                null, // Optionally, pass a string here as an alias for the data item in descendant contexts
+                function(context) {
+                    ko.utils.extend(context, valueAccessor());
+                });
+            ko.applyBindingsToDescendants(childBindingContext, boxElement);
+
+            // Also tell KO *not* to bind the descendants itself, otherwise they will be bound twice
+            return { controlsDescendantBindings: true };
+        },
+        update: function(element, valueAccessor) {
             var blockWsLst = ko.unwrap(valueAccessor());
-            var boxElem    = $(boxElement);
-            var tabsElem   = $(".box-tabs",boxElem);
+        }
+    };
+    ko.bindingHandlers.boxTabs = {
+        init: function(tabsElement, valueAccessor, allBindings, viewModel, bindingContext) {
+            var blockWsLst = ko.unwrap(valueAccessor());
+            var boxElem    = $(tabsElement).parents(".blockBox");
+            var tabsElem   = $(tabsElement);
             var panelElm   = $(".box-tabs-panel",boxElem);
 
             //タブの初期状態をセット
             $(".box-workspace",boxElem).addClass("box-workspace-hide");
-            $($(".box-workspace",boxElem)[0]).removeClass("box-workspace-hide");
-            $($(".box-workspace",boxElem)[0]).addClass("box-workspace-disp");
-            $($(".box-tabs-btn",boxElem)[0]).addClass("box-tabs-btn-sel")
 
             var tabLayoutUpdate = function(){
                 tabsElem.css({
@@ -2119,7 +2138,7 @@ function BlockManager(){
                });
             };
             // パネル部分
-            $(boxElement).scroll(function(e){
+            boxElem.scroll(function(e){
                 tabLayoutUpdate();
             });
             $(window).resize(function(e){
@@ -2184,12 +2203,12 @@ function BlockManager(){
                     if(moveY!=0){
                         tabMenuY += moveY;
                         if(tabMenuY < -panelElm.outerHeight()){
-                            tabMenuY = $(boxElement).height();
+                            tabMenuY = boxElem.height();
                         }
-                        else if(tabMenuY > $(boxElement).height()){
+                        else if(tabMenuY > boxElem.height()){
                             tabMenuY = -panelElm.height();
                         }
-                        $(".box-tabs-panel",boxElement).css({
+                        $(".box-tabs-panel",boxElem).css({
                             top:tabMenuY,
                         });
                     }
@@ -2258,8 +2277,72 @@ function BlockManager(){
                     return false;
                 },
             });
+
+        },
+    };
+    ko.bindingHandlers.boxTabsBtn = {
+        init: function(btnElement, valueAccessor) {
+            var data       = ko.unwrap(valueAccessor());
+            var btnElem    = $(btnElement);
+            var startTime  = null;
+            var startPosX  = 0;
+            var startPosY  = 0;
+            var tapAct = function(){
+                $.each(data.lst,function(k,wsObsv){                  
+                    var ws = wsObsv();
+                    if(ws == data.ws){
+                        //表示
+                        $(ws.workAreaElement).removeClass("box-workspace-hide");
+                        $(ws.workAreaElement).addClass("box-workspace-disp");
+                    }
+                    else{
+                        //非表示
+                        $(ws.workAreaElement).removeClass("box-workspace-disp");
+                        $(ws.workAreaElement).addClass("box-workspace-hide");
+                    }
+                });
+                $(".box-tabs-btn",btnElem.parent()).removeClass("box-tabs-btn-sel");
+                btnElem.addClass("box-tabs-btn-sel");
+            };
+            if( data.lst[0] && data.lst[0]() == data.ws)
+            {
+                tapAct();
+            }
+            $(btnElement).on({
+                'touchstart mousedown': function (event) {
+                    event.preventDefault();
+                    startTime = +new Date();
+                    startPosX  = event.pageX||event.originalEvent.touches[0].pageX;
+                    startPosY  = event.pageY||event.originalEvent.touches[0].pageY;
+                },
+                'touchmove mousemove': function (event) {
+                    event.preventDefault();
+                },
+                'touchend mouseup': function (event) {
+                    event.preventDefault();
+                    var lastTime = +new Date();
+                    if((lastTime - startTime) < 500){
+                        var lastPosX  = event.pageX||event.originalEvent.changedTouches[0].pageX;
+                        var lastPosY  = event.pageY||event.originalEvent.changedTouches[0].pageY;
+                        var mvX = lastPosX - startPosX;
+                        var mvY = lastPosY - startPosY;
+                        if(Math.sqrt(mvX*mvX+mvY*mvY) < $(btnElement).height()){
+                            tapAct();
+                        }
+                    }
+                },
+            });
+        },
+        update: function(element, valueAccessor) {
+            valueAccessor();
+        }
+    };
+    ko.bindingHandlers.guide = {
+        init: function(guideElement, valueAccessor, allBindings, viewModel, bindingContext) {
+            var boxElem    = $(guideElement).parents(".blockBox");
+
             // スクロールガイド(移動の操作しやすくするためのもの＋そのうちタブ向けのボタンになるかも)
-            var guidElem = $(".box-scroll-guide",boxElem);
+            var guidElem = $(guideElement);
             var guidLayoutUpdate = function(){
                 guidElem.css({
                     left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
@@ -2323,71 +2406,18 @@ function BlockManager(){
                     $(this).css({
                         opacity:"0.2",
                     });
+                    if(!lastGuide2Y&&accVY!=0){
+                        var decAccVY = accVY/50;
+                        var timeId = setInterval(function(){
+                            accVY = accVY - decAccVY ;
+                            $("#page").scrollTop($("#page").scrollTop()-accVY);
+                            if(Math.abs(accVY)<Math.abs(decAccVY*2))clearInterval(timeId);
+                        });
+                    }
                     lastGuide2Y = null;
-                    var decAccVY = accVY/50;
-                    var timeId = setInterval(function(){
-                        accVY = accVY - decAccVY ;
-                        $("#page").scrollTop($("#page").scrollTop()-accVY);
-                        if(Math.abs(accVY)<Math.abs(decAccVY*2))clearInterval(timeId);
-                    });
                     return false;
                 },
             });
-        },
-        update: function(element, valueAccessor) {
-        }
-    };
-    ko.bindingHandlers.boxTabsBtn = {
-        init: function(btnElement, valueAccessor) {
-            var data       = ko.unwrap(valueAccessor());
-            var btnElem    = $(btnElement);
-            var startTime  = null;
-            var startPosX  = 0;
-            var startPosY  = 0;
-            var tapAct = function(){
-                $.each(data.lst,function(k,wsObsv){                  
-                    var ws = wsObsv();
-                    if(ws == data.ws){
-                        //表示
-                        $(ws.workAreaElement).removeClass("box-workspace-hide");
-                        $(ws.workAreaElement).addClass("box-workspace-disp");
-                    }
-                    else{
-                        //非表示
-                        $(ws.workAreaElement).removeClass("box-workspace-disp");
-                        $(ws.workAreaElement).addClass("box-workspace-hide");
-                    }
-                });
-                $(".box-tabs-btn",btnElem.parent()).removeClass("box-tabs-btn-sel");
-                btnElem.addClass("box-tabs-btn-sel");
-            };
-            $(btnElement).on({
-                'touchstart mousedown': function (event) {
-                    event.preventDefault();
-                    startTime = +new Date();
-                    startPosX  = event.pageX||event.originalEvent.touches[0].pageX;
-                    startPosY  = event.pageY||event.originalEvent.touches[0].pageY;
-                },
-                'touchmove mousemove': function (event) {
-                    event.preventDefault();
-                },
-                'touchend mouseup': function (event) {
-                    event.preventDefault();
-                    var lastTime = +new Date();
-                    if((lastTime - startTime) < 500){
-                        var lastPosX  = event.pageX||event.originalEvent.changedTouches[0].pageX;
-                        var lastPosY  = event.pageY||event.originalEvent.changedTouches[0].pageY;
-                        var mvX = lastPosX - startPosX;
-                        var mvY = lastPosY - startPosY;
-                        if(Math.sqrt(mvX*mvX+mvY*mvY) < $(btnElement).height()){
-                            tapAct();
-                        }
-                    }
-                },
-            });
-            //data.ws.tabSelect();
-            //click:$data.tabSelect,
-            //event:{touchend:$data.tabSelect},
         },
         update: function(element, valueAccessor) {
         }
@@ -2519,6 +2549,9 @@ $(function(){
         else{
             self.lunchPepper = false;
         }
+        if(getUrlParameter("loadJsonUrl")){
+            
+        }
 
         //■ ＵＩ関連の準備など ■
 
@@ -2551,15 +2584,50 @@ $(function(){
         self.saveBlock = function(){
             var saveData = {
                 version:"00.01",
-                toyBoxWs:      self.toyBoxWs().toJSON(),
-                factoryBoxWs:  self.factoryBoxWs().toJSON(),
+                toyBoxWsLst:    [],
+                factoryBoxWsLst:[],
             };
+            $.each(self.toyBoxWsList(),function(k,wsObsv){
+                saveData.toyBoxWsLst.push(wsObsv().toJSON());
+            });
+            $.each(self.factoryBoxWsList(),function(k,wsObsv){
+                saveData.factoryBoxWsLst.push(wsObsv().toJSON());
+            });
             localStorage.setItem("working_saveData",JSON.stringify(saveData));
         };
         self.loadBlock = function(){
             var saveData = JSON.parse(localStorage.getItem("working_saveData"));
-            self.toyBoxWs().fromJSON(saveData.toyBoxWs);
-            self.factoryBoxWs().fromJSON(saveData.factoryBoxWs);
+
+            self.toyBoxWsList.removeAll();
+            $.each(saveData.toyBoxWsLst,function(k,wsJson){
+                var wsIns = self.blockManager.createBlockWorkSpaceIns("droppableScope")
+                self.toyBoxWsList.push(ko.observable(wsIns));
+                wsIns.fromJSON(wsJson);
+            });
+            self.factoryBoxWsList.removeAll();
+            $.each(saveData.factoryBoxWsLst,function(k,wsJson){
+                var wsIns = self.blockManager.createBlockWorkSpaceIns("droppableScope")
+                wsIns.fromJSON(wsJson);
+                self.factoryBoxWsList.push(ko.observable(wsIns));
+            });
+        };
+
+        // 共有
+        self.shareBlock = function(){
+            var saveData = {
+                version:"00.01",
+                toyBoxWsLst:    [],
+                factoryBoxWsLst:[],
+            };
+            $.each(self.toyBoxWsList(),function(k,wsObsv){
+                saveData.toyBoxWsLst.push(wsObsv().toJSON());
+            });
+            $.each(self.factoryBoxWsList(),function(k,wsObsv){
+                saveData.factoryBoxWsLst.push(wsObsv().toJSON());
+            });
+            $("#debugLogBox").text(
+                JSON.stringify(saveData)
+            );
         };
 
         //■ ブロック管理を作成 ■
@@ -2693,10 +2761,16 @@ $(function(){
 
         self.toyBoxWsList = ko.observableArray();
         self.toyBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("droppableScope")
+            self.blockManager.createBlockWorkSpaceIns("droppableScope","箱１")
         ));
         self.toyBoxWsList.push(ko.observable(
-            self.blockManager.createBlockWorkSpaceIns("droppableScope")
+            self.blockManager.createBlockWorkSpaceIns("droppableScope","箱２")
+        ));
+        self.toyBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("droppableScope","箱３")
+        ));
+        self.toyBoxWsList.push(ko.observable(
+            self.blockManager.createBlockWorkSpaceIns("droppableScope","箱４")
         ));
 
 

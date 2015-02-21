@@ -347,8 +347,11 @@
           <button data-bind="click: $root.saveBlock">きろく</button>
           <button data-bind="click: $root.loadBlock">ふっかつ</button>
         </div>
-        <div class="debugLogBox" id="debugLogBox"></div>
-        <div class="blockBox">
+        <div class="vButton">
+          <button data-bind="click: $root.shareBlock">しぇあ(仮)</button>
+        </div>
+        <textarea class="debugLogBox" id="debugLogBox"></textarea>
+        <div class="blockBoxs">
           <div id="pix2em" class="pix2em"></div>
           <div class="floatDraggingArea">
               <div data-bind="foreach:$root.blockManager.floatDraggingList">
@@ -357,15 +360,6 @@
           </div>
 
           <script type="text/html" id="box-template">
-            <div class="box-tabs">
-              <div class="box-tabs-panel" data-bind="foreach: $data">
-                <div class="box-tabs-btn" data-bind="boxTabsBtn:{lst:$parent,ws:$data},
-                                                     text:$data.workspaceNameObsv,"></div>
-              </div>
-            </div>
-            
-            <div class="box-scroll-guide">
-            </div>
             <!-- ko foreach: $data -->
                <div class="box-workspace" data-bind="blockWorkSpaceSetup: $data, attr{id:$data.id}">
                   <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
@@ -374,29 +368,32 @@
                   </div>
               </div>
             <!-- /ko -->
+            <div class="box-scroll-guide" data-bind="guide:$data">
+            </div>
+            <div class="box-tabs" data-bind="boxTabs:$data">
+              <div class="box-tabs-panel" data-bind="foreach: $data">
+                <div class="box-tabs-btn" data-bind="boxTabsBtn:{lst:$parent,ws:$data},
+                                                     text:$data.workspaceNameObsv,"></div>
+              </div>
+            </div>            
           </script>
 
-          <div class="materialBox" data-bind="with:$root.materialBoxWsList,
-                                              boxTabs:$root.materialBoxWsList">
+          <div class="materialBox blockBox" data-bind="with:$root.materialBoxWsList">
             <div class="box-title" data-bind>そざいBOX</div>
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
 
-          <div class="toyBox" data-bind="with:    $root.toyBoxWsList, 
-                                         boxTabs: $root.toyBoxWsList">          
+          <div class="toyBox blockBox" data-bind="with: $root.toyBoxWsList">          
             <div class="box-title" data-bind>といBOX</div>
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
-          <div class="factoryBox" data-bind="with:    $root.factoryBoxWsList, 
-                                             boxTabs: $root.factoryBoxWsList">          
+          <div class="factoryBox blockBox" data-bind="with: $root.factoryBoxWsList">          
               <div class="box-title" data-bind>ふぁくとりBOX</div>
             <!-- ko template:'box-template', data:$data -->
             <!-- /ko --> 
           </div>
-
-
 
         <div>
 
