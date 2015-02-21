@@ -692,6 +692,75 @@ function BlockManager(){
         }
     };
 
+    // ■編集のモード遷移の管理用のインスタンス(タップやホールド等の管理をします)
+    function EditMode(){
+        var self = this;
+        
+        // ■編集始まり待ち中？
+        var nowWait_ = false;
+        var nowEdit_ = false;
+        self.isNowLazyEditModeStartWait = function()
+        {
+            return nowWait_;
+        }
+
+        // ■編集を遅延させる形で始めます
+        var editModeTimeId;
+        var editEndCb = null;
+        self.lazyEditModeStart = function(startCb, endCb){
+            nowWait_ = true;
+            // 編集モードへの移行を開始します
+            // (押したりりタップ後、一定時間でキャンセルされなければ開始となります)
+            if(editModeTimeId){
+                clearTimeout(editModeTimeId);
+                editModeTimeId = null;   
+            }
+            editEndCb = endCb;
+            editModeTimeId = setTimeout(function(){
+                nowWait_ = false;
+                nowEdit_ = true;
+                startCb();
+            },300);
+        };
+        self.lazyEditModeCancel = function(){
+            clearTimeout(editModeTimeId);
+            editModeTimeId = null;
+            nowWait_ = false;
+            nowEdit_ = false;
+            editEndCb();
+        };
+
+        // ■ホールド検知を開始します
+        var holdModeTimeId;
+        self.holdModeFlag = true;
+        var holdEndCb = null;
+        self.lazyHoldModeStart = function(startCb,endCb){
+            if(holdModeTimeId){
+                clearTimeout(holdModeTimeId);
+                holdModeTimeId = null;
+            }
+            holdEndCb = endCb;
+            holdModeTimeId = setTimeout(function(){
+                self.lazyEditModeCancel();
+                self.holdModeFlag = true;
+                if(startCb){
+                    startCb();
+                }
+            },1000);
+        };
+        self.lazyHoldModeCancel = function(){
+            clearTimeout(holdModeTimeId);
+            holdModeTimeId = null;
+            if(holdEndCb){
+                holdEndCb();
+            }
+            holdEndCb = null;
+            self.holdModeFlag = false;
+        };
+    };
+    self.editMode = new EditMode();
+
+
     //■ ブロック周りの便利系な処理
 
     // 指定のブロックの繋がっているブロックの塊の一番最上流のブロックを取得します
@@ -1210,6 +1279,337 @@ function BlockManager(){
         self.blockList.push(newBlockIns);
         return newBlockIns;
     };
+
+
+
+    // ■ブロック移動・編集・ドラッグなどの操作
+
+    // contentEditable(テキスト入力)要素の操作用です("[contentEditable='true']"となる要素)
+    function ModEditableElement()
+    {
+        var self = this;
+
+        var editableElm = null;
+
+        self.setElement = function(element)
+        {
+            self.clearElement();
+            editableElm = $(element);
+            if(editableElm && editableElm.length>0)
+            {
+                // curEditMode を割り当てます
+                $(editableElm).addClass("curEditMode");
+                // 編集対象へフォーカスをあてます
+                editableElm[0].focus();
+                // 最後にカーソルを持っていきます
+                setEndOfContenteditable_(editableElm[0]);
+                // イマイチ環境依存してうまく動かないのでカット
+                //$(editableElm[0]).blur(function(){
+                //    clearAllEditMode_();
+                //});
+            }
+        };
+        self.clearElement = function()
+        {
+            if(editableElm && editableElm.length>0)
+            {
+                clearEditableFocus_(editableElm);
+                // curEditMode を外します
+                $(editableElm).removeClass("curEditMode");
+            }
+            editableElm = null;
+        };
+
+        // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
+        function setEndOfContenteditable_(contentEditableElement)
+        {
+            var range,selection;
+            if(document.createRange)//Firefox, Chrome, Opera, Safari, IE 9+
+            {
+                range = document.createRange();//Create a range (a range is a like the selection but invisible)
+                range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
+                range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+                selection = window.getSelection();//get the selection object (allows you to change selection)
+                selection.removeAllRanges();//remove any selections already made
+                selection.addRange(range);//make the range you have just created the visible selection
+            }
+            else if(document.selection)//IE 8 and lower
+            { 
+                range = document.body.createTextRange();//Create a range (a range is a like the selection but invisible)
+                range.moveToElementText(contentEditableElement);//Select the entire contents of the element with the range
+                range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+                range.select();//Select the range (make it the visible selection
+            }
+        }
+        var clearEditableFocus_ = function(contentEditableElement){
+            if(checkAgent_NeedDragUnselect())
+            {
+                if(contentEditableElement)
+                {
+                    // 外れた要素の編集状態を無効にします
+                    // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
+                    // (荒わざっぽいけど働いてる事は働いてる)
+                    var editableFix = jQuery(
+                        '<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>'
+                    ).appendTo( contentEditableElement );
+                    editableFix.focus();
+                    editableFix.children()[0].setSelectionRange(0, 0);
+                    editableFix.blur();
+                    editableFix.remove();
+                }
+            }
+        }
+    };
+
+    // １つのブロック内のcontentEditable要素の編集を管理します
+    function BlockEditableElemEdit(block,selectElem)
+    {
+        var self = this;
+ 
+        var modEditableElm_ = new ModEditableElement();
+       
+        var findEditableElm_ = function(block,selectElem)
+        {
+            // 編集対象を探します
+            var editableElm;
+            if($(selectElem).attr("contentEditable")=='true'){
+                editableElm = $(selectElem);
+            }
+            if(!editableElm||editableElm.length==0){
+                editableElm = $("[contentEditable='true']", selectElem);
+            }
+            if(!editableElm||editableElm.length==0){
+                editableElm = $("[contentEditable='true']", block.element);
+            }
+            if(editableElm.length>0)
+            {
+                return $(editableElm[0]);
+            }
+        };
+        var setEditMode_ = function(tgtBlock){
+            $(tgtBlock.element).addClass("curEditModeForDraggable");
+            // 対象ブロックのドラッグを無効化します
+            $(tgtBlock.element).draggable('disable');
+        };
+        var clearAllEditMode_ = function(){
+            var nowEditableDraggableElm = $(".curEditModeForDraggable");
+            nowEditableDraggableElm.removeClass("curEditModeForDraggable");
+            // 外れた要素のドラッグを有効化します
+            nowEditableDraggableElm.draggable('enable');
+        };
+ 
+        self.startEdit = function()
+        {
+            // 編集対象を探して、あれば選択します
+            var editableElm = findEditableElm_(block,selectElem);
+            if(editableElm)
+            {
+                // 編集対象をセットします
+                clearAllEditMode_();
+                setEditMode_(block);
+
+                // 編集対象へフォーカスをあてます
+                modEditableElm_.setElement(editableElm);
+            }
+        };
+        self.endEdit = function()
+        {
+            clearAllEditMode_();
+            modEditableElm_.clearElement();
+        };
+    };
+
+    var setDragGuide = function(block)
+    {
+        // ドラッグ先のガイド表示をします
+        if(block.in){
+            $(".hitAreaOut").addClass("hitAreaDragging");
+            $(".hitAreaScopeOut").addClass("hitAreaDragging");
+        }
+        if(block.out){
+            $(".hitAreaIn").addClass("hitAreaDragging");
+        }
+        if(block.valueOut)
+        {
+            $(".hitAreaValueIn").each(function(k,elm){
+                var tgtElm = $(elm).parents(".block");
+                var tgtBlock = self.elementBlockLookupTbl[$(tgtElm).data("blockId")];
+                var tgtDataName = $(elm).attr("id");
+                if(tgtBlock)
+                {
+                    if(tgtBlock.getTypeAccept(tgtDataName,block))
+                    {
+                        $(elm).addClass("hitAreaDragging");
+                    }
+                }
+            });
+            //$(".hitAreaValueIn").addClass("hitAreaDragging");
+            $(".hitAreaValueOut",block.element).addClass("hitAreaDragging");
+        }
+    };
+    var clearDragGuide = function(){
+        $(".hitAreaDragging").removeClass("hitAreaDragging");
+    };
+
+    var isFloatDragMode = false;
+
+    // ブロックに対するタッチとマウス関連の操作をセットアップします
+    self.setupBlockTouchAndMouseAction = function(block)
+    {
+        var fromBlkWs = null;
+        var droppedWs = null;
+        var cloneBlock = null;
+        var blockElem  = $(block.element);
+        var ignoreMouseDown = false;
+
+        blockElem
+          .mousedown(function(ev) {
+              if(ignoreMouseDown)return;
+              if(self.editMode.isNowLazyEditModeStartWait()){
+                  //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
+                  self.editMode.lazyEditModeCancel();                  
+              }
+              else{
+                  // タップ後の遅延開始でブロック編集を開始します
+                  var blockEditableElemEdit = new BlockEditableElemEdit(block,ev.target);
+                  self.editMode.lazyEditModeStart(
+                      blockEditableElemEdit.startEdit,
+                      blockEditableElemEdit.endEdit
+                  );
+                  // ホールドで作業場間のドラッグ操作を開始します
+                  blockElem.addClass("holdModeStart");
+                  self.editMode.lazyHoldModeStart(function(){
+                      isFloatDragMode = true;
+                      ignoreMouseDown = true;
+                      blockElem.trigger(ev);
+                      ignoreMouseDown = false;
+                      blockElem.removeClass("holdModeStart");
+                      blockElem.addClass("holdMode"); 
+                  },function(){
+                      blockElem.removeClass("holdModeStart");
+                      blockElem.removeClass("holdMode");
+                  });
+              }
+              return false;
+          })
+          .mouseup(function(ev) {
+              //アップを検知したらホールドモードはキャンセルされます
+              self.editMode.lazyHoldModeCancel();
+          })
+          .draggable({
+              scroll:false,
+              cancel:".noDrag,input,textarea,button,select,option",
+              helper:function(e){
+                  self.editMode.lazyHoldModeCancel();
+                  if(block.isCloneDragMode){
+                      // ドロップ先の設定を行います
+                      blockElem.draggable("option", "scope", "droppableScope");
+                      blockElem.draggable("option", "containment", (".blockBox"));
+                      // ブロックの複製をして浮遊ドラッグリスト(専用作業場)に追加します
+                      cloneBlock = block.cloneThisBlock();
+                      self.addFloatDraggingList(cloneBlock);
+                      return cloneBlock.element;
+                  }
+                  else{
+                      if(!self.editMode.holdModeFlag){
+                          self.editMode.lazyHoldModeCancel();
+                      }
+                      if(isFloatDragMode){
+                          // 自ボックスの外にも移動できるモード
+                          blockElem.draggable("option", "scope", "droppableScope");
+                          blockElem.draggable("option", "containment", (".blockBox"));
+                          cloneBlock = block.cloneThisBlockAndConnectBlock();
+                          self.addFloatDraggingList(cloneBlock);
+                          return cloneBlock.element;
+                      }
+                      else{
+                          //自ボックスの内限定で移動できるモード
+                          blockElem.draggable("option", "scope", "innerScope");//※ドロップ出来ないようにしてます
+                          blockElem.draggable("option", "containment", null);
+                          return this;
+                      }
+                  }
+
+              },
+              start:function(event, ui){
+                  self.editMode.lazyEditModeCancel();
+
+                  self.moveStart(cloneBlock||block, ui.offset);
+                  
+                  self.floatDraggingInfo.droppedWs = null;
+                  self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
+
+                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
+                  self.floatDraggingInfo.fromWs.scrollLock = true;
+
+                  if(block.isCloneDragMode){
+                      //blockElem.show();
+                  }
+                  else{
+                      if(isFloatDragMode){
+                          //blockElem.hide();
+                          self.traverseUnderBlock(block,{
+                              blockCb:function(block){
+                                  //$(block.element).hide();
+                                  block.setNoConnectMode(true);
+                                  $(block.element).css({opacity:0.2});
+                              },
+                          });
+                      }
+                      else{
+                          //blockElem.show();
+                      }
+                  }
+
+                  // ドラッグ先のガイド表示をします
+                  setDragGuide(cloneBlock||block);
+              },
+              drag:function(event, ui){
+                  self.move(cloneBlock||block, ui.offset);
+              },
+              stop:function(event, ui){
+                  clearDragGuide();
+
+                  self.moveStop(cloneBlock||block, ui.offset);
+                  if(cloneBlock){
+                      //self.blockManager.removeBlock(cloneBlock);
+                      cloneBlock = null;
+                  }
+                  if(block.isCloneDragMode){
+                  }
+                  else{
+                      if(isFloatDragMode){
+                          //どっちがいいかテスト中
+                          if(self.floatDraggingInfo.fromWs != self.floatDraggingInfo.droppedWs){
+                              //コピーモード
+                              self.traverseUnderBlock(block,{
+                                  blockCb:function(block){
+                                      block.setNoConnectMode(false);
+                                      $(block.element).css({opacity:1.0});
+                                      $(block.element).show();
+                                  },
+                              });
+                          }else{
+                              //移動モード
+                              self.floatDraggingInfo.fromWs.removeBlock(block);
+                          }
+                      }
+                      else{
+                      }
+                  }
+                  isFloatDragMode = false;
+
+                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
+                  self.floatDraggingInfo.fromWs.scrollLock = false;
+              },
+          })
+          .doubletap(function(){
+              // ■ブロックの実行
+              self.editMode.lazyEditModeCancel();
+              block.deferred();
+          });
+    };
+
 
 
     // ■ブロック作業場管理など
@@ -1932,345 +2332,6 @@ function BlockManager(){
         }
     };
 
-    // ■ブロック移動・編集・ドラッグなどの操作
-
-    // 編集のモード遷移の管理用のインスタンス
-    function EditMode(){
-        var self = this;
-        var editModeTimeId;
-        var draggableElem;
-        var tgtElem;
-        var holdModeTimeId;
-        var setEditMode_ = function(draggableElem, editableElm){
-            // curEditMode を割り当てます
-            $(editableElm).addClass("curEditMode");
-            $(draggableElem).addClass("curEditModeForDraggable");
-            // 対象ブロックのドラッグを無効化します
-            $(draggableElem).draggable('disable');
-        };
-        var clearAllEditMode_ = function(){
-            // curEditMode を外します
-            var nowEditableElm = $(".curEditMode");
-            var nowEditableDraggableElm = $(".curEditModeForDraggable");
-            nowEditableElm.removeClass("curEditMode");
-            nowEditableDraggableElm.removeClass("curEditModeForDraggable");
-            // 外れた要素のドラッグを有効化します
-            nowEditableDraggableElm.draggable('enable');
-        };
-        // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
-        function setEndOfContenteditable_(contentEditableElement)
-        {
-            var range,selection;
-            if(document.createRange)//Firefox, Chrome, Opera, Safari, IE 9+
-            {
-                range = document.createRange();//Create a range (a range is a like the selection but invisible)
-                range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
-                range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
-                selection = window.getSelection();//get the selection object (allows you to change selection)
-                selection.removeAllRanges();//remove any selections already made
-                selection.addRange(range);//make the range you have just created the visible selection
-            }
-            else if(document.selection)//IE 8 and lower
-            { 
-                range = document.body.createTextRange();//Create a range (a range is a like the selection but invisible)
-                range.moveToElementText(contentEditableElement);//Select the entire contents of the element with the range
-                range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
-                range.select();//Select the range (make it the visible selection
-            }
-        }
-        var clearEditableFocus_ = function(){
-            if(checkAgent_NeedDragUnselect())
-            {
-                if(draggableElem)
-                {
-                    // 外れた要素の編集状態を無効にします
-                    // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
-                    // (荒わざっぽいけど働いてる事は働いてる)
-                    var editableFix = jQuery(
-                        '<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>'
-                    ).appendTo( draggableElem );
-                    editableFix.focus();
-                    editableFix.children()[0].setSelectionRange(0, 0);
-                    editableFix.blur();
-                    editableFix.remove();
-                }
-            }
-        }
-        // ■編集始まり待ち中？
-        var nowWait_ = false;
-        var nowEdit_ = false;
-        self.isNowLazyEditModeStartWait = function()
-        {
-            return nowWait_;
-        }
-        // ■編集を遅延させる形で始めます
-        self.lazyEditModeStart = function(draggableElem_,tgtElem_){
-            nowWait_ = true;
-            draggableElem = draggableElem_;
-            tgtElem       = tgtElem_;
-            //console.log("edit mode ready");
-            // 編集モードへの移行を開始します
-            // (押したりりタップ後、一定時間でキャンセルされなければ開始となります)
-            if(editModeTimeId){
-                clearTimeout(editModeTimeId);
-                editModeTimeId = null;   
-            }
-            editModeTimeId = setTimeout(function(){
-                nowWait_ = false;
-                nowEdit_ = true;
-                //console.log("edit mode start");
-                // 編集対象を探します
-                var editableElm;
-                if($(tgtElem).attr("contentEditable")=='true'){
-                    editableElm = $(tgtElem);
-                }
-                if(!editableElm||editableElm.length==0){
-                    editableElm = $("[contentEditable='true']", tgtElem);
-                }
-                if(!editableElm||editableElm.length==0){
-                    editableElm = $("[contentEditable='true']", draggableElem);
-                }
-                if(editableElm.length>0){
-                    editableElm = $(editableElm[0]);
-                }
-                // 編集対象があれば選択します
-                if(editableElm.length>0){
-                    //console.log("edit mode start2");
-                    // 現在編集モードの対象をクリアします
-                    clearAllEditMode_();
-                    // 編集対象をセットします
-                    setEditMode_(draggableElem, editableElm);
-                    // 編集対象へフォーカスをあてます
-                    editableElm[0].focus();
-                    setEndOfContenteditable_(editableElm[0]);
-                    $(editableElm[0]).blur(function(){
-                        //console.log("edit mode blur");
-                        clearAllEditMode_();
-                    });
-                }
-            },300);
-        };
-        // ■編集をキャンセルします
-        self.lazyEditModeCancel = function(){
-            if(!nowWait_){
-
-            }
-            //console.log("edit mode cancel");
-            nowWait_ = false;
-            clearTimeout(editModeTimeId);
-            clearAllEditMode_();
-            clearEditableFocus_();
-            editModeTimeId = null;
-        };
-        // ■ホールド検知を開始します
-        self.holdModeFlag = true;
-        var holdEndCb = null;
-        self.lazyHoldModeStart = function(startCb,endCb){
-            if(holdModeTimeId){
-                clearTimeout(holdModeTimeId);
-                holdModeTimeId = null;
-            }
-            holdEndCb = endCb;
-            holdModeTimeId = setTimeout(function(){
-                self.lazyEditModeCancel();
-                self.holdModeFlag = true;
-                if(startCb){
-                    startCb();
-                }
-            },1000);
-        };
-        self.lazyHoldModeCancel = function(){
-            clearTimeout(holdModeTimeId);
-            holdModeTimeId = null;
-            if(holdEndCb){
-                holdEndCb();
-            }
-            holdEndCb = null;
-            self.holdModeFlag = false;
-        };
-    };
-    var editMode = new EditMode();
-
-    var isFloatDragMode = false;
-
-    // ブロックに対するタッチとマウス関連の操作をセットアップします
-    self.setupBlockTouchAndMouseAction = function(block)
-    {
-        var fromBlkWs = null;
-        var droppedWs = null;
-        var cloneBlock = null;
-        var draggableDiv =$(block.element);
-        var ignoreMouseDown = false;
-
-        draggableDiv
-          .mousedown(function(ev) {
-              if(ignoreMouseDown)return;
-              if(editMode.isNowLazyEditModeStartWait()){
-                  //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
-                  editMode.lazyEditModeCancel();                  
-              }
-              else{
-                  editMode.lazyEditModeStart(this,ev.target);
-
-                  draggableDiv.addClass("holdModeStart");
-                  editMode.lazyHoldModeStart(function(){
-                      isFloatDragMode = true;
-                      ignoreMouseDown = true;
-                      draggableDiv.trigger(ev);
-                      ignoreMouseDown = false;
-                      draggableDiv.removeClass("holdModeStart");
-                      draggableDiv.addClass("holdMode"); 
-                  },function(){
-                      draggableDiv.removeClass("holdModeStart");
-                      draggableDiv.removeClass("holdMode");
-                  });
-              }
-              return false;
-          })
-          .mouseup(function(ev) {
-              //アップを検知したらホールドモードはキャンセルされます
-              editMode.lazyHoldModeCancel();
-          })
-          .draggable({
-              //containment:$(".blockBox"),
-              //scope:'toOriginalBlock',
-              scroll:false,
-              cancel:".noDrag,input,textarea,button,select,option",
-              helper:function(e){
-                  editMode.lazyHoldModeCancel();
-                  if(block.isCloneDragMode){
-                      // ドロップ先の設定を行います
-                      $(draggableDiv).draggable("option", "scope", "droppableScope");
-                      $(draggableDiv).draggable("option", "containment", (".blockBox"));
-                      // ブロックの複製をして浮遊ドラッグリスト(専用作業場)に追加します
-                      cloneBlock = block.cloneThisBlock();
-                      self.addFloatDraggingList(cloneBlock);
-                      return cloneBlock.element;
-                  }
-                  else{
-                      if(!editMode.holdModeFlag){
-                          editMode.lazyHoldModeCancel();
-                      }
-                      if(isFloatDragMode){
-                          // 自ボックスの外にも移動できるモード
-                          $(draggableDiv).draggable("option", "scope", "droppableScope");
-                          $(draggableDiv).draggable("option", "containment", (".blockBox"));
-                          cloneBlock = block.cloneThisBlockAndConnectBlock();
-                          self.addFloatDraggingList(cloneBlock);
-                          return cloneBlock.element;
-                      }
-                      else{
-                          //自ボックスの内限定で移動できるモード
-                          $(draggableDiv).draggable("option", "scope", "innerScope");//※ドロップ出来ないようにしてます
-                          $(draggableDiv).draggable("option", "containment", null);
-                          return this;
-                      }
-                  }
-
-              },
-              start:function(event, ui){
-                  editMode.lazyEditModeCancel();
-
-                  self.moveStart(cloneBlock||block, ui.offset);
-                  
-                  self.floatDraggingInfo.droppedWs = null;
-                  self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
-
-                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
-                  self.floatDraggingInfo.fromWs.scrollLock = true;
-
-                  if(block.isCloneDragMode){
-                      //draggableDiv.show();
-                  }
-                  else{
-                      if(isFloatDragMode){
-                          //draggableDiv.hide();
-                          self.traverseUnderBlock(block,{
-                              blockCb:function(block){
-                                  //$(block.element).hide();
-                                  block.setNoConnectMode(true);
-                                  $(block.element).css({opacity:0.2});
-                              },
-                          });
-                      }
-                      else{
-                          //draggableDiv.show();
-                      }
-                  }
-
-                  // ドラッグ先のガイド表示をします
-                  if(block.in){
-                      $(".hitAreaOut").addClass("hitAreaDragging");
-                      $(".hitAreaScopeOut").addClass("hitAreaDragging");
-                  }
-                  if(block.out){
-                      $(".hitAreaIn").addClass("hitAreaDragging");
-                  }
-                  if(block.valueOut)
-                  {
-                      $(".hitAreaValueIn").each(function(k,elm){
-                          var tgtElm = $(elm).parents(".block");
-                          var tgtBlock = self.elementBlockLookupTbl[$(tgtElm).data("blockId")];
-                          var tgtDataName = $(elm).attr("id");
-                          if(tgtBlock)
-                          {
-                              if(tgtBlock.getTypeAccept(tgtDataName,block))
-                              {
-                                  $(elm).addClass("hitAreaDragging");
-                              }
-                          }
-                      });
-                      //$(".hitAreaValueIn").addClass("hitAreaDragging");
-                      $(".hitAreaValueOut",ui.helper).addClass("hitAreaDragging");
-                  }
-              },
-              drag:function(event, ui){
-                  self.move(cloneBlock||block, ui.offset);
-              },
-              stop:function(event, ui){
-                  $(".hitAreaDragging").removeClass("hitAreaDragging");
-                  self.moveStop(cloneBlock||block, ui.offset);
-                  if(cloneBlock){
-                      //self.blockManager.removeBlock(cloneBlock);
-                      cloneBlock = null;
-                  }
-                  if(block.isCloneDragMode){
-                  }
-                  else{
-                      if(isFloatDragMode){
-                          //どっちがいいかテスト中
-                          if(self.floatDraggingInfo.fromWs != self.floatDraggingInfo.droppedWs){
-                              //コピーモード
-                              self.traverseUnderBlock(block,{
-                                  blockCb:function(block){
-                                      block.setNoConnectMode(false);
-                                      $(block.element).css({opacity:1.0});
-                                      $(block.element).show();
-                                  },
-                              });
-                          }else{
-                              //移動モード
-                              self.floatDraggingInfo.fromWs.removeBlock(block);
-                          }
-                      }
-                      else{
-                      }
-                  }
-                  isFloatDragMode = false;
-
-                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
-                  self.floatDraggingInfo.fromWs.scrollLock = false;
-              },
-          })
-          //.dblclick(function(){
-          //    self.deferred();
-          //})
-          .doubletap(function(){
-              // ■ブロックの実行
-              editMode.lazyEditModeCancel();
-              block.deferred();
-          });
-    };
 
 
     // 別ボックスへ移動するためのドラッグ向けのリストに追加
