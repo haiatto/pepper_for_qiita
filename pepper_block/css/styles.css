@@ -11,10 +11,9 @@
     margin:  0;
     padding: 0;
     width:  1px;
-    height: 100em;
+    height: 10em;
     visibility: hidden;
 }
-
 .debugLogBox{
     display:block;
     opacity: 1.0;
@@ -29,6 +28,9 @@
 body{
   overflow:hidden;
 }
+.page{
+  height:100%;
+} 
 
 .ipAddrInput
 {   
@@ -78,7 +80,7 @@ body{
     height:200px;
     border-style:solid;
     border-width:1px;
-    overflow:auto;
+    overflow:hidden;
     position:relative;
 }
 

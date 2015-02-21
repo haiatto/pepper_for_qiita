@@ -411,7 +411,7 @@ function Block(blockManager, blockTemplate, callback) {
             self.element = null;
         }
         self.element = element;
-        self.pix2em  = 1.0 / ($('#pix2em').outerHeight()/100.0);
+        self.pix2em  = 1.0 / ($('#pix2em').outerHeight()/10.0);
         self.minimumRowHeight = self.minimumRowHeightEm / self.pix2em;
         self.indentWidth      = self.indentWidthEm      / self.pix2em;
         if(self.in)
@@ -1951,6 +1951,16 @@ function BlockManager(){
                 if(e.originalEvent.touches)return false;
                 return true;
             };
+            var isFirstTouch = function(e){
+                //最初の指でタッチしたかを判定します
+                if(e.originalEvent.touches){
+                    var touch = e.originalEvent.touches[0];
+                    if(touch && !$(touch.target).hasClass("controlableBlockWsBG")){
+                        return false;
+                    }
+                }
+                return true;
+            };
             var getOnePosition = function(e){
                 if(e.originalEvent.touches){
                     var touch = e.originalEvent.touches[0];
@@ -1977,6 +1987,9 @@ function BlockManager(){
                     e.preventDefault();
                     if ( $(e.target).hasClass("controlableBlockWsBG") )
                     {
+                        if(!isFirstTouch(e)){
+                            return;
+                        }
                         nowControl = true;
                         blockWsIns.blockManager.editMode.lazyEditModeCancel();
 
@@ -2264,6 +2277,8 @@ function BlockManager(){
 
             var guidX=0;
             var guidY=0;
+            var accVY=0;
+            var lastGuide2Y=null;
             guidElem.on({
                 'touchstart': function (event) {
                     event.preventDefault();
@@ -2282,13 +2297,38 @@ function BlockManager(){
                     var moveY = touch.screenY - guidY;
                     guidX = touch.screenX;
                     guidY = touch.screenY;
+                    
+                    var touch2 = event.originalEvent.touches[1];
+                    if(touch2){
+                        var nowGuide2Y = $(touch2.target).offset().top;
+                        if(lastGuide2Y){
+                            var moveY2 = lastGuide2Y - nowGuide2Y;
+                            console.log(moveY);
+                            boxElem.height(boxElem.height()+moveY);
+                            moveY = 0;//-moveY/2;
+                        }
+                        lastGuide2Y = nowGuide2Y;
+                        guidLayoutUpdate();
+                        accVY = 0;
+                    }else{
+                        lastGuide2Y = null;
+                        accVY = accVY * 0.8 + moveY * 0.2;
+                    }
                     $("#page").scrollTop($("#page").scrollTop()-moveY);
+
                     return false;
                 },
                 'touchend': function (event) {
                     event.preventDefault();
                     $(this).css({
                         opacity:"0.2",
+                    });
+                    lastGuide2Y = null;
+                    var decAccVY = accVY/50;
+                    var timeId = setInterval(function(){
+                        accVY = accVY - decAccVY ;
+                        $("#page").scrollTop($("#page").scrollTop()-accVY);
+                        if(Math.abs(accVY)<Math.abs(decAccVY*2))clearInterval(timeId);
                     });
                     return false;
                 },
