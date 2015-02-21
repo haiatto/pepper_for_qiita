@@ -2550,7 +2550,18 @@ $(function(){
             self.lunchPepper = false;
         }
         if(getUrlParameter("loadJsonUrl")){
-            
+            var url = getUrlParameter("loadJsonUrl");
+            $.ajax({
+              type: 'GET',
+              url: url,
+              dataType: 'json',
+              success: function(json){
+                   var len = json.length;
+              },
+              error: function(XMLHttpRequest, textStatus, errorThrown){
+                  alert(url+"の読み込みでエラーです:"+textStatus);
+              },
+            });
         }
 
         //■ ＵＩ関連の準備など ■
