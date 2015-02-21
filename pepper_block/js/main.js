@@ -2550,13 +2550,16 @@ $(function(){
             self.lunchPepper = false;
         }
         if(getUrlParameter("loadJsonUrl")){
+            // とりあえずな実装…
             var url = getUrlParameter("loadJsonUrl");
             $.ajax({
               type: 'GET',
               url: url,
               dataType: 'json',
               success: function(json){
-                   var len = json.length;
+                  setTimeout(function(){
+                    self.fromJSON(JSON.stringify(json));
+                  },2000);
               },
               error: function(XMLHttpRequest, textStatus, errorThrown){
                   alert(url+"の読み込みでエラーです:"+textStatus);
@@ -2592,7 +2595,7 @@ $(function(){
         };
 
         // セーブとロード
-        self.saveBlock = function(){
+        self.toJSON = function(){
             var saveData = {
                 version:"00.01",
                 toyBoxWsLst:    [],
@@ -2604,11 +2607,10 @@ $(function(){
             $.each(self.factoryBoxWsList(),function(k,wsObsv){
                 saveData.factoryBoxWsLst.push(wsObsv().toJSON());
             });
-            localStorage.setItem("working_saveData",JSON.stringify(saveData));
+            return saveData;  
         };
-        self.loadBlock = function(){
-            var saveData = JSON.parse(localStorage.getItem("working_saveData"));
-
+        self.fromJSON = function(data){
+            var saveData = data;
             self.toyBoxWsList.removeAll();
             $.each(saveData.toyBoxWsLst,function(k,wsJson){
                 var wsIns = self.blockManager.createBlockWorkSpaceIns("droppableScope")
@@ -2621,6 +2623,13 @@ $(function(){
                 wsIns.fromJSON(wsJson);
                 self.factoryBoxWsList.push(ko.observable(wsIns));
             });
+        };
+        self.saveBlock = function(){
+            localStorage.setItem("working_saveData",JSON.stringify(self.toJSON()));
+        };
+        self.loadBlock = function(){
+            var saveData = JSON.parse(localStorage.getItem("working_saveData"));
+            self.fromJSON(saveData);
         };
 
         // 共有
