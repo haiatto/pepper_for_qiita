@@ -695,6 +695,14 @@ function BlockManager(){
     // ■編集のモード遷移の管理用のインスタンス(タップやホールド等の管理をします)
     function EditMode(){
         var self = this;
+
+        var targetBlock=null;
+        self.setTargetBlock = function(block){
+            targetBlock = block;
+        };
+        self.getTargetBlock = function(){
+            return targetBlock;
+        };
         
         // ■編集始まり待ち中？
         var nowWait_ = false;
@@ -727,7 +735,7 @@ function BlockManager(){
             editModeTimeId = null;
             nowWait_ = false;
             nowEdit_ = false;
-            editEndCb();
+            if(editEndCb)editEndCb();
         };
 
         // ■ホールド検知を開始します
@@ -1281,10 +1289,10 @@ function BlockManager(){
     };
 
 
-
     // ■ブロック移動・編集・ドラッグなどの操作
 
-    // contentEditable(テキスト入力)要素の操作用です("[contentEditable='true']"となる要素)
+    // contentEditable(テキスト入力)属性の操作用です
+    // .editableContent というクラスが付加された要素を操作します
     function ModEditableElement()
     {
         var self = this;
@@ -1297,6 +1305,11 @@ function BlockManager(){
             editableElm = $(element);
             if(editableElm && editableElm.length>0)
             {
+                //
+                $(editableElm).attr({contenteditable:"true"});
+
+//$(editableElm).append("<input>");
+
                 // curEditMode を割り当てます
                 $(editableElm).addClass("curEditMode");
                 // 編集対象へフォーカスをあてます
@@ -1307,17 +1320,41 @@ function BlockManager(){
                 //$(editableElm[0]).blur(function(){
                 //    clearAllEditMode_();
                 //});
+
+                setTimeout(function(){
+
+                    console.log("xxxxxx");
+                // curEditMode を割り当てます
+                $(editableElm).addClass("curEditMode");
+                // 編集対象へフォーカスをあてます
+                editableElm[0].focus();
+                // 最後にカーソルを持っていきます
+                setEndOfContenteditable_(editableElm[0]);
+                // イマイチ環境依存してうまく動かないのでカット
+                //$(editableElm[0]).blur(function(){
+                //    clearAllEditMode_();
+                //});
+                },300)
             }
         };
         self.clearElement = function()
         {
             if(editableElm && editableElm.length>0)
             {
-                clearEditableFocus_(editableElm);
+                editableElm.removeAttr("contentEditable");
                 // curEditMode を外します
                 $(editableElm).removeClass("curEditMode");
             }
             editableElm = null;
+        };
+
+        // 操作対象の要素を探します
+        // (当初はcontentEditable属性をもとにやりましたが何かと大変だったのでやめました)
+        self.findEditableElement = function(element){
+            if($(element).hasClass(".editableContent")){
+                return $(element);
+            }
+            return $(".editableContent",element);
         };
 
         // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
@@ -1341,24 +1378,6 @@ function BlockManager(){
                 range.select();//Select the range (make it the visible selection
             }
         }
-        var clearEditableFocus_ = function(contentEditableElement){
-            if(checkAgent_NeedDragUnselect())
-            {
-                if(contentEditableElement)
-                {
-                    // 外れた要素の編集状態を無効にします
-                    // (他の要素をドラッグしたりする際にフォーカスが外れないらしいChromeの仕様かcontentEdiableの仕様)
-                    // (荒わざっぽいけど働いてる事は働いてる)
-                    var editableFix = jQuery(
-                        '<div style="position:absolute"><input style="width:1px;height:1px;border:none;margin:0;padding:0;" tabIndex="-1"></div>'
-                    ).appendTo( contentEditableElement );
-                    editableFix.focus();
-                    editableFix.children()[0].setSelectionRange(0, 0);
-                    editableFix.blur();
-                    editableFix.remove();
-                }
-            }
-        }
     };
 
     // １つのブロック内のcontentEditable要素の編集を管理します
@@ -1372,14 +1391,9 @@ function BlockManager(){
         {
             // 編集対象を探します
             var editableElm;
-            if($(selectElem).attr("contentEditable")=='true'){
-                editableElm = $(selectElem);
-            }
+            editableElm = modEditableElm_.findEditableElement(selectElem);
             if(!editableElm||editableElm.length==0){
-                editableElm = $("[contentEditable='true']", selectElem);
-            }
-            if(!editableElm||editableElm.length==0){
-                editableElm = $("[contentEditable='true']", block.element);
+                editableElm = modEditableElm_.findEditableElement(block.element);
             }
             if(editableElm.length>0)
             {
@@ -1465,6 +1479,9 @@ function BlockManager(){
         blockElem
           .mousedown(function(ev) {
               if(ignoreMouseDown)return;
+              if(block != self.editMode.getTargetBlock()){
+                  self.editMode.lazyEditModeCancel();
+              }
               if(self.editMode.isNowLazyEditModeStartWait()){
                   //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
                   self.editMode.lazyEditModeCancel();                  
@@ -1472,6 +1489,7 @@ function BlockManager(){
               else{
                   // タップ後の遅延開始でブロック編集を開始します
                   var blockEditableElemEdit = new BlockEditableElemEdit(block,ev.target);
+                  self.editMode.setTargetBlock(block);
                   self.editMode.lazyEditModeStart(
                       blockEditableElemEdit.startEdit,
                       blockEditableElemEdit.endEdit
@@ -1603,11 +1621,12 @@ function BlockManager(){
                   self.floatDraggingInfo.fromWs.scrollLock = false;
               },
           })
-          .doubletap(function(){
+/*          .doubletap(function(){
               // ■ブロックの実行
               self.editMode.lazyEditModeCancel();
               block.deferred();
-          });
+          })*/
+          ;
     };
 
 
@@ -1924,6 +1943,9 @@ function BlockManager(){
             // ブロックを要素から引くためにテーブルに追加します
             self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
 
+            // 要素が操作可能な背景である事を識別するためにクラスを付加します
+            $(element).addClass("controlableBlockWsBG");
+
             // ワークスペースのUI操作を構築します
             var isMouseEvent = function(e){
                 if(e.originalEvent.touches)return false;
@@ -1949,22 +1971,32 @@ function BlockManager(){
             var accsV    = {x:0,y:0};
             var lastTime = null;
             var timeId   = null;
+            var nowControl=false;
             $(element).on({
                 'touchstart mousedown': function (e) {
                     e.preventDefault();
-                    var target = $(this);
-                    if(isMouseEvent(e)){
-                        mouseDownFlg = true;
-                    }
-                    lastPos = startPos = getOnePosition(e);
-                    lastTime = +new Date();
-                    if(timeId){
-                        clearInterval(timeId);
-                        timeId = null;
+                    if ( $(e.target).hasClass("controlableBlockWsBG") )
+                    {
+                        nowControl = true;
+                        blockWsIns.blockManager.editMode.lazyEditModeCancel();
+
+                        var target = $(this);
+                        if(isMouseEvent(e)){
+                            mouseDownFlg = true;
+                        }
+                        lastPos = startPos = getOnePosition(e);
+                        lastTime = +new Date();
+                        if(timeId){
+                            clearInterval(timeId);
+                            timeId = null;
+                        }
                     }
                 },
                 'touchmove mousemove': function (e) {
                     event.preventDefault();
+                    if(!nowControl){
+                        return;
+                    }
                     var target = $(this);
                     if(isMouseEvent(e) && !mouseDownFlg){
                         return;
@@ -1992,10 +2024,15 @@ function BlockManager(){
                     //console.log(""+blockWsIns.offsetX()+","+blockWsIns.offsetY())
                 },
                 'mouseout': function (e) {
+                    nowControl = false;
                     mouseDownFlg = false;
                 },
                 'touchend mouseup': function (e) {
                     event.preventDefault();
+                    if(!nowControl){
+                        return;
+                    }
+                    nowControl = false;
                     mouseDownFlg = false;
                     if(!blockWsIns.scrollLock){
                         var nowPos = getOnePosition(e);
@@ -2404,7 +2441,7 @@ $(function(){
         
     ko.bindingHandlers.editableText = {
         init: function(element, valueAccessor) {
-            $(element).attr("contenteditable","true");
+            $(element).addClass("editableContent");
             $(element).on('blur', function() {
                 var observable = valueAccessor();
                 observable( $(this).text() );

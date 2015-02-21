@@ -249,6 +249,10 @@ body{
 
 }
 
+.editableContent{
+  
+}
+
 .curEditMode{
   background:cyan !important;
 }
