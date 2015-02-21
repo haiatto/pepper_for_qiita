@@ -2558,7 +2558,7 @@ $(function(){
               dataType: 'json',
               success: function(json){
                   setTimeout(function(){
-                    self.fromJSON(JSON.parse(json));
+                    self.fromJSON(json);
                     alert(url+"の読み込み完了です");
                   },2000);
               },
