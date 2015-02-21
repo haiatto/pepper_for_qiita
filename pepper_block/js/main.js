@@ -1349,10 +1349,10 @@ function BlockManager(){
         // 操作対象の要素を探します
         // (当初はcontentEditable属性をもとにやりましたが何かと大変だったのでやめました)
         self.findEditableElement = function(element){
-            if($(element).hasClass(".editableContent")){
+            if($(element).hasClass("editableContent")){
                 return $(element);
             }
-            return $(".editableContent",element);
+            return $("editableContent",element);
         };
 
         // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
@@ -1473,10 +1473,24 @@ function BlockManager(){
         var cloneBlock = null;
         var blockElem  = $(block.element);
         var ignoreMouseDown = false;
-
+        var checkTarget =function(elem){
+            if($(elem).hasClass("noDrag")){
+                return false;   
+            }
+            if(["INPUT","TEXTAREA",
+                "BUTTON","SELECT",
+                "OPTION"].indexOf($(elem).prop("tagName"))>=0)
+            {
+                return false;
+            }
+            return true;
+        };
         blockElem
           .mousedown(function(ev) {
               if(ignoreMouseDown)return;
+              if(!checkTarget(ev.target)){
+                  return;   
+              }
               if(block != self.editMode.getTargetBlock()){
                   self.editMode.lazyEditModeCancel();
               }
@@ -1619,12 +1633,11 @@ function BlockManager(){
                   self.floatDraggingInfo.fromWs.scrollLock = false;
               },
           })
-/*          .doubletap(function(){
+          .doubletap(function(){
               // ■ブロックの実行
               self.editMode.lazyEditModeCancel();
               block.deferred();
-          })*/
-          ;
+          });
     };
 
 
@@ -1984,8 +1997,24 @@ function BlockManager(){
             var lastTime = null;
             var timeId   = null;
             var nowControl=false;
+            var checkTarget =function(elem){
+                if($(elem).hasClass("noDrag")){
+                    return false;   
+                }
+                if(["INPUT","TEXTAREA",
+                    "BUTTON","SELECT",
+                    "OPTION"].indexOf($(elem).prop("tagName"))>=0)
+                {
+                    return false;
+                }
+                return true;
+            };
+
             $(element).on({
                 'touchstart mousedown': function (e) {
+                    if(!checkTarget(e.target)){
+                        return;
+                    }
                     e.preventDefault();
                     if ( $(e.target).hasClass("controlableBlockWsBG") )
                     {
@@ -2008,6 +2037,9 @@ function BlockManager(){
                     }
                 },
                 'touchmove mousemove': function (e) {
+                    if(!checkTarget(e.target)){
+                        return;
+                    }
                     event.preventDefault();
                     if(!nowControl){
                         return;
@@ -2043,6 +2075,9 @@ function BlockManager(){
                     mouseDownFlg = false;
                 },
                 'touchend mouseup': function (e) {
+                    if(!checkTarget(e.target)){
+                        return;
+                    }
                     event.preventDefault();
                     if(!nowControl){
                         return;
@@ -2277,7 +2312,6 @@ function BlockManager(){
                     return false;
                 },
             });
-
         },
     };
     ko.bindingHandlers.boxTabsBtn = {
