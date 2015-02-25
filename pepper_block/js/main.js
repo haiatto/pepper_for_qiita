@@ -716,6 +716,8 @@ function BlockManager(){
         var editModeTimeId;
         var editEndCb = null;
         self.lazyEditModeStart = function(startCb, endCb){
+            // 前回の編集モードが有効なら即終わらせます
+            self.lazyEditModeCancel();
             nowWait_ = true;
             // 編集モードへの移行を開始します
             // (押したりりタップ後、一定時間でキャンセルされなければ開始となります)
@@ -1352,7 +1354,7 @@ function BlockManager(){
             if($(element).hasClass("editableContent")){
                 return $(element);
             }
-            return $("editableContent",element);
+            return $(".editableContent",element);
         };
 
         // http://stackoverflow.com/questions/1125292/how-to-move-cursor-to-end-of-contenteditable-entity/3866442#3866442
@@ -1408,6 +1410,11 @@ function BlockManager(){
             nowEditableDraggableElm.removeClass("curEditModeForDraggable");
             // 外れた要素のドラッグを有効化します
             nowEditableDraggableElm.draggable('enable');
+        };
+
+        self.isNowEdit = function(){
+            var editableElm = findEditableElm_(block,selectElem);
+            return $(editableElm).hasClass("curEditMode");
         };
  
         self.startEdit = function()
@@ -1485,7 +1492,89 @@ function BlockManager(){
             }
             return true;
         };
+        var lastTime = null;
+        blockElem.on({
+           'touchstart mousedown': function (e) {
+              //e.preventDefault();
+              if(e.originalEvent.fromTouch){
+                  //タッチをマウスでシミュレーション時のイベントは無視します
+                  return;
+              }
+              if(ignoreMouseDown)return;
+              if(block != self.editMode.getTargetBlock()){
+                  self.editMode.lazyEditModeCancel();
+              }
+              if(self.editMode.isNowLazyEditModeStartWait()){
+                  //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
+                  self.editMode.lazyEditModeCancel();
+                  // ダブルタップ扱いにします
+                  // ■ブロックの実行
+                  //block.deferred();
+                  console.log("doble tap");
+              }
+              else{
+                  // タップ後の遅延開始でブロック編集を開始します
+                  var blockEditableElemEdit = new BlockEditableElemEdit(block,e.target);
+                  if(blockEditableElemEdit.isNowEdit()){
+                      return;
+                  }
+                  self.editMode.setTargetBlock(block);
+                  self.editMode.lazyEditModeStart(
+                      blockEditableElemEdit.startEdit,
+                      blockEditableElemEdit.endEdit
+                  );
+                  // ホールドで作業場間のドラッグ操作を開始します
+                  blockElem.addClass("holdModeStart");
+                  self.editMode.lazyHoldModeStart(function(){
+                      isFloatDragMode = true;
+                      ignoreMouseDown = true;
+                      blockElem.trigger(e);
+                      ignoreMouseDown = false;
+                      blockElem.removeClass("holdModeStart");
+                      blockElem.addClass("holdMode"); 
+                  },function(){
+                      blockElem.removeClass("holdModeStart");
+                      blockElem.removeClass("holdMode");
+                  });
+              }
+              //return false;
+            },
+            'touchmove mousemove': function (e) {
+              if(e.originalEvent.fromTouch){
+                  //タッチをマウスでシミュレーション時のイベントは無視します
+                  return;
+              }
+              //event.preventDefault();
+            },
+            'mouseout': function (e) {
+              if(e.originalEvent.fromTouch){
+                  //タッチをマウスでシミュレーション時のイベントは無視します
+                  return;
+              }
+            },
+            'touchend mouseup': function (e) {
+              if(e.originalEvent.fromTouch){
+                  //タッチをマウスでシミュレーション時のイベントは無視します
+                  return;
+              }
+              //アップを検知したらホールドモードはキャンセルされます
+              self.editMode.lazyHoldModeCancel();
+            },
+        });
+        /*
+           .doubletap(function(){
+              // ■ブロックの実行
+              self.editMode.lazyEditModeCancel();
+              block.deferred();
+          },null,300);
+        */
         blockElem
+/*
+          .doubletap(function(){
+              // ■ブロックの実行
+              self.editMode.lazyEditModeCancel();
+              block.deferred();
+          },null,300)
           .mousedown(function(ev) {
               if(ignoreMouseDown)return;
               if(!checkTarget(ev.target)){
@@ -1496,7 +1585,8 @@ function BlockManager(){
               }
               if(self.editMode.isNowLazyEditModeStartWait()){
                   //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
-                  self.editMode.lazyEditModeCancel();                  
+                  self.editMode.lazyEditModeCancel();
+                  self.editMode.doubleTap();
               }
               else{
                   // タップ後の遅延開始でブロック編集を開始します
@@ -1526,6 +1616,7 @@ function BlockManager(){
               //アップを検知したらホールドモードはキャンセルされます
               self.editMode.lazyHoldModeCancel();
           })
+*/
           .draggable({
               scroll:false,
               cancel:".noDrag,input,textarea,button,select,option",
@@ -1632,14 +1723,47 @@ function BlockManager(){
                   //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
                   self.floatDraggingInfo.fromWs.scrollLock = false;
               },
-          })
-          .doubletap(function(){
-              // ■ブロックの実行
-              self.editMode.lazyEditModeCancel();
-              block.deferred();
           });
+          //jqueryUIのドラッグのみタッチに限定対応させます
+          //※幾つかライブラリ使ってみたけど環境依存する色々な挙動が挟まる事が多数あったので
+          var myDraggable = blockElem;
+          var widget = myDraggable.data('ui-draggable');
+          var clickEvent = null;
+          myDraggable.on({
+          'touchstart':function(e){
+              var event = e.originalEvent;
+              var touches = event.changedTouches,
+                  first = touches[0];
+              var simulatedEvent = document.createEvent('MouseEvent');
+              simulatedEvent.initMouseEvent("mousedown", true, true, window, 1, first.screenX, first.screenY, first.clientX, first.clientY, false, false, false, false, 0/*left*/, null);
+              //widget._mouseStart(simulatedEvent);
+              //widget._mouseDownEvent = simulatedEvent;
+              simulatedEvent.fromTouch = true;
+              first.target.dispatchEvent(simulatedEvent);
+          },
+          'touchmove':function(e){
+              var event = e.originalEvent;
+              var touches = event.changedTouches,
+                  first = touches[0];
+              var simulatedEvent = document.createEvent('MouseEvent');
+              simulatedEvent.initMouseEvent("mousemove", true, true, window, 1, first.screenX, first.screenY, first.clientX, first.clientY, false, false, false, false, 0/*left*/, null);
+              //widget._mouseDownEvent = clickEvent;
+              //widget._mouseMove(simulatedEvent);
+              simulatedEvent.fromTouch = true;
+              first.target.dispatchEvent(simulatedEvent);
+          },
+          'touchend':function(e){
+              var event = e.originalEvent;
+              var touches = event.changedTouches,
+                  first = touches[0];
+              var simulatedEvent = document.createEvent('MouseEvent');
+              simulatedEvent.initMouseEvent("mouseup", true, true, window, 1, first.screenX, first.screenY, first.clientX, first.clientY, false, false, false, false, 0/*left*/, null);
+              //widget._mouseUp(simulatedEvent);
+              //widget._mouseDownEvent = null;
+              simulatedEvent.fromTouch = true;
+              first.target.dispatchEvent(simulatedEvent);
+          }});
     };
-
 
 
     // ■ブロック作業場管理など
