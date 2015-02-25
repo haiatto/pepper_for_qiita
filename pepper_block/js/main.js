@@ -1509,7 +1509,7 @@ function BlockManager(){
                   self.editMode.lazyEditModeCancel();
                   // ダブルタップ扱いにします
                   // ■ブロックの実行
-                  //block.deferred();
+                  block.deferred();
                   console.log("doble tap");
               }
               else{
