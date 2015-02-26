@@ -363,7 +363,15 @@
 
           <script type="text/html" id="box-template">
             <!-- ko foreach: $data -->
-               <div class="box-workspace" data-bind="blockWorkSpaceSetup: $data, attr{id:$data.id}">
+               <div class="box-workspace graphPaper" 
+                    data-bind="blockWorkSpaceSetup: $data, 
+                               attr:{id:$data.id},
+                               style:{transform:'scale('+$data.scale()+','+
+                                                         $data.scale()+')',
+                                      width:(100.0/$data.scale())+'%',
+                                      height:(100.0/$data.scale())+'%',
+                                     },">
+                  <div class="testPt"></div>
                   <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
                     <!-- ko template:'block-template',data:$data -->
                     <!-- /ko -->

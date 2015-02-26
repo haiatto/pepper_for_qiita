@@ -2100,6 +2100,8 @@ function BlockManager(){
                 }
                 return true;
             };
+            var isTouchEvent = function(e){
+            }
             var getOnePosition = function(e){
                 if(e.originalEvent.touches){
                     var touch = e.originalEvent.touches[0];
@@ -2115,15 +2117,123 @@ function BlockManager(){
                 }
             };
             var mouseDownFlg = false;
-            var startPos = null;
             var lastPos  = null;
             var accsV    = {x:0,y:0};
             var lastTime = null;
             var timeId   = null;
+            var lastTouch= [];
+            var TouchMove = function(){
+                var self = this;
+                self.touchInfo=[];
+                self.start = function(e){
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        self.touchInfo[touch.identifier] = {
+                            sx:touch.pageX,sy:touch.pageY,
+                            lx:touch.pageX,ly:touch.pageY,
+                            dx:0,dy:0,
+                        };
+                    });
+                };
+                self.move = function(e){
+                    $.each(self.touchInfo,function(k,info){
+                        if(info){
+                            info.dx=0;
+                            info.dy=0;
+                        }
+                    });
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        var info = self.touchInfo[touch.identifier];
+                        if(!info)return;
+                        info.dx = touch.pageX - info.lx;
+                        info.dy = touch.pageY - info.ly;
+                        info.lx = touch.pageX;
+                        info.ly = touch.pageY;
+                    });
+                };
+                self.end = function(e){
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        self.touchInfo[touch.identifier] = null;
+                    });
+                };
+            };
+            var touchMove = new TouchMove();            
+            var TouchST = function(){
+                var self = this;
+                var touchInfo=[];
+                self.st = null;
+                self.start = function(e){
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        touchInfo[touch.identifier] = {
+                            sx:touch.pageX,
+                            sy:touch.pageY,
+                            lx:touch.pageX,
+                            ly:touch.pageY,
+                            dx:0,dy:0,
+                        };
+                    });
+                };
+                self.move = function(e){
+                    $.each(touchInfo,function(k,info){
+                        if(info){
+                            info.dx=0;
+                            info.dy=0;
+                        }
+                    });
+                    var calcDist = function(dx,dy){return Math.sqrt(dx*dx+dy*dy);}
+                    var t0 = touchInfo[0];
+                    var t1 = touchInfo[1];
+                    if(t0&&t1){
+                        if(!self.st){
+                            self.st = {
+                                centerDelta:{X:0,y:0},
+                                scaleDelta:0.0,
+                                center:{x:(t0.lx-t1.lx)/2+t1.lx,
+                                        y:(t0.ly-t1.ly)/2+t1.ly},
+                                scale:1.0,
+                                fingDist:calcDist(t0.lx-t1.lx,t0.lx-t1.lx),
+                            };
+                        }
+                    }
+                    else{
+                        self.st = null;
+                    }
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        var info = touchInfo[touch.identifier];
+                        if(info){
+                            info.dx = touch.pageX - info.lx;
+                            info.dy = touch.pageY - info.ly;
+                            info.lx = touch.pageX;
+                            info.ly = touch.pageY;
+                        }
+                    });
+                    if(t0&&t1){
+                        var newCenter = {x:(t0.lx-t1.lx)/2+t1.lx,
+                                         y:(t0.ly-t1.ly)/2+t1.ly};
+                        var nowFingDist = calcDist(t0.lx-t1.lx,t0.lx-t1.lx);
+                        var newScale = nowFingDist / self.st.fingDist;
+                        self.st.centerDelta.x = newCenter.x - self.st.center.x;
+                        self.st.centerDelta.y = newCenter.y - self.st.center.y;
+                        self.st.center = newCenter;
+                        self.st.scaleDelta = nowFingDist / (self.st.fingDist * self.st.scale);
+                        self.st.scale = newScale;
+                    }
+                };
+                self.end = function(e){
+                    $.each(e.originalEvent.changedTouches,function(k,touch){
+                        touchInfo[touch.identifier] = null;
+                    });
+                    var t0 = touchInfo[0];
+                    var t1 = touchInfo[1];
+                    if(!t0&&!t1){
+                        self.st = null;
+                    }
+                };
+            };
+            var touchSt = new TouchST();
             var nowControl=false;
             var checkTarget =function(elem){
                 if($(elem).hasClass("noDrag")){
-                    return false;   
+                    return false;
                 }
                 if(["INPUT","TEXTAREA",
                     "BUTTON","SELECT",
@@ -2142,21 +2252,37 @@ function BlockManager(){
                     e.preventDefault();
                     if ( $(e.target).hasClass("controlableBlockWsBG") )
                     {
-                        if(!isFirstTouch(e)){
+                        if(!isFirstTouch(e)){//タッチの場合は最初の指の対象がここ以外なら無視します
                             return;
                         }
-                        nowControl = true;
-                        blockWsIns.blockManager.editMode.lazyEditModeCancel();
-
-                        var target = $(this);
-                        if(isMouseEvent(e)){
-                            mouseDownFlg = true;
+                        if(e.originalEvent.changedTouches){
+                            touchMove.start(e);
+                            touchSt.start(e);
                         }
-                        lastPos = startPos = getOnePosition(e);
-                        lastTime = +new Date();
-                        if(timeId){
-                            clearInterval(timeId);
-                            timeId = null;
+                        if(!nowControl)
+                        {
+                            nowControl = true;
+                            blockWsIns.blockManager.editMode.lazyEditModeCancel();
+
+                            var target = $(this);
+                            if(isMouseEvent(e)){
+                                mouseDownFlg = true;
+                            }
+                            lastPos = null;
+                            if(isMouseEvent(e)){
+                                lastPos = {x:e.pageX,y:e.posY};       
+                            }
+                            else if(touchMove.touchInfo[0]){
+                                lastPos = {
+                                    x:touchMove.touchInfo[0].lx,
+                                    y:touchMove.touchInfo[0].ly
+                                };
+                            }
+                            lastTime = +new Date();
+                            if(timeId){
+                                clearInterval(timeId);
+                                timeId = null;
+                            }
                         }
                     }
                 },
@@ -2168,31 +2294,69 @@ function BlockManager(){
                     if(!nowControl){
                         return;
                     }
+                    if(e.originalEvent.changedTouches){
+                        touchMove.move(e);
+                        touchSt.move(e);
+                    }
                     var target = $(this);
                     if(isMouseEvent(e) && !mouseDownFlg){
                         return;
                     }
-                    var nowPos = getOnePosition(e);
-                    var nowTime = +new Date();
-                    var vX = nowPos.x - lastPos.x;
-                    var vY = nowPos.y - lastPos.y;
-                    var delta = (nowTime - lastTime)/1000;
-                    if(delta==0){
-                        return;
+                    var nowPos = null;
+                    if(isMouseEvent(e)){
+                        nowPos = {x:e.pageX,y:e.posY};       
                     }
-                    lastPos = nowPos;
-                    lastTime = nowTime;
-                    if(!blockWsIns.scrollLock){
-                        blockWsIns.offsetX(vX + blockWsIns.offsetX());
-                        blockWsIns.offsetY(vY + blockWsIns.offsetY());
-                        accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
-                        accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
+                    else if(touchMove.touchInfo[0]){
+                        nowPos = {
+                            x:touchMove.touchInfo[0].lx,
+                            y:touchMove.touchInfo[0].ly
+                        };
+                    }
+                    if(touchSt.st){
+                        var scaleDelta = touchSt.st.scaleDelta;
+                        var nowScale   = blockWsIns.scale();
+                        var newScale   = scaleDelta * nowScale;
+                        if(newScale<=0.2){
+                            scaleDelta = 0.2/nowScale;
+                            newScale = 0.2;
+                        }
+                        else if(newScale>=5.00){
+                            scaleDelta = 5.0/nowScale;
+                            newScale = 5.0;
+                        }
+                        var elmOfs = $(blockWsIns.workAreaElement).offset();
+                        var cx = (touchSt.st.center.x - elmOfs.left)/(nowScale*scaleDelta);
+                        var cy = (touchSt.st.center.y - elmOfs.top )/(nowScale*scaleDelta);
+
+                        var wsOfx = (blockWsIns.offsetX()-cx) * scaleDelta + cx;
+                        var wsOfy = (blockWsIns.offsetY()-cy) * scaleDelta + cy;
+                        blockWsIns.offsetX(wsOfx/scaleDelta);
+                        blockWsIns.offsetY(wsOfy/scaleDelta);
+                        blockWsIns.scale(newScale);
                     }
                     else{
-                        accsV.x = 0;
-                        accsV.y = 0;
+                        var nowTime = +new Date();
+                        if(lastPos&&nowPos){
+                            var vX = (nowPos.x - lastPos.x)*1.0/blockWsIns.scale();
+                            var vY = (nowPos.y - lastPos.y)*1.0/blockWsIns.scale();
+                            var delta = (nowTime - lastTime)/1000;
+                            if(delta==0){
+                                return;
+                            }
+                            if(!blockWsIns.scrollLock){
+                                blockWsIns.offsetX(vX + blockWsIns.offsetX());
+                                blockWsIns.offsetY(vY + blockWsIns.offsetY());
+                                accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
+                                accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
+                            }
+                            else{
+                                accsV.x = 0;
+                                accsV.y = 0;
+                            }
+                        }
+                        lastPos = nowPos;
+                        lastTime = nowTime;
                     }
-                    //console.log(""+blockWsIns.offsetX()+","+blockWsIns.offsetY())
                 },
                 'mouseout': function (e) {
                     nowControl = false;
@@ -2206,10 +2370,16 @@ function BlockManager(){
                     if(!nowControl){
                         return;
                     }
-                    nowControl = false;
-                    mouseDownFlg = false;
-                    if(!blockWsIns.scrollLock){
-                        var nowPos = getOnePosition(e);
+                    if(e.originalEvent.changedTouches){
+                        touchMove.end(e);
+                        touchSt.end(e);
+                    }
+                    if(!touchMove.touchInfo[0] && !touchSt.st){
+                        nowControl = false;
+                        mouseDownFlg = false;
+                    }
+                    if(!nowControl && !blockWsIns.scrollLock){
+                        //とりあえずな慣性
                         var accLastTime = +new Date();
                         if(timeId){
                             clearInterval(timeId);
