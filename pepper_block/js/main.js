@@ -601,7 +601,7 @@ function Block(blockManager, blockTemplate, callback) {
             return;
         }
         var oldConnectOut = self.scopeTbl[scopeName].scopeOut.blockObsv();
-        self.clearScopeOut();
+        self.clearScopeOut(scopeName);
 
         self.scopeTbl[scopeName].scopeOut.blockObsv(block);
         block.in.blockObsv(self);
