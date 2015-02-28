@@ -222,8 +222,8 @@ function Block(blockManager, blockTemplate, callback) {
     //(反映の遅延のレスポンスに影響は殆どなく寧ろ処理が軽くなって反応あがる効果あるみたいです)
 //    TODO:ドロップ時のヒット判定の位置をUI要素から直に得ていたせいでうまくいかなかったのでひとまずカット
 //         ドロップ時に値を'読め'ば即反映されるはずなので後で試したい。(仕組み的に受動的な通知が遅延するだけとのこと)
-//    self.dispPosX.extend({ rateLimit: 1 });
-//    self.dispPosY.extend({ rateLimit: 1 });
+    self.dispPosX.extend({ rateLimit: 1 });
+    self.dispPosY.extend({ rateLimit: 1 });
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
@@ -672,25 +672,6 @@ function BlockManager(){
     self.blockList = [];
     self.elementBlockLookupTbl = {};
     self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
-
-    // コリジョン判定
-    var checkHitDist = function(area0, area1){
-        var offs0 = area0.offset();
-        var offs1 = area1.offset();
-        var w0    = area0.width();
-        var h0    = area0.height();
-        var w1    = area1.width();
-        var h1    = area1.height();
-        if(offs0.top < offs1.top + h1&&
-           offs1.top < offs0.top + h0&&
-           offs0.left < offs1.left + w1&&
-           offs1.left < offs0.left + w0)
-        {
-            var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
-            var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
-            return Math.sqrt(vx*vx + vy*vy);
-        }
-    };
 
     // ■編集のモード遷移の管理用のインスタンス(タップやホールド等の管理をします)
     function EditMode(){
@@ -1161,6 +1142,14 @@ function BlockManager(){
             $.each(block.valueInTbl,function(k,v){
                 v.blockObsv();
             });
+            var calcHitAreaRect = function(block,hitArea){
+                return {
+                    x:hitArea.offset().left- $(block.element).offset().left,
+                    y:hitArea.offset().top - $(block.element).offset().top,
+                    w:hitArea.width(),
+                    h:hitArea.height(),
+                };
+            };
             //
             if(block.in){
                 block.in.blockObsv();
@@ -1185,18 +1174,20 @@ function BlockManager(){
                         if(k!=0){
                             blkLocalPosX += cellXMargin;
                         }
-                        var valueln;
+                        var valueIn;
                         var dataName = $(elemCell).attr("id");
                         if(dataName)
                         {
                             valueIn = block.valueInTbl[dataName];
                             valueIn.blockLocalX( blkLocalPosX );
                             valueIn.blockLocalY( blkLocalPosY );
-                            $(".hitAreaValueIn#"+dataName,block.element).
-                            css(
+                            valueIn.hitArea
+                            //$(".hitAreaValueIn#"+dataName,block.element)
+                            .css(
                                  {left:blkLocalPosX,
                                   top :blkLocalPosY,}
                             );
+                            valueIn.hitAreaRect = calcHitAreaRect(block,valueIn.hitArea);
                         }
                         $(elemCell).css({left:blkLocalPosX});
                         var cellW = $(elemCell).outerWidth();
@@ -1232,6 +1223,7 @@ function BlockManager(){
                     //上辺の出力コネクタ用のマージンを加えます
                     scopeBlocksH += blkConnectorHalfMargin;
                     rowSizeH = Math.max( rowSizeH, scopeBlocksH );
+                    rowContent.scopeOut.hitAreaRect = calcHitAreaRect(block,rowContent.scopeOut.hitArea);
                 }
                 else if(rowContent.space){
                     rowSizeH = Math.max( rowSizeH, 1.0 / block.pix2em );
@@ -1253,6 +1245,33 @@ function BlockManager(){
             var blkSizeH = blkLocalPosY;
             block.blockHeight(blkSizeH);
             block.blockWidth (blkSizeW);
+
+
+            if(block.valueOut){
+                block.valueOut.hitAreaRect = calcHitAreaRect(block,block.valueOut.hitArea);
+            }
+            if(block.in){
+                block.in.hitAreaRect = calcHitAreaRect(block,block.in.hitArea);
+            }
+            $(".blockRow",element).each(function(rowIndex,elemR){
+                var rowContent = block.rowContents[rowIndex];
+                if(rowContent.expressions){
+                    $(".blockCell",elemR).each(function(k,elemCell){                        
+                        var dataName = $(elemCell).attr("id");
+                        if(dataName)
+                        {
+                            var valueIn = block.valueInTbl[dataName];
+                            valueIn.hitAreaRect = calcHitAreaRect(block,valueIn.hitArea);
+                        }
+                    });
+                }
+                else if(rowContent.scopeOut){
+                    rowContent.scopeOut.hitAreaRect = calcHitAreaRect(block,rowContent.scopeOut.hitArea);
+                }
+            });
+            if(block.out){
+                block.out.hitAreaRect = calcHitAreaRect(block,block.out.hitArea);
+            }
         }
     };
 
@@ -1906,6 +1925,7 @@ function BlockManager(){
         };
 
         // コリジョン判定
+        /*
         var checkHitDist = function(area0, area1){
             var offs0 = area0.offset();
             var offs1 = area1.offset();
@@ -1913,6 +1933,24 @@ function BlockManager(){
             var h0    = area0.height();
             var w1    = area1.width();
             var h1    = area1.height();
+            if(offs0.top < offs1.top + h1&&
+               offs1.top < offs0.top + h0&&
+               offs0.left < offs1.left + w1&&
+               offs1.left < offs0.left + w0)
+            {
+                var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
+                var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
+                return Math.sqrt(vx*vx + vy*vy);
+            }
+        };
+        */
+        var checkHitRectDist = function(block0, block1, rect0, rect1){
+            var offs0 = {left:block0.posX()+rect0.x, top:block0.posY()+rect0.y};
+            var offs1 = {left:block1.posX()+rect1.x, top:block1.posY()+rect1.y};
+            var w0    = rect0.w;
+            var h0    = rect0.h;
+            var w1    = rect1.w;
+            var h1    = rect1.h;
             if(offs0.top < offs1.top + h1&&
                offs1.top < offs0.top + h0&&
                offs0.left < offs1.left + w1&&
@@ -1964,7 +2002,8 @@ function BlockManager(){
                 if(tgtBlock == outBlock) return;
                 if(tgtBlock == valueBlock) return;
                 if(tgtBlock.in && outBlock && outBlock.out){
-                    dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                    //dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                    dist = checkHitRectDist(tgtBlock,outBlock,tgtBlock.in.hitAreaRect,outBlock.out.hitAreaRect);
                     if(dist && dist < nearDist){
                         nearDist = dist;
                         hitBlock = tgtBlock;
@@ -1975,7 +2014,11 @@ function BlockManager(){
                     }
                 }
                 if(tgtBlock.out && inBlock){
-                    dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                    //dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                    dist = checkHitRectDist(tgtBlock,
+                                            inBlock,
+                                            tgtBlock.out.hitAreaRect,
+                                            inBlock.in.hitAreaRect);
                     if(dist && dist < nearDist){
                         nearDist = dist;
                         hitBlock = tgtBlock;
@@ -1987,7 +2030,8 @@ function BlockManager(){
                 }
                 if(inBlock){
                     $.each(tgtBlock.scopeTbl,function(name,scope){
-                        dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                        //dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                        dist = checkHitRectDist(tgtBlock, inBlock, scope.scopeOut.hitAreaRect, inBlock.in.hitAreaRect);
                         if(dist && dist < nearDist){
                             nearDist = dist;
                             hitBlock = tgtBlock;
@@ -2000,7 +2044,8 @@ function BlockManager(){
                 }
                 if(valueBlock){
                     $.each(tgtBlock.valueInTbl,function(name,valueIn){
-                        dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                        //dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                        dist = checkHitRectDist(tgtBlock, valueBlock, valueIn.hitAreaRect, valueBlock.valueOut.hitAreaRect);
                         if(dist && dist < nearDist){
                             if(tgtBlock.valueInTbl[name].blockObsv())
                             {
@@ -2093,6 +2138,7 @@ function BlockManager(){
                 var self = this;
                 self.touchInfo=[];
                 self.start = function(e){
+                    console.log("ts");//@@
                     $.each(e.originalEvent.changedTouches,function(k,touch){
                         self.touchInfo[touch.identifier] = {
                             sx:touch.pageX,sy:touch.pageY,
@@ -2102,6 +2148,7 @@ function BlockManager(){
                     });
                 };
                 self.move = function(e){
+                    console.log("tm");//@@
                     $.each(self.touchInfo,function(k,info){
                         if(info){
                             info.dx=0;
@@ -2118,6 +2165,7 @@ function BlockManager(){
                     });
                 };
                 self.end = function(e){
+                    console.log("te");//@@
                     $.each(e.originalEvent.changedTouches,function(k,touch){
                         self.touchInfo[touch.identifier] = null;
                     });
@@ -2921,9 +2969,11 @@ $(function(){
             });
         };
         self.saveBlock = function(){
+            if(!localStorage)return;
             localStorage.setItem("working_saveData",JSON.stringify(self.toJSON()));
         };
         self.loadBlock = function(){
+            if(!localStorage)return;
             var saveData = JSON.parse(localStorage.getItem("working_saveData"));
             self.fromJSON(saveData);
         };
@@ -3014,7 +3064,10 @@ $(function(){
         self.ip000_000_XXX_000 = ko.observable(1);
         self.ip000_000_000_XXX = ko.observable(2);
 
-        var pepper_ip = JSON.parse(localStorage.getItem("pepper_ip"));
+        var pepper_ip;
+        if(localStorage){
+            pepper_ip = JSON.parse(localStorage.getItem("pepper_ip"));
+        }
         if(pepper_ip){
             self.ipXXX_000_000_000( pepper_ip.ip[0] );
             self.ip000_XXX_000_000( pepper_ip.ip[1] );
@@ -3028,13 +3081,16 @@ $(function(){
                     self.ip000_000_XXX_000(),
                     self.ip000_000_000_XXX(),],
             };
-            localStorage.setItem("pepper_ip",JSON.stringify(pepper_ip));
+            if(localStorage){
+                localStorage.setItem("pepper_ip",JSON.stringify(pepper_ip));
+            }
         }
         var updatePepperIp = function(){
             pepper_ip.ip[0] = self.ipXXX_000_000_000();
             pepper_ip.ip[1] = self.ip000_XXX_000_000();
             pepper_ip.ip[2] = self.ip000_000_XXX_000();
             pepper_ip.ip[3] = self.ip000_000_000_XXX();
+            if(!localStorage)return;
             localStorage.setItem("pepper_ip",JSON.stringify(pepper_ip));
         }
         self.ipXXX_000_000_000.subscribe(updatePepperIp);
