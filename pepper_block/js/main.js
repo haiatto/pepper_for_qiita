@@ -1025,7 +1025,7 @@ function BlockManager(){
         });
     };
 
-    self.moveStart = function(block,offsPosition){
+    self.moveStart = function(block,uiOffsPosition){
         block.clearIn();
         block.clearValueOut();
         // 動かすモノをつながっている順に後ろに付け替えます
@@ -1062,40 +1062,40 @@ function BlockManager(){
             zIndex+=1;
         });
     };
-    self.move = function(block,offsPosition){
+    self.move = function(block,scaledUiRelativePosition){
         var workSpace = self.findBlockWorkSpaceByBlock(block);
         var offsetX = 0;
         var offsetY = 0;
-        var posX = offsPosition.left;
-        var posY = offsPosition.top;
+        var posX = scaledUiRelativePosition.left;
+        var posY = scaledUiRelativePosition.top;
         if(workSpace){
-            posX = posX - $(workSpace.workAreaElement).offset().left;
-            posY = posY - $(workSpace.workAreaElement).offset().top;
-            offsetX = workSpace.offsetX();
-            offsetY = workSpace.offsetY();
+            //posX = posX - $(workSpace.workAreaElement).offset().left;
+            //posY = posY - $(workSpace.workAreaElement).offset().top;
+            posX = posX - workSpace.offsetX();
+            posY = posY - workSpace.offsetY();
         }
-        block.posX(posX - offsetX);
-        block.posY(posY - offsetY);
+        block.posX(posX);
+        block.posY(posY);
         self.updatePositionLayout(block);
         self.dropGuideUpdate(block);
     };
-    self.moveStop = function(block,offsPosition){
+    self.moveStop = function(block,scaledUiRelativePosition){
         var workSpace = self.findBlockWorkSpaceByBlock(block);
         var offsetX = 0;
         var offsetY = 0;
-        var posX = offsPosition.left;
-        var posY = offsPosition.top;
+        var posX = scaledUiRelativePosition.left;
+        var posY = scaledUiRelativePosition.top;
         if(workSpace){
-            posX = posX - $(workSpace.workAreaElement).offset().left;
-            posY = posY - $(workSpace.workAreaElement).offset().top;
-            offsetX = workSpace.offsetX();
-            offsetY = workSpace.offsetY();
+            //posX = posX - $(workSpace.workAreaElement).offset().left;
+            //posY = posY - $(workSpace.workAreaElement).offset().top;
+            posX = posX - workSpace.offsetX();
+            posY = posY - workSpace.offsetY();
         }
-        block.posX(posX - offsetX);
-        block.posY(posY - offsetY);
+        block.posX(posX);
+        block.posY(posY);
         self.updatePositionLayout(block);               
-        self.dropConnectUpdate(block,{x:offsPosition.left,
-                                      y:offsPosition.top });
+        self.dropConnectUpdate(block,{x:scaledUiRelativePosition.left,
+                                      y:scaledUiRelativePosition.top });
     };
 
     // ドロップする場所のガイドを更新します
@@ -1324,16 +1324,19 @@ function BlockManager(){
                 //});
 
                 setTimeout(function(){
-                    // curEditMode を割り当てます
-                    $(editableElm).addClass("curEditMode");
-                    // 編集対象へフォーカスをあてます
-                    editableElm[0].focus();
-                    // 最後にカーソルを持っていきます
-                    setEndOfContenteditable_(editableElm[0]);
-                    // イマイチ環境依存してうまく動かないのでカット
-                    //$(editableElm[0]).blur(function(){
-                    //    clearAllEditMode_();
-                    //});
+                    if(editableElm)
+                    {
+                        // curEditMode を割り当てます
+                        $(editableElm).addClass("curEditMode");
+                        // 編集対象へフォーカスをあてます
+                        editableElm[0].focus();
+                        // 最後にカーソルを持っていきます
+                        setEndOfContenteditable_(editableElm[0]);
+                        // イマイチ環境依存してうまく動かないのでカット
+                        //$(editableElm[0]).blur(function(){
+                        //    clearAllEditMode_();
+                        //});
+                    }
                 },300)
             }
         };
@@ -1475,8 +1478,6 @@ function BlockManager(){
     // ブロックに対するタッチとマウス関連の操作をセットアップします
     self.setupBlockTouchAndMouseAction = function(block)
     {
-        var fromBlkWs = null;
-        var droppedWs = null;
         var cloneBlock = null;
         var blockElem  = $(block.element);
         var ignoreMouseDown = false;
@@ -1561,62 +1562,8 @@ function BlockManager(){
               self.editMode.lazyHoldModeCancel();
             },
         });
-        /*
-           .doubletap(function(){
-              // ■ブロックの実行
-              self.editMode.lazyEditModeCancel();
-              block.deferred();
-          },null,300);
-        */
+        var dragInfo = null;
         blockElem
-/*
-          .doubletap(function(){
-              // ■ブロックの実行
-              self.editMode.lazyEditModeCancel();
-              block.deferred();
-          },null,300)
-          .mousedown(function(ev) {
-              if(ignoreMouseDown)return;
-              if(!checkTarget(ev.target)){
-                  return;   
-              }
-              if(block != self.editMode.getTargetBlock()){
-                  self.editMode.lazyEditModeCancel();
-              }
-              if(self.editMode.isNowLazyEditModeStartWait()){
-                  //遅延開始待ち中に再度ダウンを検知したら解除します(ダブルタップなどだと思われるので)
-                  self.editMode.lazyEditModeCancel();
-                  self.editMode.doubleTap();
-              }
-              else{
-                  // タップ後の遅延開始でブロック編集を開始します
-                  var blockEditableElemEdit = new BlockEditableElemEdit(block,ev.target);
-                  self.editMode.setTargetBlock(block);
-                  self.editMode.lazyEditModeStart(
-                      blockEditableElemEdit.startEdit,
-                      blockEditableElemEdit.endEdit
-                  );
-                  // ホールドで作業場間のドラッグ操作を開始します
-                  blockElem.addClass("holdModeStart");
-                  self.editMode.lazyHoldModeStart(function(){
-                      isFloatDragMode = true;
-                      ignoreMouseDown = true;
-                      blockElem.trigger(ev);
-                      ignoreMouseDown = false;
-                      blockElem.removeClass("holdModeStart");
-                      blockElem.addClass("holdMode"); 
-                  },function(){
-                      blockElem.removeClass("holdModeStart");
-                      blockElem.removeClass("holdMode");
-                  });
-              }
-              return false;
-          })
-          .mouseup(function(ev) {
-              //アップを検知したらホールドモードはキャンセルされます
-              self.editMode.lazyHoldModeCancel();
-          })
-*/
           .draggable({
               scroll:false,
               cancel:".noDrag,input,textarea,button,select,option",
@@ -1650,10 +1597,17 @@ function BlockManager(){
                           return this;
                       }
                   }
-
               },
               start:function(event, ui){
                   self.editMode.lazyEditModeCancel();
+
+                  dragInfo = {
+                      click:{
+                          x:event.clientX, 
+                          y:event.clientY
+                      },
+                      blockWs:self.findBlockWorkSpaceByBlock(cloneBlock||block),
+                  };
 
                   self.moveStart(cloneBlock||block, ui.offset);
                   
@@ -1686,12 +1640,22 @@ function BlockManager(){
                   setDragGuide(cloneBlock||block);
               },
               drag:function(event, ui){
-                  self.move(cloneBlock||block, ui.offset);
+                  if(dragInfo)
+                  {
+                      // This is the parameter for scale()
+                      var zoom = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
+                      var original = ui.originalPosition;
+                      // jQuery will simply use the same object we alter here
+                      ui.position = {
+                          left: (event.clientX - dragInfo.click.x + original.left) / zoom,
+                          top:  (event.clientY - dragInfo.click.y + original.top ) / zoom
+                      };
+                  }
+                  self.move(cloneBlock||block, ui.position);
               },
               stop:function(event, ui){
                   clearDragGuide();
-
-                  self.moveStop(cloneBlock||block, ui.offset);
+                  self.moveStop(cloneBlock||block, ui.position);
                   if(cloneBlock){
                       //self.blockManager.removeBlock(cloneBlock);
                       cloneBlock = null;
@@ -1922,11 +1886,14 @@ function BlockManager(){
                 var findBlockTop = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
                 var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
                 self.addBlock( dropBlockTop );
-                var areaOffset = $(self.workAreaElement).offset();
-                var scrollTop  = -self.offsetY();//$(self.workAreaElement).scrollTop();
-                var scrollLeft = -self.offsetX();//$(self.workAreaElement).scrollLeft();
-                dropBlockTop.posX(ui.offset.left - areaOffset.left + scrollLeft);
-                dropBlockTop.posY(ui.offset.top  - areaOffset.top  + scrollTop);
+                var areaElmOffset = $(self.workAreaElement).offset();
+                var dropX = (ui.offset.left - areaElmOffset.left);
+                var dropY = (ui.offset.top  - areaElmOffset.top );
+                dropX = dropX * 1/self.scale() - self.offsetX();
+                dropY = dropY * 1/self.scale() - self.offsetY();
+
+                dropBlockTop.posX(dropX);
+                dropBlockTop.posY(dropY);
                 self.blockManager.updatePositionLayout( dropBlockTop );
                 self.blockManager.dropConnectUpdate( dropBlockTop );
             };

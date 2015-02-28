@@ -370,6 +370,8 @@
                                                          $data.scale()+')',
                                       width:(100.0/$data.scale())+'%',
                                       height:(100.0/$data.scale())+'%',
+                                      backgroundPosition:$data.offsetX()+'px '+
+                                                         $data.offsetY()+'px',
                                      },">
                   <div class="testPt"></div>
                   <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
