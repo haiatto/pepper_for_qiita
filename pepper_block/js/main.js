@@ -2136,19 +2136,27 @@ function BlockManager(){
             var lastTouch= [];
             var TouchMove = function(){
                 var self = this;
-                self.touchInfo=[];
+                self.touchInfo={}
+                self.touchInfoFing=[];
                 self.start = function(e){
-                    console.log("ts");//@@
                     $.each(e.originalEvent.changedTouches,function(k,touch){
+                        var fingId = 0;
+                        if(self.touchInfo[touch.identifier]){
+                            fingId = self.touchInfo[touch.identifier].fingId;
+                        }
+                        else{
+                            for(;self.touchInfoFing[fingId];fingId++){}
+                        }
+                        self.touchInfoFing[fingId] = 
                         self.touchInfo[touch.identifier] = {
                             sx:touch.pageX,sy:touch.pageY,
                             lx:touch.pageX,ly:touch.pageY,
                             dx:0,dy:0,
+                            fingId:fingId,
                         };
                     });
                 };
                 self.move = function(e){
-                    console.log("tm");//@@
                     $.each(self.touchInfo,function(k,info){
                         if(info){
                             info.dx=0;
@@ -2165,25 +2173,38 @@ function BlockManager(){
                     });
                 };
                 self.end = function(e){
-                    console.log("te");//@@
                     $.each(e.originalEvent.changedTouches,function(k,touch){
-                        self.touchInfo[touch.identifier] = null;
+                        var info = self.touchInfo[touch.identifier];
+                        if(info){
+                            self.touchInfoFing[info.fingId]  = null; 
+                            self.touchInfo[touch.identifier] = null;
+                        }
                     });
                 };
             };
             var touchMove = new TouchMove();            
             var TouchST = function(){
                 var self = this;
-                var touchInfo=[];
+                var touchInfo={};
+                var touchInfoFing=[];
                 self.st = null;
                 self.start = function(e){
                     $.each(e.originalEvent.changedTouches,function(k,touch){
+                        var fingId = 0;
+                        if(touchInfo[touch.identifier]){
+                            fingId = touchInfo[touch.identifier].fingId;
+                        }
+                        else{
+                            for(;touchInfoFing[fingId];fingId++){}
+                        }
+                        touchInfoFing[fingId] = 
                         touchInfo[touch.identifier] = {
                             sx:touch.pageX,
                             sy:touch.pageY,
                             lx:touch.pageX,
                             ly:touch.pageY,
                             dx:0,dy:0,
+                            fingId:fingId,
                         };
                     });
                 };
@@ -2195,8 +2216,8 @@ function BlockManager(){
                         }
                     });
                     var calcDist = function(dx,dy){return Math.sqrt(dx*dx+dy*dy);}
-                    var t0 = touchInfo[0];
-                    var t1 = touchInfo[1];
+                    var t0 = touchInfoFing[0];
+                    var t1 = touchInfoFing[1];
                     if(t0&&t1){
                         if(!self.st){
                             self.st = {
@@ -2235,10 +2256,14 @@ function BlockManager(){
                 };
                 self.end = function(e){
                     $.each(e.originalEvent.changedTouches,function(k,touch){
-                        touchInfo[touch.identifier] = null;
+                        var info = touchInfo[touch.identifier];
+                        if(info){
+                            touchInfoFing[info.fingId]  = null; 
+                            touchInfo[touch.identifier] = null;
+                        }
                     });
-                    var t0 = touchInfo[0];
-                    var t1 = touchInfo[1];
+                    var t0 = touchInfoFing[0];
+                    var t1 = touchInfoFing[1];
                     if(!t0&&!t1){
                         self.st = null;
                     }
@@ -2287,10 +2312,10 @@ function BlockManager(){
                             if(isMouseEvent(e)){
                                 lastPos = {x:e.pageX,y:e.posY};       
                             }
-                            else if(touchMove.touchInfo[0]){
+                            else if(touchMove.touchInfoFing[0]){
                                 lastPos = {
-                                    x:touchMove.touchInfo[0].lx,
-                                    y:touchMove.touchInfo[0].ly
+                                    x:touchMove.touchInfoFing[0].lx,
+                                    y:touchMove.touchInfoFing[0].ly
                                 };
                             }
                             lastTime = +new Date();
@@ -2321,10 +2346,10 @@ function BlockManager(){
                     if(isMouseEvent(e)){
                         nowPos = {x:e.pageX,y:e.posY};       
                     }
-                    else if(touchMove.touchInfo[0]){
+                    else if(touchMove.touchInfoFing[0]){
                         nowPos = {
-                            x:touchMove.touchInfo[0].lx,
-                            y:touchMove.touchInfo[0].ly
+                            x:touchMove.touchInfoFing[0].lx,
+                            y:touchMove.touchInfoFing[0].ly
                         };
                     }
                     if(touchSt.st){
@@ -2382,12 +2407,12 @@ function BlockManager(){
                         return;
                     }
                     event.preventDefault();
-                    if(!nowControl){
-                        return;
-                    }
                     if(e.originalEvent.changedTouches){
                         touchMove.end(e);
                         touchSt.end(e);
+                    }
+                    if(!nowControl){
+                        return;
                     }
                     if(!touchMove.touchInfo[0] && !touchSt.st){
                         nowControl = false;
