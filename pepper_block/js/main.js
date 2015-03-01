@@ -220,10 +220,9 @@ function Block(blockManager, blockTemplate, callback) {
 
     // パフォーマンスのために反映を遅延させます
     //(反映の遅延のレスポンスに影響は殆どなく寧ろ処理が軽くなって反応あがる効果あるみたいです)
-//    TODO:ドロップ時のヒット判定の位置をUI要素から直に得ていたせいでうまくいかなかったのでひとまずカット
-//         ドロップ時に値を'読め'ば即反映されるはずなので後で試したい。(仕組み的に受動的な通知が遅延するだけとのこと)
-    self.dispPosX.extend({ rateLimit: 1 });
-    self.dispPosY.extend({ rateLimit: 1 });
+//    TODO:パフォーマンス計測等のため一旦OFFあとでもどす
+//    self.dispPosX.extend({ rateLimit: 1 });
+//    self.dispPosY.extend({ rateLimit: 1 });
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
@@ -659,6 +658,80 @@ function Block(blockManager, blockTemplate, callback) {
         return recv(self);
     };
 }
+
+
+
+// タッチ移動簡易管理
+var TouchMove = function(opt){
+    var self = this;
+    self.opt = opt||{
+        //スクリーン座標を使うか？
+        // 廃止！iosとchromeとか扱いが機種依存しまくる値だったorz
+        ////useScreen:false,
+        //自身が動く場合用オプション。移動値を積算してオフセットとして引いた値にします
+        useSelfMove:false,
+    };
+    self.touchInfo={}
+    self.touchInfoFing=[];
+    self.start = function(e){
+        $.each(e.originalEvent.changedTouches,function(k,touch){
+            var fingId = 0;
+            if(self.touchInfo[touch.identifier]){
+                fingId = self.touchInfo[touch.identifier].fingId;
+            }
+            else{
+                for(;self.touchInfoFing[fingId];fingId++){}
+            }
+            self.touchInfoFing[fingId] = 
+            self.touchInfo[touch.identifier] = {
+                sx: touch.pageX,
+                sy: touch.pageY,
+                lx: touch.pageX,
+                ly: touch.pageY,
+                dx:0,dy:0,
+                fingId:fingId,
+                touchId:touch.identifier,
+                isFirst:true,
+                sumDX:0,
+                sumDY:0,
+            };
+        });
+    };
+    self.move = function(e){
+        $.each(self.touchInfo,function(k,info){
+            if(info){
+                info.dx=0;
+                info.dy=0;
+                info.isFirst = false;
+            }
+        });
+        $.each(e.originalEvent.changedTouches,function(k,touch){
+            var info = self.touchInfo[touch.identifier];
+            if(!info)return;
+            var x = touch.pageX;
+            var y = touch.pageY;
+            if(self.opt.useSelfMove){
+                x = x + info.sumDX;
+                y = y + info.sumDY;
+            }
+            info.dx = x - info.lx;
+            info.dy = y - info.ly;
+            info.lx = x;
+            info.ly = y;
+            info.sumDX = info.sumDX + info.dx;
+            info.sumDY = info.sumDY + info.dy;
+        });
+    };
+    self.end = function(e){
+        $.each(e.originalEvent.changedTouches,function(k,touch){
+            var info = self.touchInfo[touch.identifier];
+            if(info){
+                self.touchInfoFing[info.fingId]  = null; 
+                self.touchInfo[touch.identifier] = null;
+            }
+        });
+    };
+};
 
 
 // 設計メモ
@@ -2134,6 +2207,7 @@ function BlockManager(){
             var lastTime = null;
             var timeId   = null;
             var lastTouch= [];
+/*
             var TouchMove = function(){
                 var self = this;
                 self.touchInfo={}
@@ -2182,6 +2256,7 @@ function BlockManager(){
                     });
                 };
             };
+*/
             var touchMove = new TouchMove();            
             var TouchST = function(){
                 var self = this;
@@ -2443,7 +2518,7 @@ function BlockManager(){
                                 clearInterval(timeId);
                                 timeId = null;
                             }
-                        });
+                        },10);
                     }
                 },
             });
@@ -2705,6 +2780,112 @@ function BlockManager(){
             valueAccessor();
         }
     };
+
+//慣性などの加速を管理するもの
+var AccelMove = function(callback,decSpeed){
+    var self = this;
+    var values      = null;
+    var speedValues = null;
+    var timerId     = null;
+    var lastTime    = null;
+    var decSpeedFunc = decSpeed||function(speed){
+        var nextSpeed = speed - 0.1;
+        if(Math.abs(nextSpeed)<0.1){
+           nextSpeed = 0;
+        }
+        return nextSpeed;
+    };
+    self.moveInfo = {values:[],deltaValues:[]};
+    self.clear = function(){
+        if(timerId){
+            clearInterval(timerId);
+            timerId=null;
+        }
+        values = null;
+    };
+    self.isStart = function(){
+        return values!=null;
+    };
+    self.start = function(){
+        if(timerId){
+            clearInterval(timerId);
+            timerId=null;
+        }
+        values = Array.prototype.slice.call(arguments);
+        speedValues = [];
+        for(var ii=0; ii < values.length ; ii++){
+            speedValues[ii] = 0;
+        }
+        var moveInfo = {values:[],deltaValues:[]};
+        for(var ii=0; ii < values.length ; ii++){
+            moveInfo.values     .push(values[ii]);
+            moveInfo.deltaValues.push(0);
+        }
+        self.moveInfo = moveInfo;
+        if(callback){
+            callback(moveInfo);
+        }
+        lastTime = +new Date();
+    };
+    self.move = function(){
+        if(!values) return;
+        var nowTime = +new Date();
+        var newValues = Array.prototype.slice.call(arguments);
+        var deltaTime = nowTime - lastTime;
+        if(deltaTime>0) {
+            var moveInfo = {values:[],deltaValues:[]};
+            for(var ii=0; ii < values.length ; ii++){
+                var delta = newValues[ii] - values[ii];
+                values[ii] = newValues[ii];
+                var oldSpeed = speedValues[ii];
+                var speed    = delta / deltaTime;
+                // chromeでは最後に数フレ、ゼロが来たりするようなので
+                // 合成してみる。加速度の変化をダンパする(変化に鈍感に)とかの方がよいのかも？
+                speedValues[ii] = speed * 0.2 + oldSpeed * 0.8;
+                moveInfo.values     .push(values[ii]);
+                moveInfo.deltaValues.push(delta);
+            }
+            self.moveInfo = moveInfo;
+            if(callback){
+                callback(moveInfo);
+            }
+            lastTime = nowTime;
+        }
+    };
+    self.end = function(){
+        if(!values) return;
+        var accLastTime = +new Date();
+        timerId = setInterval(function(){
+            var accNowTime = +new Date();
+            var accDeltaTime = accNowTime - accLastTime;
+            accLastTime = accNowTime;
+
+            var endCheck = true;
+            var moveInfo = {values:[],deltaValues:[]};
+            for(var ii=0; ii < values.length ; ii++)
+            {
+                var speed = speedValues[ii];
+                var diff  = speed * accDeltaTime;
+                values[ii] = values[ii] + diff;
+                //減速
+                speedValues[ii] = decSpeedFunc(speed,accDeltaTime);
+                if(!speedValues[ii]) speedValues[ii] = 0;
+                if(Math.abs(speedValues[ii]) > 0){
+                    endCheck = false;                    
+                }
+                moveInfo.values     .push(values[ii]);
+                moveInfo.deltaValues.push(diff);
+            }
+            if(callback){
+                callback(moveInfo);
+            }
+            if(endCheck){
+                self.clear();
+            }
+        },15);
+    };
+};
+
     ko.bindingHandlers.guide = {
         init: function(guideElement, valueAccessor, allBindings, viewModel, bindingContext) {
             var boxElem    = $(guideElement).parents(".blockBox");
@@ -2729,44 +2910,78 @@ function BlockManager(){
             var guidX=0;
             var guidY=0;
             var accVY=0;
-            var lastGuide2Y=null;
+            var isLastSizeMove=null;
+            var touchMove = new TouchMove({useSelfMove:true});
+            var accelMove = new AccelMove(
+                function(moveInfo){
+                    $("body").scrollTop($("body").scrollTop()-moveInfo.deltaValues[0]);
+                },
+                function(speed,deltaTime){
+                    if(speed!=0)
+                    {
+                        var decSpeed  = 0.5 / deltaTime;
+                        var nextSpeed = speed - ((speed>0)?decSpeed:-decSpeed);
+                        if((nextSpeed>0) != (speed > 0)||
+                            Math.abs(nextSpeed)<0.01)
+                        {
+                           nextSpeed = 0;
+                        }
+                        //console.log("s:"+speed+" n:"+nextSpeed+" d:"+decSpeed);
+                    }
+                    return nextSpeed;
+                }
+            );
             guidElem.on({
                 'touchstart': function (event) {
-                    event.preventDefault();
-                    var touch = event.originalEvent.touches[0];
-                    guidX = touch.screenX;
-                    guidY = touch.screenY;
+                    event.preventDefault();                    
+                    touchMove.start(event);
+                    var touchInfo = touchMove.touchInfoFing[0];
                     $(this).css({
                         opacity:1.0,
                     });
+                    if(touchInfo&&touchInfo.isFirst){
+                        accelMove.start(touchInfo.ly);
+                    }
                     return false;
                 },
                 'touchmove': function (event) {
                     event.preventDefault();
-                    var touch = event.originalEvent.touches[0];
-                    var moveX = touch.screenX - guidX;
-                    var moveY = touch.screenY - guidY;
-                    guidX = touch.screenX;
-                    guidY = touch.screenY;
-                    
-                    var touch2 = event.originalEvent.touches[1];
-                    if(touch2){
-                        var nowGuide2Y = $(touch2.target).offset().top;
-                        if(lastGuide2Y){
-                            var moveY2 = lastGuide2Y - nowGuide2Y;
-                            console.log(moveY);
-                            boxElem.height(boxElem.height()+moveY);
-                            moveY = 0;//-moveY/2;
-                        }
-                        lastGuide2Y = nowGuide2Y;
-                        guidLayoutUpdate();
-                        accVY = 0;
-                    }else{
-                        lastGuide2Y = null;
-                        accVY = accVY * 0.8 + moveY * 0.2;
-                    }
-                    $("#page").scrollTop($("#page").scrollTop()-moveY);
+                    touchMove.move(event);
 
+                    isLastSizeMove = false;
+                    var touchInfo  = touchMove.touchInfoFing[0];
+                    $.each(event.originalEvent.touches,function(k,touch){
+                        if(touchInfo.touchId != touch.identifier){
+                            // 複数のタッチを検知したら拡縮モードにします
+                            isLastSizeMove = true;
+                        }
+                    });
+                    if(isLastSizeMove){
+                        if(touchMove.opt.useSelfMove){
+                            touchMove.opt.useSelfMove = false;
+                            touchMove.start(event);
+                        }
+                        else{
+                            var newH = boxElem.height()+touchInfo.dy;
+                            if(newH < 50){
+                                newH = 50;
+                            }
+                            boxElem.height(newH);
+                            accelMove.clear();
+                            guidLayoutUpdate();
+                        }
+                    }
+                    else{
+                        if(!touchMove.opt.useSelfMove){
+                            touchMove.opt.useSelfMove = true;
+                            touchMove.start(event);
+                        }else{
+                            if(!accelMove.isStart()){
+                                accelMove.start(touchInfo.ly);
+                            }
+                            accelMove.move(touchInfo.ly);
+                        }
+                    }
                     return false;
                 },
                 'touchend': function (event) {
@@ -2774,15 +2989,13 @@ function BlockManager(){
                     $(this).css({
                         opacity:"0.2",
                     });
-                    if(!lastGuide2Y&&accVY!=0){
-                        var decAccVY = accVY/50;
-                        var timeId = setInterval(function(){
-                            accVY = accVY - decAccVY ;
-                            $("#page").scrollTop($("#page").scrollTop()-accVY);
-                            if(Math.abs(accVY)<Math.abs(decAccVY*2))clearInterval(timeId);
-                        });
+                    if(!isLastSizeMove){
+                        //慣性スクロール開始
+                        accelMove.end();
+                    }else{
+                        accelMove.clear();
                     }
-                    lastGuide2Y = null;
+                    touchMove.end(event);
                     return false;
                 },
             });

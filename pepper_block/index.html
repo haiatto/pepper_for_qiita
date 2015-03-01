@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- エラー出た…  
   <script type="text/javascript" src="libs/firebug-lite.js"></script>
+-->
+<!-- 
   <script type="text/javascript" src="https://getfirebug.com/firebug-lite.js"></script>
 -->
 
@@ -371,8 +373,9 @@
                <div class="box-workspace graphPaper" 
                     data-bind="blockWorkSpaceSetup: $data, 
                                attr:{id:$data.id},
-                               style:{transform:'scale('+$data.scale()+','+
-                                                         $data.scale()+')',
+                               style:{'-webkit-transform':'scale('+$data.scale()+','+
+                                                                   $data.scale()+')'+
+                                                          '',
                                       width:(100.0/$data.scale())+'%',
                                       height:(100.0/$data.scale())+'%',
                                       backgroundPosition:$data.offsetX()+'px '+

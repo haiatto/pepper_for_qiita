@@ -56,10 +56,10 @@
 }
 
 body{
-  overflow:hidden;
+  /* overflow: scroll; */
 }
 .page{
-  height:100%;
+  /* height:100%;*/
 } 
 
 .ipAddrInput
@@ -352,10 +352,24 @@ body{
   width: 2em;
   border-radius: 0.4em;
 }
+.box-scroll-guide:after{
+  content:"";
+  display:block;
+  position:absolute;
+  top:-0.5em;
+  width: 0em;
+  height:0em;
+  background:#transparent;
+  border-style:solid;
+  border-color:transparent;
+  border-bottom-color:red;
+  border-width:1em;
+}
 .box-workspace{
   width: 100%;
   height: 100%;
   /* overflow: hidden; */
+  -webkit-transform-origin: 0px 0px;
   transform-origin: 0px 0px;
   /* background: mediumvioletred; */
   /* opacity: 0.1; */
