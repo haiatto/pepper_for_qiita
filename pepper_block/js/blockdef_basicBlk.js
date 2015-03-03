@@ -577,6 +577,77 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+
+    // ぼくの領域(ゾーン)に何か居る（エンゲージメントゾーン）ブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"engagentZone@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["bool"],
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'ぼくの'},
+                  {options:{default:'ゾーン全体',
+                            list:[{text:"ゾーン１",value:"1"},
+                                  {text:"ゾーン２",value:"2"},
+                                  {text:"ゾーン３",value:"3"},
+                                 ]}, 
+                   dataName:'zone',
+                  },
+                  {label:'に'},
+                  {options:{default:'うごくもの',
+                            list:[{text:"うごくもの",value:"movement"},
+                                  {text:"ひと",value:"person"},
+                                 ]}, 
+                   dataName:'target',
+                  },
+                  {label:'が　いたら'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeTbl){
+          var dfd = $.Deferred();
+          var onFail = function(e) {
+              console.error('fail:' + e);};
+          var onFailPass = function(e) {
+              console.log('fail:' + e); 
+              return $.Deferred().resolve();};
+          var zone   = valueDataTbl["zone"]();
+          var target = valueDataTbl["target"]();
+          if(ctx.qims){
+              $.when( ctx.qims.service("ALMemory")
+              )
+              .then(function(alMemory){
+                  var keyTbl={
+                      "person":{
+                          "1":"EngagementZones/PeopleInZone1",
+                          "2":"EngagementZones/PeopleInZone2",
+                          "3":"EngagementZones/PeopleInZone3",
+                      },
+                      "movement":{
+                          "1":"EngagementZones/LastMovementsInZone1",
+                          "2":"EngagementZones/LastMovementsInZone2",
+                          "3":"EngagementZones/LastMovementsInZone3",
+                      },
+                  };
+                  alMemory.getData(keyTbl[target][zone]).then(function(v){
+                      dfd.resolve(v.length>0);
+                  }, onFail);
+              }, onFail);
+          }
+          else{
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
+
+
     // 素材リスト生成をします
     var materialBoxWs;
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","かいわ");
@@ -605,5 +676,6 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("eq@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("sonarSimple@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("nowTime@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZone@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 });

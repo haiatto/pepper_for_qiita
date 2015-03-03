@@ -3137,6 +3137,94 @@ $(function(){
     function MyModel() {
         var self = this;
 
+        //■ ブロック管理を作成 ■
+        self.blockManager = new BlockManager();
+
+        //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
+        var makeExecContext = function()
+        {
+            var exeContext = {};
+            // バージョン
+            exeContext.contextVersion = "0.01";
+
+            // 最後に認識した単語データ
+            exeContext.lastRecoData   = {rawData:null,};
+
+            // qiMessaging経由のインスタンス   
+            exeContext.setupExecContextFromQim = function(qims)
+            {
+                // 初期化とsubscribeが必要なモノの起動を行います
+                // (まだ理解しきれてないけどsubscibeしておけばALEngagementZonesなど
+                //  とりあえず色々動くみたいなのでやっておく…名前付きでやる割にはグローバルに影響してるのが良く理解できてない部分…
+                //  さらにあらゆるものがグローバルのようなので値の初期化もなるべく最初にやっておくことに
+                //  (多数起動で初期化されかねないけど変えたい人は直前に変えるブロックを配置するべきという概念で
+                //   やるべきっぽい気がする…寧ろ定期的に初期化するべきな予感…サンドボックスとかあるのだろうか？)
+                exeContext.qims      = qims;
+                exeContext.alIns     = {};
+                exeContext.cameraIns = null;
+                exeContext.qims.service("ALTextToSpeech").done(function(ins){
+                  exeContext.alIns.alTextToSpeech = ins;
+                });
+                exeContext.qims.service("ALAudioDevice").done(function(ins){
+                  exeContext.alIns.alAudioDevice = ins;
+                });
+                exeContext.qims.service("ALMotion").done(function(ins){
+                  exeContext.alIns.alMotion = ins;
+                });
+                exeContext.qims.service("ALRobotPosture").done(function(ins){
+                  exeContext.alIns.alRobotPosture = ins;
+                });
+                exeContext.qims.service("ALVideoDevice").done(function(ins){
+                  exeContext.alIns.alVideoDevice = ins;
+                  exeContext.pepperCameraIns = new PepperCamera(ins);
+                });
+                exeContext.qims.service('ALMemory').then(function(ins){
+                  exeContext.alIns.alMemory = ins;
+                });
+                exeContext.qims.service('ALPeoplePerception').then(function(ins){
+                  exeContext.alIns.alPeoplePerception = ins;
+                  exeContext.alIns.alPeoplePerception.subscribe("PepperBlock");
+                });
+                exeContext.qims.service('ALMovementDetection').then(function(ins){
+                  exeContext.alIns.alMovementDetection = ins;
+                  exeContext.alIns.alMovementDetection.subscribe("PepperBlock");
+                });
+                exeContext.qims.service('ALEngagementZones').then(function(ins){
+                  exeContext.alIns.alEngagementZones = ins;
+                  exeContext.alIns.alEngagementZones.subscribe("PepperBlock");
+
+                  exeContext.alIns.alEngagementZones.setFirstLimitDistance(1.5);
+                  exeContext.alIns.alEngagementZones.setSecondLimitDistance(2.5);
+                  exeContext.alIns.alEngagementZones.setLimitAngle(90);
+                });
+                exeContext.qims.service('ALVisualSpaceHistory').then(function(ins){
+                  exeContext.alIns.alVisualSpaceHistory = ins;
+                  exeContext.alIns.alVisualSpaceHistory.subscribe("PepperBlock");
+                });
+
+            };
+
+            //■便利そうな補助関数など
+            exeContext.onFail = function(e) {
+                //dfd向けエラー関数
+                console.error('fail:' + e);
+            };
+            exeContext.onFailPass = function(e) {
+                //dfd向けエラー関数 スルー付
+                //MEMO: 
+                // チェイン時のおそらくお望みの動作は、
+                //  処理A.then(処理B,fail).then(null,onFailPass)
+                // かも。thenの仕様は処理Aの結果を分岐するので、処理Bのエラーをスルーする際自分は勘違いしたことあり。
+                console.log('fail:' + e); 
+                return $.Deferred().resolve();
+            };
+
+            return exeContext;
+        }
+        self.blockManager.execContext = makeExecContext();
+
+
+
         //■ URLパラメータより ■
         if(getUrlParameter("lunchPepper")){
             self.lunchPepper = true;
@@ -3248,64 +3336,6 @@ $(function(){
             );
         };
 
-        //■ ブロック管理を作成 ■
-        self.blockManager = new BlockManager();
-
-        //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
-        var makeExecContext = function()
-        {
-            var exeContext = {};
-            // バージョン
-            exeContext.contextVersion = "0.01";
-
-            // 最後に認識した単語データ
-            exeContext.lastRecoData   = {rawData:null,};
-
-            // qiMessaging経由のインスタンス   
-            exeContext.setupExecContextFromQim = function(qims)
-            {
-                exeContext.qims      = qims;
-                exeContext.alIns     = {};
-                exeContext.cameraIns = null;
-                exeContext.qims.service("ALTextToSpeech").done(function(ins){
-                  exeContext.alIns.alTextToSpeech = ins;
-                });
-                exeContext.qims.service("ALAudioDevice").done(function(ins){
-                  exeContext.alIns.alAudioDevice = ins;
-                });
-                exeContext.qims.service("ALMotion").done(function(ins){
-                  exeContext.alIns.alMotion = ins;
-                });
-                exeContext.qims.service("ALRobotPosture").done(function(ins){
-                  exeContext.alIns.alRobotPosture = ins;
-                });
-                exeContext.qims.service("ALVideoDevice").done(function(ins){
-                  exeContext.alIns.alVideoDevice = ins;
-                  exeContext.pepperCameraIns = new PepperCamera(ins);
-                });
-                exeContext.qims.service('ALMemory').then(function(ins){
-                  exeContext.alIns.alMemory = ins;
-                });
-            };
-
-            //■便利そうな補助関数など
-            exeContext.onFail = function(e) {
-                //dfd向けエラー関数
-                console.error('fail:' + e);
-            };
-            exeContext.onFailPass = function(e) {
-                //dfd向けエラー関数 スルー付
-                //MEMO: 
-                // チェイン時のおそらくお望みの動作は、
-                //  処理A.then(処理B,fail).then(null,onFailPass)
-                // かも。thenの仕様は処理Aの結果を分岐するので、処理Bのエラーをスルーする際自分は勘違いしたことあり。
-                console.log('fail:' + e); 
-                return $.Deferred().resolve();
-            };
-
-            return exeContext;
-        }
-        self.blockManager.execContext = makeExecContext();
 
 
         // ■ 接続処理 ■
@@ -3350,7 +3380,7 @@ $(function(){
         self.ip000_000_XXX_000.subscribe(updatePepperIp);
         self.ip000_000_000_XXX.subscribe(updatePepperIp);
 
-        // 接続部分
+        // ■ 接続部分
         self.nowState = ko.observable("未接続");
         self.connect = function() 
         {
