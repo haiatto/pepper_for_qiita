@@ -1602,11 +1602,17 @@ function BlockManager(){
         var lastTime = null;
         blockElem.on({
            'touchstart mousedown': function (e) {
-              //e.preventDefault();
+              if(["BUTTON","SELECT",
+                  "OPTION"].indexOf($(e.target).prop("tagName"))>=0)
+              {
+                 return ;
+              }
+              e.preventDefault();
               if(e.originalEvent.fromTouch){
                   //タッチをマウスでシミュレーション時のイベントは無視します
                   return;
               }
+
               if(ignoreMouseDown)return;
               if(block != self.editMode.getTargetBlock()){
                   self.editMode.lazyEditModeCancel();
@@ -1660,6 +1666,11 @@ function BlockManager(){
               }
             },
             'touchend mouseup': function (e) {
+              if(["BUTTON","SELECT",
+                  "OPTION"].indexOf($(e.target).prop("tagName"))>=0)
+              {
+                 return ;
+              }
               if(e.originalEvent.fromTouch){
                   //タッチをマウスでシミュレーション時のイベントは無視します
                   return;
@@ -1796,11 +1807,22 @@ function BlockManager(){
           });
           //jqueryUIのドラッグのみタッチに限定対応させます
           //※幾つかライブラリ使ってみたけど環境依存する色々な挙動が挟まる事が多数あったので
+          var checkIgnoreEmuTarget_ = function(e){
+              if(["BUTTON",
+                  "SELECT",
+                  "OPTION"].indexOf($(e.target).prop("tagName"))>=0)
+              {
+                 return true;
+              }
+          };
           var myDraggable = blockElem;
           var widget = myDraggable.data('ui-draggable');
           var clickEvent = null;
           myDraggable.on({
           'touchstart':function(e){
+              if ( checkIgnoreEmuTarget_(e) ){
+                  return;
+              }
               var event = e.originalEvent;
               var touches = event.changedTouches,
                   first = touches[0];
@@ -1812,6 +1834,9 @@ function BlockManager(){
               first.target.dispatchEvent(simulatedEvent);
           },
           'touchmove':function(e){
+              if ( checkIgnoreEmuTarget_(e) ){
+                  return;
+              }
               var event = e.originalEvent;
               var touches = event.changedTouches,
                   first = touches[0];
@@ -1823,6 +1848,9 @@ function BlockManager(){
               first.target.dispatchEvent(simulatedEvent);
           },
           'touchend':function(e){
+              if ( checkIgnoreEmuTarget_(e) ){
+                  return;
+              }
               var event = e.originalEvent;
               var touches = event.changedTouches,
                   first = touches[0];
@@ -3150,15 +3178,26 @@ $(function(){
             // 最後に認識した単語データ
             exeContext.lastRecoData   = {rawData:null,};
 
+            // 最後に調べた人データ
+            exeContext.lastPeopleData   = {rawData:null,};
+
             // qiMessaging経由のインスタンス   
             exeContext.setupExecContextFromQim = function(qims)
             {
                 // 初期化とsubscribeが必要なモノの起動を行います
+
+                // MEMO:
                 // (まだ理解しきれてないけどsubscibeしておけばALEngagementZonesなど
-                //  とりあえず色々動くみたいなのでやっておく…名前付きでやる割にはグローバルに影響してるのが良く理解できてない部分…
-                //  さらにあらゆるものがグローバルのようなので値の初期化もなるべく最初にやっておくことに
-                //  (多数起動で初期化されかねないけど変えたい人は直前に変えるブロックを配置するべきという概念で
-                //   やるべきっぽい気がする…寧ろ定期的に初期化するべきな予感…サンドボックスとかあるのだろうか？)
+                //  とりあえず色々動くみたいなのでやっておきます
+                //  …名前付きでやる割にはグローバルに影響してるのが良く理解できてない部分
+                //  …色んなものが再起動を超えてグローバルのようなので値の初期化もなるべく最初にやっておくことに
+                //  (これだと多人数で遊ぶと毎回で初期化されかねないけど基本的に変えたい人は直前に変えるブロックを
+                //   配置するべきという概念でやるべきっぽい匂いがする…寧ろ積極的に定期的に初期化するべきな予感…
+                //   知らないだけでサンドボックスとかあるのだろうか？)
+                //  (起動を超えて保存される感じからどこかに初期値一覧がありそう。ALMemoryの機能だろうか…全リセットコマンド作りたい)
+                //  (しかしGPUのコマンド生で扱ってる感じでバグの温床っぽくてヤナ感じ。
+                //   GPU周りみたいに差分とか全書き出しとかを管理するステートキャッシュみたいなの作るべきかな…)
+                
                 exeContext.qims      = qims;
                 exeContext.alIns     = {};
                 exeContext.cameraIns = null;

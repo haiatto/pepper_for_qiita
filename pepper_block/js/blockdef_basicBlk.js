@@ -635,6 +635,13 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                       },
                   };
                   alMemory.getData(keyTbl[target][zone]).then(function(v){
+                      if(target=="person")
+                      {
+                          if(v.length>0)
+                          {
+                              ctx.lastPeopleData.rawData = v[0];
+                          }
+                      }
                       dfd.resolve(v.length>0);
                   }, onFail);
               }, onFail);
