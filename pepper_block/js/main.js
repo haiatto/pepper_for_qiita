@@ -674,8 +674,110 @@ function Block(blockManager, blockTemplate, callback) {
 }
 
 
+// ■慣性などの加速を管理するもの
+var AccelMove = function(callback,decSpeed){
+    var self = this;
+    var values      = null;
+    var speedValues = null;
+    var timerId     = null;
+    var lastTime    = null;
+    var decSpeedFunc = decSpeed||function(speed){
+        var nextSpeed = speed - 0.1;
+        if(Math.abs(nextSpeed)<0.1){
+           nextSpeed = 0;
+        }
+        return nextSpeed;
+    };
+    self.moveInfo = {values:[],deltaValues:[]};
+    self.clear = function(){
+        if(timerId){
+            clearInterval(timerId);
+            timerId=null;
+        }
+        values = null;
+    };
+    self.isStart = function(){
+        return values!=null;
+    };
+    self.start = function(){
+        if(timerId){
+            clearInterval(timerId);
+            timerId=null;
+        }
+        values = Array.prototype.slice.call(arguments);
+        speedValues = [];
+        for(var ii=0; ii < values.length ; ii++){
+            speedValues[ii] = 0;
+        }
+        var moveInfo = {values:[],deltaValues:[]};
+        for(var ii=0; ii < values.length ; ii++){
+            moveInfo.values     .push(values[ii]);
+            moveInfo.deltaValues.push(0);
+        }
+        self.moveInfo = moveInfo;
+        if(callback){
+            callback(moveInfo);
+        }
+        lastTime = +new Date();
+    };
+    self.move = function(){
+        if(!values) return;
+        var nowTime = +new Date();
+        var newValues = Array.prototype.slice.call(arguments);
+        var deltaTime = nowTime - lastTime;
+        if(deltaTime>0) {
+            var moveInfo = {values:[],deltaValues:[]};
+            for(var ii=0; ii < values.length ; ii++){
+                var delta = newValues[ii] - values[ii];
+                values[ii] = newValues[ii];
+                var oldSpeed = speedValues[ii];
+                var speed    = delta / deltaTime;
+                // chromeでは最後に数フレ、ゼロが来たりするようなので
+                // 合成してみる。加速度の変化をダンパする(変化に鈍感に)とかの方がよいのかも？
+                speedValues[ii] = speed * 0.2 + oldSpeed * 0.8;
+                moveInfo.values     .push(values[ii]);
+                moveInfo.deltaValues.push(delta);
+            }
+            self.moveInfo = moveInfo;
+            if(callback){
+                callback(moveInfo);
+            }
+            lastTime = nowTime;
+        }
+    };
+    self.end = function(){
+        if(!values) return;
+        var accLastTime = +new Date();
+        timerId = setInterval(function(){
+            var accNowTime = +new Date();
+            var accDeltaTime = accNowTime - accLastTime;
+            accLastTime = accNowTime;
+            var endCheck = true;
+            var moveInfo = {values:[],deltaValues:[]};
+            for(var ii=0; ii < values.length ; ii++)
+            {
+                //減速
+                speedValues[ii] = decSpeedFunc(speedValues[ii],accDeltaTime);
+                if(!speedValues[ii]) speedValues[ii] = 0;
+                if(Math.abs(speedValues[ii]) > 0){
+                    endCheck = false;
+                }
+                var diff  = speedValues[ii] * accDeltaTime;
+                values[ii] = values[ii] + diff;
+                moveInfo.values     .push(values[ii]);
+                moveInfo.deltaValues.push(diff);
+            }
+            if(callback){
+                callback(moveInfo);
+            }
+            if(endCheck){
+                self.clear();
+            }
+        },15);
+    };
+};
 
-// タッチ移動簡易管理
+// ■タッチ移動簡易管理
 var TouchMove = function(opt){
     var self = this;
     self.opt = opt||{
@@ -748,17 +850,1102 @@ var TouchMove = function(opt){
 };
 
 
+// ■ブロック作業場
+var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
+    var self = this;
+
+    self.blockManager      = blockManager;
+    self.workspaceNameObsv = ko.observable(workspaceName||"あたらしいエリア");
+    self.blockListObsv     = ko.observableArray();
+    self.workAreaElement   = null;
+    self.dragScopeName     = dragScopeName;
+    self.id                = blockManager.blockWsIdSeed_++;
+
+    self.offsetX = ko.observable(0);
+    self.offsetY = ko.observable(0);
+    self.scale   = ko.observable(1.0);
+    self.scrollLock = false;
+
+    var updateBlockDispPositions_ = function(){
+        var topBlockList = [];
+        $.each(self.blockListObsv(),function(k,blockObsv){
+            var block = blockObsv();
+            block.dispPosX(Math.floor(block.posX()+self.offsetX()));
+            block.dispPosY(Math.floor(block.posY()+self.offsetY()));
+        });
+    };
+    self.offsetX.subscribe(updateBlockDispPositions_);
+    self.offsetY.subscribe(updateBlockDispPositions_);
+
+    // シリアライズ関連です
+    self.toJSON = function()
+    {
+        var topBlockList = [];
+        $.each(self.blockListObsv(),function(k,blockObsv){
+            var topBlock = self.blockManager.getLumpTopBlock(blockObsv());
+            if(topBlockList.indexOf(topBlock)<0){
+                topBlockList.push( topBlock );
+            }
+        });
+        var blocks = [];
+        $.each(topBlockList,function(k,topBlock){
+            blocks.push(self.blockManager.toJSON_LumpBlocks(topBlock));
+        });
+        return {
+            name:self.workspaceNameObsv(),
+            blocks:blocks,
+        };
+    };
+    self.fromJSON = function(json)
+    {
+        self.clearAllBlocks();
+        self.workspaceNameObsv(json.name);
+        $.each(json.blocks,function(k,topBlockJson){
+            var block = self.blockManager.fromJSON(topBlockJson);
+            self.addBlock( block );
+            block.posX(block.posX()/block.pix2em);
+            block.posY(block.posY()/block.pix2em);
+            self.blockManager.updatePositionLayout(block);
+        });
+    };
+
+    // UI関連です
+
+    self.tabSelect = function(data,e){
+        console.log("ttt");
+    };
+
+    // 作業場のリスト操作関連です
+    self.addBlock = function(newBlock)
+    {
+        blockManager.traverseUnderBlock(newBlock,{
+            blockCb:function(block){
+                self.blockListObsv.push(ko.observable(block));
+                block.setCloneDragMode(false);
+                block.setNoConnectMode(false);
+            },
+        });
+        // zIndexを振りなおします
+        var zIndex = 100;
+        $.each(self.blockListObsv,function(k,blockObsv){
+            $(blockObsv.element).css({zIndex:zIndex});
+            zIndex+=1;
+        });
+    };
+    self.addBlock_CloneDragMode = function(newBlock)
+    {
+        blockManager.traverseUnderBlock(newBlock,{
+            blockCb:function(block){
+                self.blockListObsv.push(ko.observable(block));
+                block.setCloneDragMode(true);
+                block.setNoConnectMode(true);
+            },
+        });
+    };
+    self.removeBlock = function(removeBlock)
+    {
+        removeBlock.clearIn();
+        blockManager.traverseUnderBlock(removeBlock,{
+            blockCb:function(block){
+                self.blockListObsv.remove(function(blockObsv){
+                    return block==blockObsv();
+                });
+            },
+        });
+    };
+    self.clearAllBlocks = function()
+    {
+        self.blockListObsv.removeAll();
+    };
+    self.isContainsBlock = function(block){
+        var bFind=false;
+        $.each(self.blockListObsv(),function(key,blockInsObsv){
+            if(blockInsObsv()==block){
+                bFind = true;
+                return false;
+            }
+        });
+        return bFind;
+    };
+
+    // ブロックを並べるレイアウトを行います
+    self.autoLayoutCb = null;
+    self.setAutoArrayLayout = function(){
+        self.autoLayoutCb = function(){
+            var posX = 10;
+            var posY = 20;
+            $.each(self.blockListObsv(),function(key,blockInsObsv){
+                blockIns = blockInsObsv();
+                blockIns.posX(posX);
+                blockIns.posY(posY);
+                posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
+                //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
+            });
+            updateBlockDispPositions_();
+        };
+    };
+
+    self.setup = function(workAreaElement){
+        self.workAreaElement = workAreaElement;
+
+        //■ ドロップ処理 ■
+        var dropAction_ = function(ui){
+            self.blockManager.floatDraggingInfo.droppedWs = self;
+
+            var findBlockTop = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
+            var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
+            self.addBlock( dropBlockTop );
+            var areaElmOffset = $(self.workAreaElement).offset();
+            var dropX = (ui.offset.left - areaElmOffset.left);
+            var dropY = (ui.offset.top  - areaElmOffset.top );
+            dropX = dropX * 1/self.scale() - self.offsetX();
+            dropY = dropY * 1/self.scale() - self.offsetY();
+
+            dropBlockTop.posX(dropX);
+            dropBlockTop.posY(dropY);
+            self.blockManager.updatePositionLayout( dropBlockTop );
+            self.blockManager.dropConnectUpdate( dropBlockTop );
+        };
+        $(self.workAreaElement).droppable({
+            scope: self.dragScopeName,
+            drop: function(e, ui) {
+                dropAction_(ui);
+            },
+        });
+    };
+
+    // コリジョン判定
+    /*
+    var checkHitDist = function(area0, area1){
+        var offs0 = area0.offset();
+        var offs1 = area1.offset();
+        var w0    = area0.width();
+        var h0    = area0.height();
+        var w1    = area1.width();
+        var h1    = area1.height();
+        if(offs0.top < offs1.top + h1&&
+           offs1.top < offs0.top + h0&&
+           offs0.left < offs1.left + w1&&
+           offs1.left < offs0.left + w0)
+        {
+            var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
+            var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
+            return Math.sqrt(vx*vx + vy*vy);
+        }
+    };
+    */
+    var checkHitRectDist = function(block0, block1, rect0, rect1){
+        var offs0 = {left:block0.posX()+rect0.x, top:block0.posY()+rect0.y};
+        var offs1 = {left:block1.posX()+rect1.x, top:block1.posY()+rect1.y};
+        var w0    = rect0.w;
+        var h0    = rect0.h;
+        var w1    = rect1.w;
+        var h1    = rect1.h;
+        if(offs0.top < offs1.top + h1&&
+           offs1.top < offs0.top + h0&&
+           offs0.left < offs1.left + w1&&
+           offs1.left < offs0.left + w0)
+        {
+            var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
+            var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
+            return Math.sqrt(vx*vx + vy*vy);
+        }
+    };
+
+    //■ 作業場内のブロックとのヒット判定を行います(渡すブロックは作業場外のものでもOKです)
+    self.getHitBlock = function(block){
+        var nearDist = 99999999;
+        var hitBlock = null;
+        var srcBlock = null;
+        var isIn     = false;
+        var valueName= null;
+        // 入出力ブロックを取り出します
+        var inBlock  = null;
+        var outBlock = null;
+        var valueBlock = null;
+        if(block.in){
+            inBlock = block;
+        }
+        if(block.out){
+            outBlock = block;
+            while(outBlock.out){
+                if(outBlock.out.blockObsv()){
+                    outBlock = outBlock.out.blockObsv();
+                }
+                else{
+                    break; 
+                }
+            }
+        }
+        if(block.valueOut){
+            valueBlock = block;
+        }
+        // ヒットチェックをします
+        // TODO:所属リストのチェックをするべき
+        $.each(self.blockListObsv(),function(k,tgtBlockObsv){
+            var tgtBlock = tgtBlockObsv();
+            if(tgtBlock.isNoConnectMode){
+                return;
+            }
+            var dist;
+            if(tgtBlock == inBlock) return;
+            if(tgtBlock == outBlock) return;
+            if(tgtBlock == valueBlock) return;
+            if(tgtBlock.in && outBlock && outBlock.out){
+                //dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+                dist = checkHitRectDist(tgtBlock,outBlock,tgtBlock.in.hitAreaRect,outBlock.out.hitAreaRect);
+                if(dist && dist < nearDist){
+                    nearDist = dist;
+                    hitBlock = tgtBlock;
+                    srcBlock = outBlock;
+                    isSrcIn  = false;
+                    valueName = null;
+                    scopeName = null;
+                }
+            }
+            if(tgtBlock.out && inBlock){
+                //dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
+                dist = checkHitRectDist(tgtBlock,
+                                        inBlock,
+                                        tgtBlock.out.hitAreaRect,
+                                        inBlock.in.hitAreaRect);
+                if(dist && dist < nearDist){
+                    nearDist = dist;
+                    hitBlock = tgtBlock;
+                    srcBlock = inBlock;
+                    isSrcIn  = true;
+                    valueName = null;
+                    scopeName = null;
+                }
+            }
+            if(inBlock){
+                $.each(tgtBlock.scopeTbl,function(name,scope){
+                    //dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
+                    dist = checkHitRectDist(tgtBlock, inBlock, scope.scopeOut.hitAreaRect, inBlock.in.hitAreaRect);
+                    if(dist && dist < nearDist){
+                        nearDist = dist;
+                        hitBlock = tgtBlock;
+                        srcBlock = inBlock;
+                        isSrcIn  = true;
+                        valueName = null;
+                        scopeName = name;
+                    }
+                });
+            }
+            if(valueBlock){
+                $.each(tgtBlock.valueInTbl,function(name,valueIn){
+                    //dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
+                    dist = checkHitRectDist(tgtBlock, valueBlock, valueIn.hitAreaRect, valueBlock.valueOut.hitAreaRect);
+                    if(dist && dist < nearDist){
+                        if(tgtBlock.valueInTbl[name].blockObsv())
+                        {
+                            //値ブロックの場合接続済みな場合は無視します
+                            //(上に乗っかったものでUIが塞がっているので)
+                            return;
+                        }
+                        if(self.blockManager.checkContainLumpBlock(valueBlock, tgtBlock))
+                        {
+                            //自身が接続しているブロックの塊内は無視します
+                            return;
+                        }
+                        if(tgtBlock.getTypeAccept(name,valueBlock))
+                        {
+                            nearDist = dist;
+                            hitBlock = tgtBlock;
+                            srcBlock = valueBlock;
+                            isSrcIn  = false;
+                            valueName = name;
+                            scopeName = null;
+                        }
+                    }
+                });
+            }
+        });
+        if(hitBlock){
+            return {hitBlock:hitBlock,
+                    srcBlock:srcBlock,
+                    isSrcIn:isSrcIn,
+                    valueName:valueName,
+                    scopeName:scopeName,};
+        }
+    };
+};
+
+// ブロック作業場用のカスタムバインド
+ko.bindingHandlers.blockWorkSpaceSetup = {
+    init: function(element, valueAccessor) {
+        // ブロックの要素生成時の初期化を行います
+        var blockWsIns = ko.unwrap(valueAccessor());
+        blockWsIns.setup( element );
+
+        // ユーザーデータにIDを付加します
+        $(element).data("blockWorkSpaceId",blockWsIns.id);
+        // ブロック作業場を要素から引くためにテーブルに追加します
+        blockWsIns.blockManager.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
+
+        // 要素が操作可能な背景である事を識別するためにクラスを付加します
+        $(element).addClass("controlableBlockWsBG");
+
+        // ワークスペースのUI操作を構築します
+        var isMouseEvent = function(e){
+            if(e.originalEvent.touches)return false;
+            return true;
+        };
+        var isFirstTouch = function(e){
+            //最初の指でタッチしたかを判定します
+            if(e.originalEvent.touches){
+                var touch = e.originalEvent.touches[0];
+                if(touch && !$(touch.target).hasClass("controlableBlockWsBG")){
+                    return false;
+                }
+            }
+            return true;
+        };
+        var isTouchEvent = function(e){
+        }
+        var getOnePosition = function(e){
+            if(e.originalEvent.touches){
+                var touch = e.originalEvent.touches[0];
+                if(!touch){
+                    touch = e.originalEvent.changedTouches[0];
+                }
+                return {x:touch.pageX,
+                        y:touch.pageY};
+            }
+            else{
+                return {x:e.pageX,
+                        y:e.pageY};
+            }
+        };
+        var mouseDownFlg = false;
+        var lastPos  = null;
+        var accsV    = {x:0,y:0};
+        var lastTime = null;
+        var timeId   = null;
+        var lastTouch= [];
+
+        var touchMove = new TouchMove();            
+        var TouchST = function(){
+            var self = this;
+            var touchInfo={};
+            var touchInfoFing=[];
+            self.st = null;
+            self.start = function(e){
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    var fingId = 0;
+                    if(touchInfo[touch.identifier]){
+                        fingId = touchInfo[touch.identifier].fingId;
+                    }
+                    else{
+                        for(;touchInfoFing[fingId];fingId++){}
+                    }
+                    touchInfoFing[fingId] = 
+                    touchInfo[touch.identifier] = {
+                        sx:touch.pageX,
+                        sy:touch.pageY,
+                        lx:touch.pageX,
+                        ly:touch.pageY,
+                        dx:0,dy:0,
+                        fingId:fingId,
+                    };
+                });
+            };
+            self.move = function(e){
+                $.each(touchInfo,function(k,info){
+                    if(info){
+                        info.dx=0;
+                        info.dy=0;
+                    }
+                });
+                var calcDist = function(dx,dy){return Math.sqrt(dx*dx+dy*dy);}
+                var t0 = touchInfoFing[0];
+                var t1 = touchInfoFing[1];
+                if(t0&&t1){
+                    if(!self.st){
+                        self.st = {
+                            centerDelta:{X:0,y:0},
+                            scaleDelta:0.0,
+                            center:{x:(t0.lx-t1.lx)/2+t1.lx,
+                                    y:(t0.ly-t1.ly)/2+t1.ly},
+                            scale:1.0,
+                            fingDist:calcDist(t0.lx-t1.lx,t0.lx-t1.lx),
+                        };
+                    }
+                }
+                else{
+                    self.st = null;
+                }
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    var info = touchInfo[touch.identifier];
+                    if(info){
+                        info.dx = touch.pageX - info.lx;
+                        info.dy = touch.pageY - info.ly;
+                        info.lx = touch.pageX;
+                        info.ly = touch.pageY;
+                    }
+                });
+                if(t0&&t1){
+                    var newCenter = {x:(t0.lx-t1.lx)/2+t1.lx,
+                                     y:(t0.ly-t1.ly)/2+t1.ly};
+                    var nowFingDist = calcDist(t0.lx-t1.lx,t0.lx-t1.lx);
+                    var newScale = nowFingDist / self.st.fingDist;
+                    self.st.centerDelta.x = newCenter.x - self.st.center.x;
+                    self.st.centerDelta.y = newCenter.y - self.st.center.y;
+                    self.st.center = newCenter;
+                    self.st.scaleDelta = nowFingDist / (self.st.fingDist * self.st.scale);
+                    self.st.scale = newScale;
+                }
+            };
+            self.end = function(e){
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    var info = touchInfo[touch.identifier];
+                    if(info){
+                        touchInfoFing[info.fingId]  = null; 
+                        touchInfo[touch.identifier] = null;
+                    }
+                });
+                var t0 = touchInfoFing[0];
+                var t1 = touchInfoFing[1];
+                if(!t0&&!t1){
+                    self.st = null;
+                }
+            };
+        };
+        var touchSt = new TouchST();
+        var nowControl=false;
+        var checkTarget =function(elem){
+            if($(elem).hasClass("noDrag")){
+                return false;
+            }
+            if(["INPUT","TEXTAREA",
+                "BUTTON","SELECT",
+                "OPTION"].indexOf($(elem).prop("tagName"))>=0)
+            {
+                return false;
+            }
+            return true;
+        };
+
+        $(element).on({
+            'touchstart mousedown': function (e) {
+                if(!checkTarget(e.target)){
+                    return;
+                }
+                e.preventDefault();
+                if ( $(e.target).hasClass("controlableBlockWsBG") )
+                {
+                    if(!isFirstTouch(e)){//タッチの場合は最初の指の対象がここ以外なら無視します
+                        return;
+                    }
+                    if(e.originalEvent.changedTouches){
+                        touchMove.start(e);
+                        touchSt.start(e);
+                    }
+                    if(!nowControl)
+                    {
+                        nowControl = true;
+                        blockWsIns.blockManager.editMode.lazyEditModeCancel();
+
+                        var target = $(this);
+                        if(isMouseEvent(e)){
+                            mouseDownFlg = true;
+                        }
+                        lastPos = null;
+                        if(isMouseEvent(e)){
+                            lastPos = {x:e.pageX,y:e.posY};       
+                        }
+                        else if(touchMove.touchInfoFing[0]){
+                            lastPos = {
+                                x:touchMove.touchInfoFing[0].lx,
+                                y:touchMove.touchInfoFing[0].ly
+                            };
+                        }
+                        lastTime = +new Date();
+                        if(timeId){
+                            clearInterval(timeId);
+                            timeId = null;
+                        }
+                    }
+                }
+            },
+            'touchmove mousemove': function (e) {
+                if(!checkTarget(e.target)){
+                    return;
+                }
+                event.preventDefault();
+                if(!nowControl){
+                    return;
+                }
+                if(e.originalEvent.changedTouches){
+                    touchMove.move(e);
+                    touchSt.move(e);
+                }
+                var target = $(this);
+                if(isMouseEvent(e) && !mouseDownFlg){
+                    return;
+                }
+                var nowPos = null;
+                if(isMouseEvent(e)){
+                    nowPos = {x:e.pageX,y:e.posY};       
+                }
+                else if(touchMove.touchInfoFing[0]){
+                    nowPos = {
+                        x:touchMove.touchInfoFing[0].lx,
+                        y:touchMove.touchInfoFing[0].ly
+                    };
+                }
+                if(touchSt.st){
+                    var scaleDelta = touchSt.st.scaleDelta;
+                    var nowScale   = blockWsIns.scale();
+                    var newScale   = scaleDelta * nowScale;
+                    if(newScale<=0.2){
+                        scaleDelta = 0.2/nowScale;
+                        newScale = 0.2;
+                    }
+                    else if(newScale>=5.00){
+                        scaleDelta = 5.0/nowScale;
+                        newScale = 5.0;
+                    }
+                    var elmOfs = $(blockWsIns.workAreaElement).offset();
+                    var cx = (touchSt.st.center.x - elmOfs.left)/(nowScale*scaleDelta);
+                    var cy = (touchSt.st.center.y - elmOfs.top )/(nowScale*scaleDelta);
+
+                    var wsOfx = (blockWsIns.offsetX()-cx) * scaleDelta + cx;
+                    var wsOfy = (blockWsIns.offsetY()-cy) * scaleDelta + cy;
+                    blockWsIns.offsetX(wsOfx/scaleDelta);
+                    blockWsIns.offsetY(wsOfy/scaleDelta);
+                    blockWsIns.scale(newScale);
+                }
+                else{
+                    var nowTime = +new Date();
+                    if(lastPos&&nowPos){
+                        var vX = (nowPos.x - lastPos.x)*1.0/blockWsIns.scale();
+                        var vY = (nowPos.y - lastPos.y)*1.0/blockWsIns.scale();
+                        var delta = (nowTime - lastTime)/1000;
+                        if(delta==0){
+                            return;
+                        }
+                        if(!blockWsIns.scrollLock){
+                            blockWsIns.offsetX(vX + blockWsIns.offsetX());
+                            blockWsIns.offsetY(vY + blockWsIns.offsetY());
+                            accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
+                            accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
+                        }
+                        else{
+                            accsV.x = 0;
+                            accsV.y = 0;
+                        }
+                    }
+                    lastPos = nowPos;
+                    lastTime = nowTime;
+                }
+            },
+            'mouseout': function (e) {
+                nowControl = false;
+                mouseDownFlg = false;
+            },
+            'touchend mouseup': function (e) {
+                if(!checkTarget(e.target)){
+                    return;
+                }
+                event.preventDefault();
+                if(e.originalEvent.changedTouches){
+                    touchMove.end(e);
+                    touchSt.end(e);
+                }
+                if(!nowControl){
+                    return;
+                }
+                if(!touchMove.touchInfo[0] && !touchSt.st){
+                    nowControl = false;
+                    mouseDownFlg = false;
+                }
+                if(!nowControl && !blockWsIns.scrollLock){
+                    //とりあえずな慣性
+                    var accLastTime = +new Date();
+                    if(timeId){
+                        clearInterval(timeId);
+                        timeId = null;
+                    }
+                    timeId = setInterval(function(){
+                        var accNowTime = +new Date();
+                        var delta = (accNowTime - accLastTime)/1000; 
+                        accLastTime = accNowTime;
+                        blockWsIns.offsetX(accsV.x*delta + blockWsIns.offsetX());
+                        blockWsIns.offsetY(accsV.y*delta + blockWsIns.offsetY());
+                        var len = Math.sqrt(accsV.x*accsV.x + accsV.y*accsV.y);
+                        if(len > 0.001){
+                            var vx = accsV.x / len;
+                            var vy = accsV.y / len;
+                            len = len - (len*50.3/1000);
+                            accsV.x = vx * len;
+                            accsV.y = vy * len;
+                        }else{
+                            accsV.x = accsV.y = 0;
+                            clearInterval(timeId);
+                            timeId = null;
+                        }
+                    },10);
+                }
+            },
+        });
+    },
+    update: function(element, valueAccessor) {
+    }
+};
+//ブロックのレイアウトの自動更新処理用バインドです(foreach:ブロックリストの後呼ばれるようにしています)
+ko.bindingHandlers.blockWorkSpaceAutoLayout = {
+    init:function(element,valueAccessor)
+    {
+        var blockWs = ko.unwrap(valueAccessor());
+        if(blockWs.autoLayoutCb){
+            blockWs.autoLayoutCb();
+        }
+    },
+    update: function(element, valueAccessor) {
+        var blockWs = ko.unwrap(valueAccessor());
+        if(blockWs.autoLayoutCb){
+            blockWs.autoLayoutCb();
+        }
+    }
+};
+
+// ブロック作業場向けのタブUI用カスタムバインド
+ko.bindingHandlers.boxCreate = {
+    init: function(boxElement, valueAccessor, allBindings, viewModel, bindingContext) {
+        var blockWsLst = valueAccessor();
+
+        // Make a modified binding context, with a extra properties, and apply it to descendant elements
+        var childBindingContext = bindingContext.createChildContext(
+            blockWsLst,
+            null, // Optionally, pass a string here as an alias for the data item in descendant contexts
+            function(context) {
+                ko.utils.extend(context, valueAccessor());
+            });
+        ko.applyBindingsToDescendants(childBindingContext, boxElement);
+
+        // Also tell KO *not* to bind the descendants itself, otherwise they will be bound twice
+        return { controlsDescendantBindings: true };
+    },
+    update: function(element, valueAccessor) {
+        var blockWsLst = ko.unwrap(valueAccessor());
+    }
+};
+ko.bindingHandlers.boxTabs = {
+    init: function(tabsElement, valueAccessor, allBindings, viewModel, bindingContext) {
+        var blockWsLst = ko.unwrap(valueAccessor());
+        var boxElem    = $(tabsElement).parents(".blockBox");
+        var tabsElem   = $(tabsElement);
+        var panelElm   = $(".box-tabs-panel",boxElem);
+
+        //タブの初期状態をセット
+        $(".box-workspace",boxElem).addClass("box-workspace-hide");
+
+        var tabLayoutUpdate = function(){
+            tabsElem.css({
+               left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
+               top: boxElem.scrollTop() +"px",
+               overflow:"hidden"
+           });
+        };
+
+
+        // パネル部分
+        boxElem.scroll(function(e){
+            tabLayoutUpdate();
+        });
+        $(window).resize(function(e){
+            tabLayoutUpdate();
+        });
+        tabLayoutUpdate();
+
+        var lastPosX=0;
+        var lastPosY=0;
+        var accVX=0;
+        var accVY=0;
+        var tabMenuY=0;
+        var mouseDownFlg = false;
+        var accIntervalId = null;
+        var startTouchEvent = null;
+        var startTouchTime  = null;
+        var accelMove = new AccelMove(
+            function(moveInfo){
+                //$("body").scrollTop($("body").scrollTop()-moveInfo.deltaValues[0]);
+                tabMenuY += moveInfo.deltaValues[0];
+                if(tabMenuY < -panelElm.outerHeight()){
+                    tabMenuY = boxElem.height();
+                }
+                else if(tabMenuY > boxElem.height()){
+                    tabMenuY = -panelElm.height();
+                }
+                $(".box-tabs-panel",boxElem).css({
+                    top:tabMenuY,
+                });
+            },
+            function(speed,deltaTime){
+                if(speed!=0)
+                {
+                    var decSpeed  = 2 / 1000 * deltaTime;
+                    var nextSpeed = speed - ((speed>0)?decSpeed:-decSpeed);
+                    if((nextSpeed>0) != (speed > 0)||
+                        Math.abs(nextSpeed)<0.01)
+                    {
+                       nextSpeed = 0;
+                    }
+                    //console.log("s:"+speed+" n:"+nextSpeed+" d:"+decSpeed);
+                }
+                return nextSpeed;
+            }
+        );
+        tabsElem.on({
+            'touchstart mousedown': function (event) {
+                event.preventDefault();
+                var target = $(this);
+                if(event.originalEvent.touches){
+                    var touch = event.originalEvent.touches[0];
+                    lastPosX = touch.pageX;
+                    lastPosY = touch.pageY;
+                    startTouch = {pageX:touch.pageX,
+                                  pageY:touch.pageY};
+                    startTouchTime = event.originalEvent.timeStamp;
+                }
+                else{
+                    lastPosX = event.pageX;
+                    lastPosY = event.pageY;
+                    mouseDownFlg = true;
+                }
+                accelMove.start(lastPosY);
+                if(accIntervalId){
+                    clearInterval(accIntervalId);
+                    accIntervalId = null;
+                }
+                return false;
+            },
+            'touchmove mousemove': function (event) {
+                event.preventDefault();
+                var target = $(this);
+                var moveX = 0;
+                var moveY = 0;
+                if(event.originalEvent.touches){
+                    var touch = event.originalEvent.touches[0];
+                    moveX = touch.pageX - lastPosX;
+                    moveY = touch.pageY - lastPosY;
+                    lastPosX = touch.pageX;
+                    lastPosY = touch.pageY;
+                }
+                else{
+                    if(mouseDownFlg){
+                        moveX = event.pageX - lastPosX;
+                        moveY = event.pageY - lastPosY;
+                        lastPosX = event.pageX;
+                        lastPosY = event.pageY;
+                    }
+                }
+                accelMove.move(lastPosY);
+                /*
+                accVX = moveX*0.3 + accVX*0.7;            
+                accVY = moveY*0.3 + accVY*0.7;
+                if(moveY!=0){
+                    tabMenuY += moveY;
+                    if(tabMenuY < -panelElm.outerHeight()){
+                        tabMenuY = boxElem.height();
+                    }
+                    else if(tabMenuY > boxElem.height()){
+                        tabMenuY = -panelElm.height();
+                    }
+                    $(".box-tabs-panel",boxElem).css({
+                        top:tabMenuY,
+                    });
+                }
+                */
+                return false;
+            },
+            'mouseout': function (event) {
+                mouseDownFlg = false;
+            },
+            'touchend mouseup': function (event) {
+                event.preventDefault();
+                var target = $(this);
+                if(event.originalEvent.touches){
+                    var touch = event.originalEvent.touches[0];
+                    if(!touch){
+                        touch = event.originalEvent.changedTouches[0];
+                    }
+                    if(touch){
+                        lastPosX = touch.pageX;
+                        lastPosY = touch.pageY;
+                        if(startTouch)
+                        {
+                            var moveTime = event.originalEvent.timeStamp - startTouchTime;
+                            if(moveTime<300)
+                            {
+                                var touchMoveX = touch.pageX - startTouch.pageX;
+                                var touchMoveY = touch.pageY - startTouch.pageY;
+                                var threshold  = tabsElem.width();
+                                if(touchMoveX<-threshold){
+                                    tabsElem.removeClass("box-tabs-close");
+                                    tabsElem.addClass("box-tabs-open");
+                                    tabLayoutUpdate();
+                                    accelMove.clear();
+                                }
+                                else if(touchMoveX > threshold/2){
+                                    tabsElem.removeClass("box-tabs-open");
+                                    tabsElem.addClass("box-tabs-close");
+                                    tabLayoutUpdate();
+                                    accelMove.clear();
+                                }
+                                else{
+                                    accelMove.end();
+                                }
+                            }
+                        }
+                    }
+                }
+                else{
+                    lastPosX = event.pageX;
+                    lastPosY = event.pageY;
+                    mouseDownFlg = false;
+                    accelMove.end();
+                }
+                /*
+                accIntervalId = setInterval(function(){
+                    tabMenuY += accVY;
+
+                    accVY = accVY - (accVY>0?0.03:-0.03);
+                    if(tabMenuY < -panelElm.outerHeight()){
+                        tabMenuY = boxElem.height();
+                    }
+                    else if(tabMenuY > boxElem.height()){
+                        tabMenuY = -panelElm.height();
+                    }
+                    panelElm.css({
+                        top:tabMenuY,
+                    });
+                    if(Math.abs(accVY)<0.1){
+                        clearInterval(accIntervalId);
+                        accIntervalId = null;
+                    }
+                })
+                */
+
+                return false;
+            },
+        });
+    },
+};
+ko.bindingHandlers.boxTabsBtn = {
+    init: function(btnElement, valueAccessor) {
+        var data       = ko.unwrap(valueAccessor());
+        var btnElem    = $(btnElement);
+        var startTime  = null;
+        var startPosX  = 0;
+        var startPosY  = 0;
+        var tapAct = function(){
+            $.each(data.lst,function(k,wsObsv){                  
+                var ws = wsObsv();
+                if(ws == data.ws){
+                    //表示
+                    $(ws.workAreaElement).removeClass("box-workspace-hide");
+                    $(ws.workAreaElement).addClass("box-workspace-disp");
+                }
+                else{
+                    //非表示
+                    $(ws.workAreaElement).removeClass("box-workspace-disp");
+                    $(ws.workAreaElement).addClass("box-workspace-hide");
+                }
+            });
+            $(".box-tabs-btn",btnElem.parent()).removeClass("box-tabs-btn-sel");
+            btnElem.addClass("box-tabs-btn-sel");
+        };
+        if( data.lst[0] && data.lst[0]() == data.ws)
+        {
+            tapAct();
+        }
+        $(btnElement).on({
+            'touchstart mousedown': function (event) {
+                event.preventDefault();
+                startTime = +new Date();
+                startPosX  = event.pageX||event.originalEvent.touches[0].pageX;
+                startPosY  = event.pageY||event.originalEvent.touches[0].pageY;
+            },
+            'touchmove mousemove': function (event) {
+                event.preventDefault();
+            },
+            'touchend mouseup': function (event) {
+                event.preventDefault();
+                var lastTime = +new Date();
+                if((lastTime - startTime) < 500){
+                    var lastPosX  = event.pageX||event.originalEvent.changedTouches[0].pageX;
+                    var lastPosY  = event.pageY||event.originalEvent.changedTouches[0].pageY;
+                    var mvX = lastPosX - startPosX;
+                    var mvY = lastPosY - startPosY;
+                    if(Math.sqrt(mvX*mvX+mvY*mvY) < $(btnElement).height()){
+                        tapAct();
+                    }
+                }
+            },
+        });
+    },
+    update: function(element, valueAccessor) {
+        valueAccessor();
+    }
+};
+
+ko.bindingHandlers.guide = {
+    init: function(guideElement, valueAccessor, allBindings, viewModel, bindingContext) {
+        var boxElem    = $(guideElement).parents(".blockBox");
+
+        // スクロールガイド(移動の操作しやすくするためのもの＋そのうちタブ向けのボタンになるかも)
+        var guidElem = $(guideElement);
+        var guidLayoutUpdate = function(){
+            guidElem.css({
+                left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
+                top: boxElem[0].clientHeight- guidElem.outerHeight() + boxElem.scrollTop()  +"px",
+                overflow:"hidden"
+            });
+        };
+        boxElem.scroll(function(e){
+            guidLayoutUpdate();
+        });
+        $(window).resize(function(e){
+            guidLayoutUpdate();
+        });
+        guidLayoutUpdate();
+
+        var guidX=0;
+        var guidY=0;
+        var accVY=0;
+        var isLastSizeMove=null;
+        var touchMove = new TouchMove({useSelfMove:true});
+        var accelMove = new AccelMove(
+            function(moveInfo){
+                $("body").scrollTop($("body").scrollTop()-moveInfo.deltaValues[0]);
+            },
+            function(speed,deltaTime){
+                if(speed!=0)
+                {
+                    var decSpeed  = 1.5 / 1000 * deltaTime;
+                    var nextSpeed = speed - ((speed>0)?decSpeed:-decSpeed);
+                    if((nextSpeed>0) != (speed > 0)||
+                        Math.abs(nextSpeed)<0.01)
+                    {
+                       nextSpeed = 0;
+                    }
+                    //console.log("s:"+speed+" n:"+nextSpeed+" d:"+decSpeed);
+                }
+                return nextSpeed;
+            }
+        );
+        guidElem.on({
+            'touchstart': function (event) {
+                event.preventDefault();                    
+                touchMove.start(event);
+                var touchInfo = touchMove.touchInfoFing[0];
+                $(this).css({
+                    opacity:1.0,
+                });
+                if(touchInfo&&touchInfo.isFirst){
+                    accelMove.start(touchInfo.ly);
+                }
+                return false;
+            },
+            'touchmove': function (event) {
+                event.preventDefault();
+                touchMove.move(event);
+
+                isLastSizeMove = false;
+                var touchInfo  = touchMove.touchInfoFing[0];
+                $.each(event.originalEvent.touches,function(k,touch){
+                    if(touchInfo.touchId != touch.identifier){
+                        // 複数のタッチを検知したら拡縮モードにします
+                        isLastSizeMove = true;
+                    }
+                });
+                if(isLastSizeMove){
+                    if(touchMove.opt.useSelfMove){
+                        touchMove.opt.useSelfMove = false;
+                        touchMove.start(event);
+                    }
+                    else{
+                        var newH = boxElem.height()+touchInfo.dy;
+                        if(newH < 50){
+                            newH = 50;
+                        }
+                        boxElem.height(newH);
+                        accelMove.clear();
+                        guidLayoutUpdate();
+                    }
+                }
+                else{
+                    if(!touchMove.opt.useSelfMove){
+                        touchMove.opt.useSelfMove = true;
+                        touchMove.start(event);
+                    }else{
+                        if(!accelMove.isStart()){
+                            accelMove.start(touchInfo.ly);
+                        }
+                        accelMove.move(touchInfo.ly);
+                    }
+                }
+                return false;
+            },
+            'touchend': function (event) {
+                event.preventDefault();
+                $(this).css({
+                    opacity:"0.2",
+                });
+                if(!isLastSizeMove){
+                    //慣性スクロール開始
+                    accelMove.end();
+                }else{
+                    accelMove.clear();
+                }
+                touchMove.end(event);
+                return false;
+            },
+        });
+    },
+    update: function(element, valueAccessor) {
+    }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
 // 設計メモ
 // 管理リスト＋グローバルなブロックという形で実装
 // ブロック間はグローバルにつなぎ、相互に接続も自由。
 // 管理エリア毎にリストを作ってそこに格納するだけ。
 
-
+// ■ブロック管理
 function BlockManager(){
     var self = this;
+
+    // 
+    self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
+
+    // ブロックのリストなど
     self.blockList = [];
     self.elementBlockLookupTbl = {};
-    self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
+
+    // ブロック作業場リストなど
+    self.floatDraggingList = ko.observableArray();
+    self.floatDraggingInfo = {
+        fromWs:null,
+        droppedWs:null,
+    };
+    self.blockWorkSpaceList = [];
+    self.elementBlockWsLookupTbl = {};
+    self.blockWsIdSeed_ = 1;
 
     // ■編集のモード遷移の管理用のインスタンス(タップやホールド等の管理をします)
     function EditMode(){
@@ -1864,1188 +3051,6 @@ function BlockManager(){
     };
 
 
-    // ■ブロック作業場管理など
-
-    self.floatDraggingList = ko.observableArray();
-    self.floatDraggingInfo = {
-        fromWs:null,
-        droppedWs:null,
-    };
-
-    self.blockWorkSpaceList = [];
-    self.elementBlockWsLookupTbl = {};
-    var blockWsIdSeed_ = 1;
-
-    var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
-        var self = this;
-        
-        self.blockManager      = blockManager;
-        self.workspaceNameObsv = ko.observable(workspaceName||"あたらしいエリア");
-        self.blockListObsv     = ko.observableArray();
-        self.workAreaElement   = null;
-        self.dragScopeName     = dragScopeName;
-        self.id                = blockWsIdSeed_++;
-
-        self.offsetX = ko.observable(0);
-        self.offsetY = ko.observable(0);
-        self.scale   = ko.observable(1.0);
-        self.scrollLock = false;
-
-        var updateBlockDispPositions_ = function(){
-            var topBlockList = [];
-            $.each(self.blockListObsv(),function(k,blockObsv){
-                var block = blockObsv();
-                block.dispPosX(Math.floor(block.posX()+self.offsetX()));
-                block.dispPosY(Math.floor(block.posY()+self.offsetY()));
-            });
-        };
-        self.offsetX.subscribe(updateBlockDispPositions_);
-        self.offsetY.subscribe(updateBlockDispPositions_);
-
-        // シリアライズ関連です
-        self.toJSON = function()
-        {
-            var topBlockList = [];
-            $.each(self.blockListObsv(),function(k,blockObsv){
-                var topBlock = self.blockManager.getLumpTopBlock(blockObsv());
-                if(topBlockList.indexOf(topBlock)<0){
-                    topBlockList.push( topBlock );
-                }
-            });
-            var blocks = [];
-            $.each(topBlockList,function(k,topBlock){
-                blocks.push(self.blockManager.toJSON_LumpBlocks(topBlock));
-            });
-            return {
-                name:self.workspaceNameObsv(),
-                blocks:blocks,
-            };
-        };
-        self.fromJSON = function(json)
-        {
-            self.clearAllBlocks();
-            self.workspaceNameObsv(json.name);
-            $.each(json.blocks,function(k,topBlockJson){
-                var block = self.blockManager.fromJSON(topBlockJson);
-                self.addBlock( block );
-                block.posX(block.posX()/block.pix2em);
-                block.posY(block.posY()/block.pix2em);
-                self.blockManager.updatePositionLayout(block);
-            });
-        };
-
-        // UI関連です
-        
-        self.tabSelect = function(data,e){
-            console.log("ttt");
-        };
-
-        // 作業場のリスト操作関連です
-        self.addBlock = function(newBlock)
-        {
-            blockManager.traverseUnderBlock(newBlock,{
-                blockCb:function(block){
-                    self.blockListObsv.push(ko.observable(block));
-                    block.setCloneDragMode(false);
-                    block.setNoConnectMode(false);
-                },
-            });
-            // zIndexを振りなおします
-            var zIndex = 100;
-            $.each(self.blockListObsv,function(k,blockObsv){
-                $(blockObsv.element).css({zIndex:zIndex});
-                zIndex+=1;
-            });
-        };
-        self.addBlock_CloneDragMode = function(newBlock)
-        {
-            blockManager.traverseUnderBlock(newBlock,{
-                blockCb:function(block){
-                    self.blockListObsv.push(ko.observable(block));
-                    block.setCloneDragMode(true);
-                    block.setNoConnectMode(true);
-                },
-            });
-        };
-        self.removeBlock = function(removeBlock)
-        {
-            removeBlock.clearIn();
-            blockManager.traverseUnderBlock(removeBlock,{
-                blockCb:function(block){
-                    self.blockListObsv.remove(function(blockObsv){
-                        return block==blockObsv();
-                    });
-                },
-            });
-        };
-        self.clearAllBlocks = function()
-        {
-            self.blockListObsv.removeAll();
-        };
-        self.isContainsBlock = function(block){
-            var bFind=false;
-            $.each(self.blockListObsv(),function(key,blockInsObsv){
-                if(blockInsObsv()==block){
-                    bFind = true;
-                    return false;
-                }
-            });
-            return bFind;
-        };
-
-        // ブロックを並べるレイアウトを行います
-        self.autoLayoutCb = null;
-        self.setAutoArrayLayout = function(){
-            self.autoLayoutCb = function(){
-                var posX = 10;
-                var posY = 20;
-                $.each(self.blockListObsv(),function(key,blockInsObsv){
-                    blockIns = blockInsObsv();
-                    blockIns.posX(posX);
-                    blockIns.posY(posY);
-                    posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
-                    //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
-                });
-                updateBlockDispPositions_();
-            };
-        };
-
-        self.setup = function(workAreaElement){
-            self.workAreaElement = workAreaElement;
-
-            //■ ドロップ処理 ■
-            var dropAction_ = function(ui){
-                self.blockManager.floatDraggingInfo.droppedWs = self;
-                
-                var findBlockTop = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
-                var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
-                self.addBlock( dropBlockTop );
-                var areaElmOffset = $(self.workAreaElement).offset();
-                var dropX = (ui.offset.left - areaElmOffset.left);
-                var dropY = (ui.offset.top  - areaElmOffset.top );
-                dropX = dropX * 1/self.scale() - self.offsetX();
-                dropY = dropY * 1/self.scale() - self.offsetY();
-
-                dropBlockTop.posX(dropX);
-                dropBlockTop.posY(dropY);
-                self.blockManager.updatePositionLayout( dropBlockTop );
-                self.blockManager.dropConnectUpdate( dropBlockTop );
-            };
-            $(self.workAreaElement).droppable({
-                scope: self.dragScopeName,
-                drop: function(e, ui) {
-                    dropAction_(ui);
-                },
-            });
-        };
-
-        // コリジョン判定
-        /*
-        var checkHitDist = function(area0, area1){
-            var offs0 = area0.offset();
-            var offs1 = area1.offset();
-            var w0    = area0.width();
-            var h0    = area0.height();
-            var w1    = area1.width();
-            var h1    = area1.height();
-            if(offs0.top < offs1.top + h1&&
-               offs1.top < offs0.top + h0&&
-               offs0.left < offs1.left + w1&&
-               offs1.left < offs0.left + w0)
-            {
-                var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
-                var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
-                return Math.sqrt(vx*vx + vy*vy);
-            }
-        };
-        */
-        var checkHitRectDist = function(block0, block1, rect0, rect1){
-            var offs0 = {left:block0.posX()+rect0.x, top:block0.posY()+rect0.y};
-            var offs1 = {left:block1.posX()+rect1.x, top:block1.posY()+rect1.y};
-            var w0    = rect0.w;
-            var h0    = rect0.h;
-            var w1    = rect1.w;
-            var h1    = rect1.h;
-            if(offs0.top < offs1.top + h1&&
-               offs1.top < offs0.top + h0&&
-               offs0.left < offs1.left + w1&&
-               offs1.left < offs0.left + w0)
-            {
-                var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
-                var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
-                return Math.sqrt(vx*vx + vy*vy);
-            }
-        };
-
-        //■ 作業場内のブロックとのヒット判定を行います(渡すブロックは作業場外のものでもOKです)
-        self.getHitBlock = function(block){
-            var nearDist = 99999999;
-            var hitBlock = null;
-            var srcBlock = null;
-            var isIn     = false;
-            var valueName= null;
-            // 入出力ブロックを取り出します
-            var inBlock  = null;
-            var outBlock = null;
-            var valueBlock = null;
-            if(block.in){
-                inBlock = block;
-            }
-            if(block.out){
-                outBlock = block;
-                while(outBlock.out){
-                    if(outBlock.out.blockObsv()){
-                        outBlock = outBlock.out.blockObsv();
-                    }
-                    else{
-                        break; 
-                    }
-                }
-            }
-            if(block.valueOut){
-                valueBlock = block;
-            }
-            // ヒットチェックをします
-            // TODO:所属リストのチェックをするべき
-            $.each(self.blockListObsv(),function(k,tgtBlockObsv){
-                var tgtBlock = tgtBlockObsv();
-                if(tgtBlock.isNoConnectMode){
-                    return;
-                }
-                var dist;
-                if(tgtBlock == inBlock) return;
-                if(tgtBlock == outBlock) return;
-                if(tgtBlock == valueBlock) return;
-                if(tgtBlock.in && outBlock && outBlock.out){
-                    //dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
-                    dist = checkHitRectDist(tgtBlock,outBlock,tgtBlock.in.hitAreaRect,outBlock.out.hitAreaRect);
-                    if(dist && dist < nearDist){
-                        nearDist = dist;
-                        hitBlock = tgtBlock;
-                        srcBlock = outBlock;
-                        isSrcIn  = false;
-                        valueName = null;
-                        scopeName = null;
-                    }
-                }
-                if(tgtBlock.out && inBlock){
-                    //dist = checkHitDist($(tgtBlock.out.hitArea), $(inBlock.in.hitArea));
-                    dist = checkHitRectDist(tgtBlock,
-                                            inBlock,
-                                            tgtBlock.out.hitAreaRect,
-                                            inBlock.in.hitAreaRect);
-                    if(dist && dist < nearDist){
-                        nearDist = dist;
-                        hitBlock = tgtBlock;
-                        srcBlock = inBlock;
-                        isSrcIn  = true;
-                        valueName = null;
-                        scopeName = null;
-                    }
-                }
-                if(inBlock){
-                    $.each(tgtBlock.scopeTbl,function(name,scope){
-                        //dist = checkHitDist($(scope.scopeOut.hitArea), $(inBlock.in.hitArea));
-                        dist = checkHitRectDist(tgtBlock, inBlock, scope.scopeOut.hitAreaRect, inBlock.in.hitAreaRect);
-                        if(dist && dist < nearDist){
-                            nearDist = dist;
-                            hitBlock = tgtBlock;
-                            srcBlock = inBlock;
-                            isSrcIn  = true;
-                            valueName = null;
-                            scopeName = name;
-                        }
-                    });
-                }
-                if(valueBlock){
-                    $.each(tgtBlock.valueInTbl,function(name,valueIn){
-                        //dist = checkHitDist($(valueIn.hitArea), $(valueBlock.valueOut.hitArea));
-                        dist = checkHitRectDist(tgtBlock, valueBlock, valueIn.hitAreaRect, valueBlock.valueOut.hitAreaRect);
-                        if(dist && dist < nearDist){
-                            if(tgtBlock.valueInTbl[name].blockObsv())
-                            {
-                                //値ブロックの場合接続済みな場合は無視します
-                                //(上に乗っかったものでUIが塞がっているので)
-                                return;
-                            }
-                            if(self.blockManager.checkContainLumpBlock(valueBlock, tgtBlock))
-                            {
-                                //自身が接続しているブロックの塊内は無視します
-                                return;
-                            }
-                            if(tgtBlock.getTypeAccept(name,valueBlock))
-                            {
-                                nearDist = dist;
-                                hitBlock = tgtBlock;
-                                srcBlock = valueBlock;
-                                isSrcIn  = false;
-                                valueName = name;
-                                scopeName = null;
-                            }
-                        }
-                    });
-                }
-            });
-            if(hitBlock){
-                return {hitBlock:hitBlock,
-                        srcBlock:srcBlock,
-                        isSrcIn:isSrcIn,
-                        valueName:valueName,
-                        scopeName:scopeName,};
-            }
-        };
-    };
-
-    // ブロック作業場用のカスタムバインド
-    var blockWsIdSeed_ = 1;
-    ko.bindingHandlers.blockWorkSpaceSetup = {
-        init: function(element, valueAccessor) {
-            // ブロックの要素生成時の初期化を行います
-            var blockWsIns = ko.unwrap(valueAccessor());
-            blockWsIns.setup( element );
-
-            // ユーザーデータにIDを付加します
-            $(element).data("blockWorkSpaceId",blockWsIns.id);
-            // ブロックを要素から引くためにテーブルに追加します
-            self.elementBlockWsLookupTbl[$(element).data("blockWorkSpaceId")] = blockWsIns;
-
-            // 要素が操作可能な背景である事を識別するためにクラスを付加します
-            $(element).addClass("controlableBlockWsBG");
-
-            // ワークスペースのUI操作を構築します
-            var isMouseEvent = function(e){
-                if(e.originalEvent.touches)return false;
-                return true;
-            };
-            var isFirstTouch = function(e){
-                //最初の指でタッチしたかを判定します
-                if(e.originalEvent.touches){
-                    var touch = e.originalEvent.touches[0];
-                    if(touch && !$(touch.target).hasClass("controlableBlockWsBG")){
-                        return false;
-                    }
-                }
-                return true;
-            };
-            var isTouchEvent = function(e){
-            }
-            var getOnePosition = function(e){
-                if(e.originalEvent.touches){
-                    var touch = e.originalEvent.touches[0];
-                    if(!touch){
-                        touch = e.originalEvent.changedTouches[0];
-                    }
-                    return {x:touch.pageX,
-                            y:touch.pageY};
-                }
-                else{
-                    return {x:e.pageX,
-                            y:e.pageY};
-                }
-            };
-            var mouseDownFlg = false;
-            var lastPos  = null;
-            var accsV    = {x:0,y:0};
-            var lastTime = null;
-            var timeId   = null;
-            var lastTouch= [];
-/*
-            var TouchMove = function(){
-                var self = this;
-                self.touchInfo={}
-                self.touchInfoFing=[];
-                self.start = function(e){
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var fingId = 0;
-                        if(self.touchInfo[touch.identifier]){
-                            fingId = self.touchInfo[touch.identifier].fingId;
-                        }
-                        else{
-                            for(;self.touchInfoFing[fingId];fingId++){}
-                        }
-                        self.touchInfoFing[fingId] = 
-                        self.touchInfo[touch.identifier] = {
-                            sx:touch.pageX,sy:touch.pageY,
-                            lx:touch.pageX,ly:touch.pageY,
-                            dx:0,dy:0,
-                            fingId:fingId,
-                        };
-                    });
-                };
-                self.move = function(e){
-                    $.each(self.touchInfo,function(k,info){
-                        if(info){
-                            info.dx=0;
-                            info.dy=0;
-                        }
-                    });
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var info = self.touchInfo[touch.identifier];
-                        if(!info)return;
-                        info.dx = touch.pageX - info.lx;
-                        info.dy = touch.pageY - info.ly;
-                        info.lx = touch.pageX;
-                        info.ly = touch.pageY;
-                    });
-                };
-                self.end = function(e){
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var info = self.touchInfo[touch.identifier];
-                        if(info){
-                            self.touchInfoFing[info.fingId]  = null; 
-                            self.touchInfo[touch.identifier] = null;
-                        }
-                    });
-                };
-            };
-*/
-            var touchMove = new TouchMove();            
-            var TouchST = function(){
-                var self = this;
-                var touchInfo={};
-                var touchInfoFing=[];
-                self.st = null;
-                self.start = function(e){
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var fingId = 0;
-                        if(touchInfo[touch.identifier]){
-                            fingId = touchInfo[touch.identifier].fingId;
-                        }
-                        else{
-                            for(;touchInfoFing[fingId];fingId++){}
-                        }
-                        touchInfoFing[fingId] = 
-                        touchInfo[touch.identifier] = {
-                            sx:touch.pageX,
-                            sy:touch.pageY,
-                            lx:touch.pageX,
-                            ly:touch.pageY,
-                            dx:0,dy:0,
-                            fingId:fingId,
-                        };
-                    });
-                };
-                self.move = function(e){
-                    $.each(touchInfo,function(k,info){
-                        if(info){
-                            info.dx=0;
-                            info.dy=0;
-                        }
-                    });
-                    var calcDist = function(dx,dy){return Math.sqrt(dx*dx+dy*dy);}
-                    var t0 = touchInfoFing[0];
-                    var t1 = touchInfoFing[1];
-                    if(t0&&t1){
-                        if(!self.st){
-                            self.st = {
-                                centerDelta:{X:0,y:0},
-                                scaleDelta:0.0,
-                                center:{x:(t0.lx-t1.lx)/2+t1.lx,
-                                        y:(t0.ly-t1.ly)/2+t1.ly},
-                                scale:1.0,
-                                fingDist:calcDist(t0.lx-t1.lx,t0.lx-t1.lx),
-                            };
-                        }
-                    }
-                    else{
-                        self.st = null;
-                    }
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var info = touchInfo[touch.identifier];
-                        if(info){
-                            info.dx = touch.pageX - info.lx;
-                            info.dy = touch.pageY - info.ly;
-                            info.lx = touch.pageX;
-                            info.ly = touch.pageY;
-                        }
-                    });
-                    if(t0&&t1){
-                        var newCenter = {x:(t0.lx-t1.lx)/2+t1.lx,
-                                         y:(t0.ly-t1.ly)/2+t1.ly};
-                        var nowFingDist = calcDist(t0.lx-t1.lx,t0.lx-t1.lx);
-                        var newScale = nowFingDist / self.st.fingDist;
-                        self.st.centerDelta.x = newCenter.x - self.st.center.x;
-                        self.st.centerDelta.y = newCenter.y - self.st.center.y;
-                        self.st.center = newCenter;
-                        self.st.scaleDelta = nowFingDist / (self.st.fingDist * self.st.scale);
-                        self.st.scale = newScale;
-                    }
-                };
-                self.end = function(e){
-                    $.each(e.originalEvent.changedTouches,function(k,touch){
-                        var info = touchInfo[touch.identifier];
-                        if(info){
-                            touchInfoFing[info.fingId]  = null; 
-                            touchInfo[touch.identifier] = null;
-                        }
-                    });
-                    var t0 = touchInfoFing[0];
-                    var t1 = touchInfoFing[1];
-                    if(!t0&&!t1){
-                        self.st = null;
-                    }
-                };
-            };
-            var touchSt = new TouchST();
-            var nowControl=false;
-            var checkTarget =function(elem){
-                if($(elem).hasClass("noDrag")){
-                    return false;
-                }
-                if(["INPUT","TEXTAREA",
-                    "BUTTON","SELECT",
-                    "OPTION"].indexOf($(elem).prop("tagName"))>=0)
-                {
-                    return false;
-                }
-                return true;
-            };
-
-            $(element).on({
-                'touchstart mousedown': function (e) {
-                    if(!checkTarget(e.target)){
-                        return;
-                    }
-                    e.preventDefault();
-                    if ( $(e.target).hasClass("controlableBlockWsBG") )
-                    {
-                        if(!isFirstTouch(e)){//タッチの場合は最初の指の対象がここ以外なら無視します
-                            return;
-                        }
-                        if(e.originalEvent.changedTouches){
-                            touchMove.start(e);
-                            touchSt.start(e);
-                        }
-                        if(!nowControl)
-                        {
-                            nowControl = true;
-                            blockWsIns.blockManager.editMode.lazyEditModeCancel();
-
-                            var target = $(this);
-                            if(isMouseEvent(e)){
-                                mouseDownFlg = true;
-                            }
-                            lastPos = null;
-                            if(isMouseEvent(e)){
-                                lastPos = {x:e.pageX,y:e.posY};       
-                            }
-                            else if(touchMove.touchInfoFing[0]){
-                                lastPos = {
-                                    x:touchMove.touchInfoFing[0].lx,
-                                    y:touchMove.touchInfoFing[0].ly
-                                };
-                            }
-                            lastTime = +new Date();
-                            if(timeId){
-                                clearInterval(timeId);
-                                timeId = null;
-                            }
-                        }
-                    }
-                },
-                'touchmove mousemove': function (e) {
-                    if(!checkTarget(e.target)){
-                        return;
-                    }
-                    event.preventDefault();
-                    if(!nowControl){
-                        return;
-                    }
-                    if(e.originalEvent.changedTouches){
-                        touchMove.move(e);
-                        touchSt.move(e);
-                    }
-                    var target = $(this);
-                    if(isMouseEvent(e) && !mouseDownFlg){
-                        return;
-                    }
-                    var nowPos = null;
-                    if(isMouseEvent(e)){
-                        nowPos = {x:e.pageX,y:e.posY};       
-                    }
-                    else if(touchMove.touchInfoFing[0]){
-                        nowPos = {
-                            x:touchMove.touchInfoFing[0].lx,
-                            y:touchMove.touchInfoFing[0].ly
-                        };
-                    }
-                    if(touchSt.st){
-                        var scaleDelta = touchSt.st.scaleDelta;
-                        var nowScale   = blockWsIns.scale();
-                        var newScale   = scaleDelta * nowScale;
-                        if(newScale<=0.2){
-                            scaleDelta = 0.2/nowScale;
-                            newScale = 0.2;
-                        }
-                        else if(newScale>=5.00){
-                            scaleDelta = 5.0/nowScale;
-                            newScale = 5.0;
-                        }
-                        var elmOfs = $(blockWsIns.workAreaElement).offset();
-                        var cx = (touchSt.st.center.x - elmOfs.left)/(nowScale*scaleDelta);
-                        var cy = (touchSt.st.center.y - elmOfs.top )/(nowScale*scaleDelta);
-
-                        var wsOfx = (blockWsIns.offsetX()-cx) * scaleDelta + cx;
-                        var wsOfy = (blockWsIns.offsetY()-cy) * scaleDelta + cy;
-                        blockWsIns.offsetX(wsOfx/scaleDelta);
-                        blockWsIns.offsetY(wsOfy/scaleDelta);
-                        blockWsIns.scale(newScale);
-                    }
-                    else{
-                        var nowTime = +new Date();
-                        if(lastPos&&nowPos){
-                            var vX = (nowPos.x - lastPos.x)*1.0/blockWsIns.scale();
-                            var vY = (nowPos.y - lastPos.y)*1.0/blockWsIns.scale();
-                            var delta = (nowTime - lastTime)/1000;
-                            if(delta==0){
-                                return;
-                            }
-                            if(!blockWsIns.scrollLock){
-                                blockWsIns.offsetX(vX + blockWsIns.offsetX());
-                                blockWsIns.offsetY(vY + blockWsIns.offsetY());
-                                accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
-                                accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
-                            }
-                            else{
-                                accsV.x = 0;
-                                accsV.y = 0;
-                            }
-                        }
-                        lastPos = nowPos;
-                        lastTime = nowTime;
-                    }
-                },
-                'mouseout': function (e) {
-                    nowControl = false;
-                    mouseDownFlg = false;
-                },
-                'touchend mouseup': function (e) {
-                    if(!checkTarget(e.target)){
-                        return;
-                    }
-                    event.preventDefault();
-                    if(e.originalEvent.changedTouches){
-                        touchMove.end(e);
-                        touchSt.end(e);
-                    }
-                    if(!nowControl){
-                        return;
-                    }
-                    if(!touchMove.touchInfo[0] && !touchSt.st){
-                        nowControl = false;
-                        mouseDownFlg = false;
-                    }
-                    if(!nowControl && !blockWsIns.scrollLock){
-                        //とりあえずな慣性
-                        var accLastTime = +new Date();
-                        if(timeId){
-                            clearInterval(timeId);
-                            timeId = null;
-                        }
-                        timeId = setInterval(function(){
-                            var accNowTime = +new Date();
-                            var delta = (accNowTime - accLastTime)/1000; 
-                            accLastTime = accNowTime;
-                            blockWsIns.offsetX(accsV.x*delta + blockWsIns.offsetX());
-                            blockWsIns.offsetY(accsV.y*delta + blockWsIns.offsetY());
-                            var len = Math.sqrt(accsV.x*accsV.x + accsV.y*accsV.y);
-                            if(len > 0.001){
-                                var vx = accsV.x / len;
-                                var vy = accsV.y / len;
-                                len = len - (len*50.3/1000);
-                                accsV.x = vx * len;
-                                accsV.y = vy * len;
-                            }else{
-                                accsV.x = accsV.y = 0;
-                                clearInterval(timeId);
-                                timeId = null;
-                            }
-                        },10);
-                    }
-                },
-            });
-        },
-        update: function(element, valueAccessor) {
-        }
-    };
-    //ブロックのレイアウトの自動更新処理用バインドです(foreach:ブロックリストの後呼ばれるようにしています)
-    ko.bindingHandlers.blockWorkSpaceAutoLayout = {
-        init:function(element,valueAccessor)
-        {
-            var blockWs = ko.unwrap(valueAccessor());
-            if(blockWs.autoLayoutCb){
-                blockWs.autoLayoutCb();
-            }
-        },
-        update: function(element, valueAccessor) {
-            var blockWs = ko.unwrap(valueAccessor());
-            if(blockWs.autoLayoutCb){
-                blockWs.autoLayoutCb();
-            }
-        }
-    };
-
-    // ブロック作業場向けのタブUI用カスタムバインド
-    ko.bindingHandlers.boxCreate = {
-        init: function(boxElement, valueAccessor, allBindings, viewModel, bindingContext) {
-            var blockWsLst = valueAccessor();
-
-            // Make a modified binding context, with a extra properties, and apply it to descendant elements
-            var childBindingContext = bindingContext.createChildContext(
-                blockWsLst,
-                null, // Optionally, pass a string here as an alias for the data item in descendant contexts
-                function(context) {
-                    ko.utils.extend(context, valueAccessor());
-                });
-            ko.applyBindingsToDescendants(childBindingContext, boxElement);
-
-            // Also tell KO *not* to bind the descendants itself, otherwise they will be bound twice
-            return { controlsDescendantBindings: true };
-        },
-        update: function(element, valueAccessor) {
-            var blockWsLst = ko.unwrap(valueAccessor());
-        }
-    };
-    ko.bindingHandlers.boxTabs = {
-        init: function(tabsElement, valueAccessor, allBindings, viewModel, bindingContext) {
-            var blockWsLst = ko.unwrap(valueAccessor());
-            var boxElem    = $(tabsElement).parents(".blockBox");
-            var tabsElem   = $(tabsElement);
-            var panelElm   = $(".box-tabs-panel",boxElem);
-
-            //タブの初期状態をセット
-            $(".box-workspace",boxElem).addClass("box-workspace-hide");
-
-            var tabLayoutUpdate = function(){
-                tabsElem.css({
-                   left:boxElem[0].clientWidth - tabsElem.outerWidth() + boxElem.scrollLeft() +"px",
-                   top: boxElem.scrollTop() +"px",
-                   overflow:"hidden"
-               });
-            };
-            // パネル部分
-            boxElem.scroll(function(e){
-                tabLayoutUpdate();
-            });
-            $(window).resize(function(e){
-                tabLayoutUpdate();
-            });
-            tabLayoutUpdate();
-
-            var lastPosX=0;
-            var lastPosY=0;
-            var accVX=0;
-            var accVY=0;
-            var tabMenuY=0;
-            var mouseDownFlg = false;
-            var accIntervalId = null;
-            var startTouchEvent = null;
-            var startTouchTime  = null;
-            tabsElem.on({
-                'touchstart mousedown': function (event) {
-                    event.preventDefault();
-                    var target = $(this);
-                    if(event.originalEvent.touches){
-                        var touch = event.originalEvent.touches[0];
-                        lastPosX = touch.pageX;
-                        lastPosY = touch.pageY;
-                        startTouch = {pageX:touch.pageX,
-                                      pageY:touch.pageY};
-                        startTouchTime = event.originalEvent.timeStamp;            
-                    }
-                    else{
-                        lastPosX = event.pageX;
-                        lastPosY = event.pageY;
-                        mouseDownFlg = true;
-                    }
-                    if(accIntervalId){
-                        clearInterval(accIntervalId);
-                        accIntervalId = null;
-                    }
-                    return false;
-                },
-                'touchmove mousemove': function (event) {
-                    event.preventDefault();
-                    var target = $(this);
-                    var moveX = 0;
-                    var moveY = 0;
-                    if(event.originalEvent.touches){
-                        var touch = event.originalEvent.touches[0];
-                        moveX = touch.pageX - lastPosX;
-                        moveY = touch.pageY - lastPosY;
-                        lastPosX = touch.pageX;
-                        lastPosY = touch.pageY;
-                    }
-                    else{
-                        if(mouseDownFlg){
-                            moveX = event.pageX - lastPosX;
-                            moveY = event.pageY - lastPosY;
-                            lastPosX = event.pageX;
-                            lastPosY = event.pageY;
-                        }
-                    }
-                    accVX = moveX*0.3 + accVX*0.7;            
-                    accVY = moveY*0.3 + accVY*0.7;
-                    if(moveY!=0){
-                        tabMenuY += moveY;
-                        if(tabMenuY < -panelElm.outerHeight()){
-                            tabMenuY = boxElem.height();
-                        }
-                        else if(tabMenuY > boxElem.height()){
-                            tabMenuY = -panelElm.height();
-                        }
-                        $(".box-tabs-panel",boxElem).css({
-                            top:tabMenuY,
-                        });
-                    }
-                    return false;
-                },
-                'mouseout': function (event) {
-                    mouseDownFlg = false;
-                },
-                'touchend mouseup': function (event) {
-                    event.preventDefault();
-                    var target = $(this);
-                    if(event.originalEvent.touches){
-                        var touch = event.originalEvent.touches[0];
-                        if(!touch){
-                            touch = event.originalEvent.changedTouches[0];
-                        }
-                        if(touch){
-                            lastPosX = touch.pageX;
-                            lastPosY = touch.pageY;
-                            if(startTouch)
-                            {
-                                var moveTime = event.originalEvent.timeStamp - startTouchTime;
-                                if(moveTime<300)
-                                {
-                                    var touchMoveX = touch.pageX - startTouch.pageX;
-                                    var touchMoveY = touch.pageY - startTouch.pageY;
-                                    var threshold  = tabsElem.width();
-                                    if(touchMoveX<-threshold){
-                                        tabsElem.removeClass("box-tabs-close");
-                                        tabsElem.addClass("box-tabs-open");
-                                        tabLayoutUpdate();
-                                    }
-                                    else if(touchMoveX > threshold/2){
-                                        tabsElem.removeClass("box-tabs-open");
-                                        tabsElem.addClass("box-tabs-close");
-                                        tabLayoutUpdate();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else{
-                        lastPosX = event.pageX;
-                        lastPosY = event.pageY;
-                        mouseDownFlg = false;
-                    }
-                    accIntervalId = setInterval(function(){
-                        tabMenuY += accVY;
-
-                        accVY = accVY - (accVY>0?0.03:-0.03);
-                        if(tabMenuY < -panelElm.outerHeight()){
-                            tabMenuY = boxElem.height();
-                        }
-                        else if(tabMenuY > boxElem.height()){
-                            tabMenuY = -panelElm.height();
-                        }
-                        panelElm.css({
-                            top:tabMenuY,
-                        });
-                        if(Math.abs(accVY)<0.1){
-                            clearInterval(accIntervalId);
-                            accIntervalId = null;
-                        }
-                    })
-
-                    return false;
-                },
-            });
-        },
-    };
-    ko.bindingHandlers.boxTabsBtn = {
-        init: function(btnElement, valueAccessor) {
-            var data       = ko.unwrap(valueAccessor());
-            var btnElem    = $(btnElement);
-            var startTime  = null;
-            var startPosX  = 0;
-            var startPosY  = 0;
-            var tapAct = function(){
-                $.each(data.lst,function(k,wsObsv){                  
-                    var ws = wsObsv();
-                    if(ws == data.ws){
-                        //表示
-                        $(ws.workAreaElement).removeClass("box-workspace-hide");
-                        $(ws.workAreaElement).addClass("box-workspace-disp");
-                    }
-                    else{
-                        //非表示
-                        $(ws.workAreaElement).removeClass("box-workspace-disp");
-                        $(ws.workAreaElement).addClass("box-workspace-hide");
-                    }
-                });
-                $(".box-tabs-btn",btnElem.parent()).removeClass("box-tabs-btn-sel");
-                btnElem.addClass("box-tabs-btn-sel");
-            };
-            if( data.lst[0] && data.lst[0]() == data.ws)
-            {
-                tapAct();
-            }
-            $(btnElement).on({
-                'touchstart mousedown': function (event) {
-                    event.preventDefault();
-                    startTime = +new Date();
-                    startPosX  = event.pageX||event.originalEvent.touches[0].pageX;
-                    startPosY  = event.pageY||event.originalEvent.touches[0].pageY;
-                },
-                'touchmove mousemove': function (event) {
-                    event.preventDefault();
-                },
-                'touchend mouseup': function (event) {
-                    event.preventDefault();
-                    var lastTime = +new Date();
-                    if((lastTime - startTime) < 500){
-                        var lastPosX  = event.pageX||event.originalEvent.changedTouches[0].pageX;
-                        var lastPosY  = event.pageY||event.originalEvent.changedTouches[0].pageY;
-                        var mvX = lastPosX - startPosX;
-                        var mvY = lastPosY - startPosY;
-                        if(Math.sqrt(mvX*mvX+mvY*mvY) < $(btnElement).height()){
-                            tapAct();
-                        }
-                    }
-                },
-            });
-        },
-        update: function(element, valueAccessor) {
-            valueAccessor();
-        }
-    };
-
-//慣性などの加速を管理するもの
-var AccelMove = function(callback,decSpeed){
-    var self = this;
-    var values      = null;
-    var speedValues = null;
-    var timerId     = null;
-    var lastTime    = null;
-    var decSpeedFunc = decSpeed||function(speed){
-        var nextSpeed = speed - 0.1;
-        if(Math.abs(nextSpeed)<0.1){
-           nextSpeed = 0;
-        }
-        return nextSpeed;
-    };
-    self.moveInfo = {values:[],deltaValues:[]};
-    self.clear = function(){
-        if(timerId){
-            clearInterval(timerId);
-            timerId=null;
-        }
-        values = null;
-    };
-    self.isStart = function(){
-        return values!=null;
-    };
-    self.start = function(){
-        if(timerId){
-            clearInterval(timerId);
-            timerId=null;
-        }
-        values = Array.prototype.slice.call(arguments);
-        speedValues = [];
-        for(var ii=0; ii < values.length ; ii++){
-            speedValues[ii] = 0;
-        }
-        var moveInfo = {values:[],deltaValues:[]};
-        for(var ii=0; ii < values.length ; ii++){
-            moveInfo.values     .push(values[ii]);
-            moveInfo.deltaValues.push(0);
-        }
-        self.moveInfo = moveInfo;
-        if(callback){
-            callback(moveInfo);
-        }
-        lastTime = +new Date();
-    };
-    self.move = function(){
-        if(!values) return;
-        var nowTime = +new Date();
-        var newValues = Array.prototype.slice.call(arguments);
-        var deltaTime = nowTime - lastTime;
-        if(deltaTime>0) {
-            var moveInfo = {values:[],deltaValues:[]};
-            for(var ii=0; ii < values.length ; ii++){
-                var delta = newValues[ii] - values[ii];
-                values[ii] = newValues[ii];
-                var oldSpeed = speedValues[ii];
-                var speed    = delta / deltaTime;
-                // chromeでは最後に数フレ、ゼロが来たりするようなので
-                // 合成してみる。加速度の変化をダンパする(変化に鈍感に)とかの方がよいのかも？
-                speedValues[ii] = speed * 0.2 + oldSpeed * 0.8;
-                moveInfo.values     .push(values[ii]);
-                moveInfo.deltaValues.push(delta);
-            }
-            self.moveInfo = moveInfo;
-            if(callback){
-                callback(moveInfo);
-            }
-            lastTime = nowTime;
-        }
-    };
-    self.end = function(){
-        if(!values) return;
-        var accLastTime = +new Date();
-        timerId = setInterval(function(){
-            var accNowTime = +new Date();
-            var accDeltaTime = accNowTime - accLastTime;
-            accLastTime = accNowTime;
-
-            var endCheck = true;
-            var moveInfo = {values:[],deltaValues:[]};
-            for(var ii=0; ii < values.length ; ii++)
-            {
-                var speed = speedValues[ii];
-                var diff  = speed * accDeltaTime;
-                values[ii] = values[ii] + diff;
-                //減速
-                speedValues[ii] = decSpeedFunc(speed,accDeltaTime);
-                if(!speedValues[ii]) speedValues[ii] = 0;
-                if(Math.abs(speedValues[ii]) > 0){
-                    endCheck = false;                    
-                }
-                moveInfo.values     .push(values[ii]);
-                moveInfo.deltaValues.push(diff);
-            }
-            if(callback){
-                callback(moveInfo);
-            }
-            if(endCheck){
-                self.clear();
-            }
-        },15);
-    };
-};
-
-    ko.bindingHandlers.guide = {
-        init: function(guideElement, valueAccessor, allBindings, viewModel, bindingContext) {
-            var boxElem    = $(guideElement).parents(".blockBox");
-
-            // スクロールガイド(移動の操作しやすくするためのもの＋そのうちタブ向けのボタンになるかも)
-            var guidElem = $(guideElement);
-            var guidLayoutUpdate = function(){
-                guidElem.css({
-                    left:boxElem[0].clientWidth - guidElem.outerWidth()  + boxElem.scrollLeft() +"px",
-                    top: boxElem[0].clientHeight- guidElem.outerHeight() + boxElem.scrollTop()  +"px",
-                    overflow:"hidden"
-                });
-            };
-            boxElem.scroll(function(e){
-                guidLayoutUpdate();
-            });
-            $(window).resize(function(e){
-                guidLayoutUpdate();
-            });
-            guidLayoutUpdate();
-
-            var guidX=0;
-            var guidY=0;
-            var accVY=0;
-            var isLastSizeMove=null;
-            var touchMove = new TouchMove({useSelfMove:true});
-            var accelMove = new AccelMove(
-                function(moveInfo){
-                    $("body").scrollTop($("body").scrollTop()-moveInfo.deltaValues[0]);
-                },
-                function(speed,deltaTime){
-                    if(speed!=0)
-                    {
-                        var decSpeed  = 0.5 / deltaTime;
-                        var nextSpeed = speed - ((speed>0)?decSpeed:-decSpeed);
-                        if((nextSpeed>0) != (speed > 0)||
-                            Math.abs(nextSpeed)<0.01)
-                        {
-                           nextSpeed = 0;
-                        }
-                        //console.log("s:"+speed+" n:"+nextSpeed+" d:"+decSpeed);
-                    }
-                    return nextSpeed;
-                }
-            );
-            guidElem.on({
-                'touchstart': function (event) {
-                    event.preventDefault();                    
-                    touchMove.start(event);
-                    var touchInfo = touchMove.touchInfoFing[0];
-                    $(this).css({
-                        opacity:1.0,
-                    });
-                    if(touchInfo&&touchInfo.isFirst){
-                        accelMove.start(touchInfo.ly);
-                    }
-                    return false;
-                },
-                'touchmove': function (event) {
-                    event.preventDefault();
-                    touchMove.move(event);
-
-                    isLastSizeMove = false;
-                    var touchInfo  = touchMove.touchInfoFing[0];
-                    $.each(event.originalEvent.touches,function(k,touch){
-                        if(touchInfo.touchId != touch.identifier){
-                            // 複数のタッチを検知したら拡縮モードにします
-                            isLastSizeMove = true;
-                        }
-                    });
-                    if(isLastSizeMove){
-                        if(touchMove.opt.useSelfMove){
-                            touchMove.opt.useSelfMove = false;
-                            touchMove.start(event);
-                        }
-                        else{
-                            var newH = boxElem.height()+touchInfo.dy;
-                            if(newH < 50){
-                                newH = 50;
-                            }
-                            boxElem.height(newH);
-                            accelMove.clear();
-                            guidLayoutUpdate();
-                        }
-                    }
-                    else{
-                        if(!touchMove.opt.useSelfMove){
-                            touchMove.opt.useSelfMove = true;
-                            touchMove.start(event);
-                        }else{
-                            if(!accelMove.isStart()){
-                                accelMove.start(touchInfo.ly);
-                            }
-                            accelMove.move(touchInfo.ly);
-                        }
-                    }
-                    return false;
-                },
-                'touchend': function (event) {
-                    event.preventDefault();
-                    $(this).css({
-                        opacity:"0.2",
-                    });
-                    if(!isLastSizeMove){
-                        //慣性スクロール開始
-                        accelMove.end();
-                    }else{
-                        accelMove.clear();
-                    }
-                    touchMove.end(event);
-                    return false;
-                },
-            });
-        },
-        update: function(element, valueAccessor) {
-        }
-    };
-
     // ブロックの作業場のインスタンスを生成します
     self.createBlockWorkSpaceIns = function(dragScopeName,workspaceName){
         var blkWsIns = new BlockWorkSpace(self, dragScopeName, workspaceName);
@@ -3061,8 +3066,6 @@ var AccelMove = function(callback,decSpeed){
             }
         }
     };
-
-
 
     // 別ボックスへ移動するためのドラッグ向けのリストに追加
     self.addFloatDraggingList = function(newBlock){
