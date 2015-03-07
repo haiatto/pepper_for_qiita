@@ -13,6 +13,110 @@ pepperBlock.registBlockDef = function(callbackFunc)
 };
 
 
+//作成中メモ兼仕様メモ
+// スクラッチの概念
+//  丸いブロックは変数
+//  丸い入力枠は数字しか入れられない入力枠。変数とは関係ないみたい。
+//  四角い入力枠は文字なら何でもあり
+//  四角いリストボックス枠は、2種類くらいあるみたい。変数が入るのと入らないの。
+//  変数が入るのは、スプライトとか背景名(所謂シンボル)が入るものが多数みたい
+//  変数が入らないのは機能が固定のものが多いみたい。
+//  リストボックスで指定される名前は変数でも行けるものと、変数では設定できないものがあるみた。混合もある。どこへボックスとか
+//  変数は文字列。数字変換できるなら数字っぽい。ブロックの入力は何でも受け付けるけど、扱いが
+//  入力ボックスは、どうも
+//    四角(自由に入力可)と丸(数値入力可)、
+//    リストから選択機能と、
+//    直接入力可・不可、
+//    変数ドロップあり・なし
+//  などの条件から作られるっぽい？ただし四角とリスト機能と自由入力を組み合わせたものはないみたい。
+
+//■■■■■ データフォーマット案 ■■■■■ 
+// -- root --
+// blockOpt
+//   sys_version
+//     'システムバージョン'
+//   blockWorldId
+//     'シリアライズで使う世界共通(各言語共通)の重複しない識別子' 
+//      たとえば 'talkBlock' 'haiatto.talkBlock' '0x00AABBCCDDEEFF99' とか自由
+//   lang
+//     'jp' 'en'
+//   color
+//     'red' '#F88'
+//   head
+//     'start' 'in' ’value’
+//   tail
+//     'end' 'out' ’value’
+//   types:
+//      ["","",...]
+
+// blockContents
+//   expressions
+//     ***下記参照***
+//   scope
+//     scopeName
+//   space
+// {
+//     blockOpt:{version:'0.01',head:'start',tail:'out'},
+//     blockContents:[
+//         {expressions:[]},
+//         {scope:{scopeName:'scopeA',}},
+//         {expressions:[]},
+//         {scope:{scopeName:'scopeB',}},
+//         {space:{spaceName:'spaceA',}},
+//     ],
+// },
+// -- expressions --
+// expressions
+//   label
+//   string   ※acceptTypes省略可
+//   number   ※acceptTypes省略可
+//   bool     ※acceptTypes省略可
+//   options  ※acceptTypes必須
+// [
+//   {label:"ここに"}.
+//   {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
+//   {string:{default:"",},dataName:'dataB', acceptTypes:["*"]},
+//   {string:{default:"",},dataName:'dataC'},
+//   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
+// ],
+//
+//-- データフォーマット --
+// {string:""},
+// {bool:true},
+// {number:123},
+// {string_list:["A","B"]},
+// {miscABC:{version:,dataA:,dataB:,}},
+//
+//■■■■■ コールバック ■■■■■ 
+//
+// deferredの関数。promise返す
+//
+//  function blcokCallback(execContext, valueDataTbl, scopeTbl){
+//      var dfd = $.Deferred();
+//      dfd.resolve(v < LIMIT);
+//      return dfd.promise();
+//   }
+//
+// execContext  グローバル環境なテーブル
+// valueDataTbl 値入りテーブル
+//   valueDataTbl["でーためい"]          … 受け入れる型が一つの場合の中身
+//   valueDataTbl["でーためい"].タイプ名  … 受け入れる型が複数の場合の中身
+//   複数受け入れの際の初期値は最初に書かれたタイプ名のものになります
+// scopeTbl     スコープ用のテーブル
+//   scopeTbl.scope0.scopeOut.blockObsv().deferred()
+
+
+//■■■■■ 多言語対応案 ■■■■■ 
+//  blockWorldId と lang で多言語対応
+//  expressions の中身は言語によって順番やラベル数まで変わる可能性ありそう
+//  
+//==============================
+
+//deferredの参考リンク
+// http://s3pw.com/qrefy/collectdeferred/
+// http://tokkono.cute.coocan.jp/blog/slow/index.php/programming/jquery-deferred-for-responsive-applications-basic/
+//
+
 
 
 
@@ -111,92 +215,6 @@ function PepperCamera(alVideoDevice) {
     };
     self.subscribe();
 }
-
-//作成中メモ
-// スクラッチの概念
-//  丸いブロックは変数
-//  丸い入力枠は数字しか入れられない入力枠。変数とは関係ないみたい。
-//  四角い入力枠は文字なら何でもあり
-//  四角いリストボックス枠は、2種類くらいあるみたい。変数が入るのと入らないの。
-//  変数が入るのは、スプライトとか背景名(所謂シンボル)が入るものが多数みたい
-//  変数が入らないのは機能が固定のものが多いみたい。
-//  リストボックスで指定される名前は変数でも行けるものと、変数では設定できないものがあるみた。混合もある。どこへボックスとか
-//  変数は文字列。数字変換できるなら数字っぽい。ブロックの入力は何でも受け付けるけど、扱いが
-//  入力ボックスは、どうも
-//    四角(自由に入力可)と丸(数値入力可)、
-//    リストから選択機能と、
-//    直接入力可・不可、
-//    変数ドロップあり・なし
-//  などの条件から作られるっぽい？ただし四角とリスト機能と自由入力を組み合わせたものはないみたい。
-
-//■■■■■ データフォーマット案 ■■■■■ 
-// -- root --
-// blockOpt
-//   sys_version
-//     'システムバージョン'
-//   blockWorldId
-//     'シリアライズで使う世界共通(各言語共通)の重複しない識別子' 
-//      たとえば 'talkBlock' 'haiatto.talkBlock' '0x00AABBCCDDEEFF99' とか自由
-//   lang
-//     'jp' 'en'
-//   color
-//     'red' '#F88'
-//   head
-//     'start' 'in' ’value’
-//   tail
-//     'end' 'out' ’value’
-//   types:
-//      ["","",...]
-
-// blockContents
-//   expressions
-//     ***下記参照***
-//   scope
-//     scopeName
-//   space
-// {
-//     blockOpt:{version:'0.01',head:'start',tail:'out'},
-//     blockContents:[
-//         {expressions:[]},
-//         {scope:{scopeName:'scopeA',}},
-//         {expressions:[]},
-//         {scope:{scopeName:'scopeB',}},
-//         {space:{spaceName:'spaceA',}},
-//     ],
-// },
-// -- expressions --
-// expressions
-//   label
-//   string
-//   number
-//   bool
-//   options
-// [
-//   {label:"ここに"}.
-//   {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
-//   {string:{default:"",},dataName:'dataB', acceptTypes:["*"]},
-//   {string:{default:"",},dataName:'dataC'},
-//   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC'},
-// ],
-//
-//-- データフォーマット --
-// {string:""},
-// {bool:true},
-// {number:123},
-// {string_list:["A","B"]},
-// {miscABC:{version:,dataA:,dataB:,}},
-
-
-//■■■■■ 多言語対応案 ■■■■■ 
-//  blockWorldId と lang で多言語対応
-//  expressions の中身は言語によって順番やラベル数まで変わる可能性ありそう
-//  
-//==============================
-
-//deferredの参考リンク
-// http://s3pw.com/qrefy/collectdeferred/
-// http://tokkono.cute.coocan.jp/blog/slow/index.php/programming/jquery-deferred-for-responsive-applications-basic/
-//
 
 $(function(){
     if(!getUrlParameter("lunchPepper"))
@@ -465,8 +483,8 @@ function Block(blockManager, blockTemplate, callback) {
                     $.Deferred(function(dfd) {
                         var valuePromise = valueIn.blockObsv().deferred();
                         valuePromise.then(function(value){
-                            var valueObsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
-                            valueObsv(value);
+                            var valueDataObsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
+                            valueDataObsv(value);
                             dfd.resolve();
                         });
                     }).promise()
@@ -475,13 +493,67 @@ function Block(blockManager, blockTemplate, callback) {
         });
         // 入力する値ブロックが全部完了したら自身のコールバックを実行します
         return $.when.apply($,valuePromiseList).then(function(){
+            var makeFormatedValueDataTable_ = function(){
+                // 値のフォーマットの加工を行います
+                // ※値ブロックは利便性の為に対応するタイプが１種類の場合、
+                // データそのものが渡すルールにしてます。
+                // ２つ以上あった場合は、
+                //   valueData.タイプ名 = データ
+                // といったタイプ名をキーにしたテーブルの形で受け渡されます。
+                // ここでは、複数対応から１種対応、１種対応から複数、の場合の
+                // データフォーマットの変換を行っています。
+                var formatedValueDataTbl = {};
+                $.each(self.valueInTbl,function(k,valueIn){
+                    if(!valueIn.blockObsv())
+                    {
+                        if(valueIn.acceptTypes.length>1){
+                            //UI =>多
+                            formatedValueDataTbl[k] = {};
+                            formatedValueDataTbl[k][valueIn.acceptTypes[0]] = self.valueDataTbl[k]();
+
+                        }else{
+                            //UI =>１
+                            formatedValueDataTbl[k] = self.valueDataTbl[k]();
+                        }
+                    }
+                    else if(valueIn.acceptTypes.length>1 && 
+                            valueIn.blockObsv().valueOut.types.length == 1)
+                    {
+                        //１ => 多
+                        var inType = valueIn.blockObsv().valueOut.types[0];
+                        formatedValueDataTbl[k] = {};
+                        formatedValueDataTbl[k][inType] = self.valueDataTbl[k]();
+                    }
+                    else if(valueIn.blockObsv().valueOut.types.length > 1)
+                    {
+                        //多 => １
+                        var inType = valueIn.acceptTypes[0];
+                        formatedValueDataTbl[k] = self.valueDataTbl[k][inType]();
+                    }
+                    else{
+                        //１ => １ or 多 => 多
+                        formatedValueDataTbl[k] = self.valueDataTbl[k]();
+                    }
+                });
+                return formatedValueDataTbl;
+            };
+            var makeScopeBlockObsvDfdTbl_ = function(){
+                var scopeObsvTbl = {};
+                $.each(self.scopeTbl,function(k,scope){
+                    scopeObsvTbl[k] = scope.scopeOut.blockObsv;
+                });
+                return scopeObsvTbl;
+            };
+
             //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
             if(self.out && self.out.blockObsv()){
                 return $.Deferred(function(dfd){
                     // 自身の処理を実行します
                     $(self.element).removeClass("executeError"); 
                     $(self.element).addClass("executeNow");
-                    self.callback(self.blockManager.execContext, self.valueDataTbl, self.scopeTbl)
+                    var valueDataTbl    = makeFormatedValueDataTable_();
+                    var scopeBlkObsvTbl = makeScopeBlockObsvDfdTbl_();
+                    self.callback(self.blockManager.execContext, valueDataTbl, scopeBlkObsvTbl)
                     .then(
                       function(){
                         // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
@@ -502,7 +574,9 @@ function Block(blockManager, blockTemplate, callback) {
             else{
                 $(self.element).removeClass("executeError"); 
                 $(self.element).addClass("executeNow");
-                return self.callback(self.blockManager.execContext, self.valueDataTbl, self.scopeTbl)
+                var valueDataTbl = makeFormatedValueDataTable_();
+                var scopeBlkObsvTbl = makeScopeBlockObsvDfdTbl_();
+                return self.callback(self.blockManager.execContext, valueDataTbl, scopeBlkObsvTbl)
                     .then(function(v){
                         $(self.element).removeClass("executeNow"); 
                         return v;

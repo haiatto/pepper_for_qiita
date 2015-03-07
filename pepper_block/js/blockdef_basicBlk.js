@@ -45,7 +45,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                   //)
                   .then(
                      function(){
-                         tss.say(valueDataTbl.talkText0()).done(function()
+                         tss.say(valueDataTbl.talkText0).done(function()
                          {
                              dfd.resolve();
                          });
@@ -73,15 +73,15 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {string:{default:"あい"},dataName:'text0',acceptTypes:["string"]},
+                  {string:{default:"あい"},dataName:'text0'},
                   {label:'と'},
-                  {string:{default:"うえお"},dataName:'text1',acceptTypes:["string"]},
+                  {string:{default:"うえお"},dataName:'text1'},
               ]},
           ],
       },
       function(ctx,valueDataTbl){
           var dfd = $.Deferred();
-          var output = valueDataTbl.text0() + valueDataTbl.text1();
+          var output = valueDataTbl.text0 + valueDataTbl.text1;
           dfd.resolve(output);
           return dfd.promise();
       }
@@ -109,7 +109,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           var output = {
               string_list:[],
           };
-          var txtLst=[valueDataTbl.text0(), valueDataTbl.text1()];
+          var txtLst=[valueDataTbl.text0, valueDataTbl.text1];
           for(var ii=0; ii < txtLst.length; ii++){
               if(!txtLst[ii]){
                   continue;
@@ -119,7 +119,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                    output.string_list.concat(txtLst[ii].string_list);
               }
               else{
-                  output.string_list.push(txtLst[ii]);
+                  output.string_list.push(txtLst[ii].string);
               }
           }
           dfd.resolve(output);
@@ -145,14 +145,13 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               {space:{}},
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
-          if(valueDataTbl.checkFlag0()){
-              //HACK: scopeOutが微妙なのでなんとかしたい。
-              if(scopeTbl.scope0.scopeOut.blockObsv())
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          if(valueDataTbl.checkFlag0){
+              if(scopeBlkObsvTbl.scope0())
               {
-                  // スコープの先頭ブロックからpromiseを返します
-                  // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
-                  return scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                  // スコープの先頭ブロックのdeferredを呼び出します
+                  // (ブロックの返すdeferredは、そのブロックとoutから繋がるブロックが全部resolveしたときresolveになります)
+                  return scopeBlkObsvTbl.scope0().deferred();
               }
           }
           //分岐なかったので即resolveするpromiseを返します
@@ -184,22 +183,21 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               {space:{}},
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
-          if(valueDataTbl.checkFlag0()){
-              //HACK: scopeOutが微妙なのでなんとかしたい。
-              if(scopeTbl.scope0.scopeOut.blockObsv())
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          if(valueDataTbl.checkFlag0){
+              if(scopeBlkObsvTbl.scope0())
               {
-                  // スコープの先頭ブロックからpromiseを返します
-                  // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
-                  return scopeTbl.scope0.scopeOut.blockObsv().deferred();
+                  // スコープの先頭ブロックのdeferredを呼び出します
+                  // (ブロックの返すdeferredは、そのブロックとoutから繋がるブロックが全部resolveしたときresolveになります)
+                  return scopeBlkObsvTbl.scope0().deferred();
               }
           }else
           {
-              if(scopeTbl.scope1.scopeOut.blockObsv())
+              if(scopeBlkObsvTbl.scope1())
               {
-                  // スコープの先頭ブロックからpromiseを返します
-                  // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
-                  return scopeTbl.scope1.scopeOut.blockObsv().deferred();
+                  // スコープの先頭ブロックのdeferredを呼び出します
+                  // (ブロックの返すdeferredは、そのブロックとoutから繋がるブロックが全部resolveしたときresolveになります)
+                  return scopeBlkObsvTbl.scope1().deferred();
               }
           }
           //分岐先なかったので即resolveするpromiseを返します
@@ -226,20 +224,20 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               {space:{}},
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           // スコープの先頭ブロックからpromiseを返します
           // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
           var dfd = $.Deferred();
-          if(scopeTbl.scope0.scopeOut.blockObsv())
+          if(scopeBlkObsvTbl.scope0())
           {
               //無限ループ停止がまだ実装できてないのでひとまずこれで対処
               var cnt = 99;
               var loopFunc = function(){
                   console.log("loop " + cnt);
                   // 実行中にブロック外された場合もあるので毎回接続をチェックします
-                  if(cnt-->0 && scopeTbl.scope0.scopeOut.blockObsv()){
+                  if(cnt-->0 && scopeBlkObsvTbl.scope0()){
                      dfd
-                     .then(scopeTbl.scope0.scopeOut.blockObsv().deferred)
+                     .then(scopeBlkObsvTbl.scope0().deferred)
                      .then(loopFunc);
                      return dfd.promise();
                   }
@@ -270,10 +268,10 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
-          var a = valueDataTbl["valueA"]();
-          var b = valueDataTbl["valueB"]();
+          var a = valueDataTbl["valueA"].string || valueDataTbl["valueA"].number;
+          var b = valueDataTbl["valueB"].string || valueDataTbl["valueB"].number;
           dfd.resolve(a==b);
           return dfd.promise();
       }
@@ -290,13 +288,13 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {string:{default:'1.0'}, dataName:'waitSec',},
+                  {string:{default:'1.0'}, dataName:'waitSec',acceptTypes:['string','number'],},
                   {label:'秒 まつ'},
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
-          var time = valueDataTbl["waitSec"]();
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var time = valueDataTbl["waitSec"].string || valueDataTbl["waitSec"].number;
           var wait_time =  function(time){
               return (function(){
                   var dfd = $.Deferred()
@@ -319,7 +317,6 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  //{string:{default:'正面'}, dataName:'angle',},
                   {options:{default:'正面',
                             list:[{text:"正面",value:"正面"},
                                   {text:"右",value:"右"},
@@ -328,19 +325,20 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                                   {text:"下",value:"下"},
                                  ]}, 
                    dataName:'angle',
+                   acceptTypes:['string'],
                   },
                   {label:'に顔を向ける'},
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var onFail = function(e) {console.error('fail:' + e);};
           var ratio_x = 0.5;
           var ratio_y = 0.5;
           var name = ['HeadYaw', 'HeadPitch'];
           var DELAY = 0.5;
 
-          switch(valueDataTbl.angle()) {
+          switch(valueDataTbl.angle) {
           case '右':
               ratio_x = 0.25;
               break;
@@ -398,11 +396,11 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
           var onFail = function(e) {console.error('fail:' + e);};
           var FRONT_KEY = 'Device/SubDeviceList/Platform/Front/Sonar/Sensor/Value';
-          var LIMIT = valueDataTbl["dist"]();
+          var LIMIT = valueDataTbl["dist"];
           if(ctx.qims){
               ctx.qims.service('ALMemory').then(function(s){
                   s.getData(FRONT_KEY).then(function(v){
@@ -438,20 +436,20 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
           var onFail = function(e) {
               console.error('fail:' + e);};
           var onFailPass = function(e) {
               console.log('fail:' + e); 
               return $.Deferred().resolve();};
-          var recoTextVal = valueDataTbl["recoText"]();
+          var recoTextVal = valueDataTbl["recoText"];
           var recoTextLst = [];
           if(recoTextVal.string_list){
               recoTextLst = recoTextVal.string_list;
           }
           else{
-              recoTextLst.push(recoTextVal);
+              recoTextLst.push(recoTextVal.string);
           }
           if(ctx.qims){
               $.when( ctx.qims.service("ALMemory"),
@@ -533,7 +531,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
           if(ctx.lastRecoData.rawData)
           {
@@ -567,7 +565,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
           var date = new Date();
           var h = date.getHours();
@@ -597,6 +595,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                                   {text:"ゾーン３",value:"3"},
                                  ]}, 
                    dataName:'zone',
+                   acceptTypes:['string'],
                   },
                   {label:'に'},
                   {options:{default:'うごくもの',
@@ -604,20 +603,21 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                                   {text:"ひと",value:"person"},
                                  ]}, 
                    dataName:'target',
+                   acceptTypes:['string'],
                   },
                   {label:'が　いたら'},
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
           var onFail = function(e) {
               console.error('fail:' + e);};
           var onFailPass = function(e) {
               console.log('fail:' + e); 
               return $.Deferred().resolve();};
-          var zone   = valueDataTbl["zone"]();
-          var target = valueDataTbl["target"]();
+          var zone   = valueDataTbl["zone"];
+          var target = valueDataTbl["target"];
           if(ctx.qims){
               $.when( ctx.qims.service("ALMemory")
               )
@@ -653,6 +653,31 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // 最後に調べた人を返すブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"lastPeopleData@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["people"],
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'最後に調べた人'}
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var date = new Date();
+          var h = date.getHours();
+          var m = date.getMinutes();
+          dfd.resolve(ctx.lastPeopleData);
+          return dfd.promise();
+      }
+    );
 
 
     // 素材リスト生成をします
@@ -684,5 +709,9 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("sonarSimple@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("nowTime@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZone@basicBlk"));
+    materialBoxWsList.push(ko.observable(materialBoxWs));
+
+    materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","ひと");
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastPeopleData@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 });
