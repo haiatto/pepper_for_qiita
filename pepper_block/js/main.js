@@ -1465,13 +1465,13 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                 var scaleW = areaW / w;
                 var scaleH = areaH / h;
                 var scale = Math.min(scaleW,scaleH);
-                scale = Math.min(scale,2.0);
+                scale = Math.min(scale,3.0);
                 blockWsIns.scale(scale * 0.9);
-                areaW = $(blockWsIns.workAreaElement).width() * scale;
-                areaH = $(blockWsIns.workAreaElement).height()* scale;
+                areaW = $(blockWsIns.workAreaElement).width() ;
+                areaH = $(blockWsIns.workAreaElement).height();
 
-                blockWsIns.offsetX(-minBX + (areaW-w*scale)/2);
-                blockWsIns.offsetY(-minBY + (areaH-h*scale)/2);
+                blockWsIns.offsetX(-minBX + (areaW-w)/2);
+                blockWsIns.offsetY(-minBY + (areaH-h)/2);
             }
         };
         var accelMove = new AccelMove(
