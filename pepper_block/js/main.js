@@ -1293,11 +1293,6 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
         };
         var mouseDownFlg = false;
         var lastPos  = null;
-        var accsV    = {x:0,y:0};
-        var lastTime = null;
-        var timeId   = null;
-        var lastTouch= [];
-
         var touchMove = new TouchMove();            
         var TouchST = function(){
             var self = this;
@@ -1386,6 +1381,125 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
             };
         };
         var touchSt = new TouchST();
+        var TouchDblTap = function(callback){
+            var self = this;
+            var touchInfos={};
+            var GAP = 15;
+            var DOUBLE_TAP_TIME = 400;
+            var startTapTime= null;
+            var lastTapTime = null;
+            var clear_ = function(){
+                startTapTime= null;
+                lastTapTime = null;
+                touchInfos = {};
+            };
+            self.dblTap = null;
+            self.start = function(e){
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    touchInfos[touch.identifier] = {
+                        sx:touch.pageX,
+                        sy:touch.pageY,
+                    };
+                    if(!lastTapTime){
+                        startTapTime = +new Date();
+                    }
+                });
+            };
+            self.move = function(e){
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    if(touchInfos[touch.identifier]){  
+                        var dx = touch.pageX - touchInfos[touch.identifier].sx;
+                        var dy = touch.pageY - touchInfos[touch.identifier].sy;
+                        if(Math.abs(dx)>GAP||Math.abs(dy)>GAP){
+                            clear_();
+                        }
+                    }
+                });
+            };
+            self.end = function(e){                
+                $.each(e.originalEvent.changedTouches,function(k,touch){
+                    if(touchInfos[touch.identifier]){
+                        touchInfos[touch.identifier] = null;
+                    }
+                    var nowTime = +new Date();
+                    if( (nowTime - startTapTime) < DOUBLE_TAP_TIME){
+                        if( lastTapTime ){
+                            if(self.dblTap){
+                                self.dblTap();
+                            }
+                            clear_();
+                        }
+                        else{
+                            lastTapTime = nowTime;
+                        }
+                    }
+                    else{
+                        clear_();
+                    }
+                });
+            };
+        };
+        var touchDblTap = new TouchDblTap();
+        touchDblTap.dblTap = function(){
+            var minBX = 99999;
+            var minBY = 99999;
+            var maxBX = -99999;
+            var maxBY = -99999;
+            $.each(blockWsIns.blockListObsv(),function(k,blockObsv){
+                var block = blockObsv();
+                minBX = Math.min(minBX,block.posX());
+                minBY = Math.min(minBY,block.posY());
+                maxBX = Math.max(maxBX,block.posX()+block.blockWidth());
+                maxBY = Math.max(maxBY,block.posY()+block.blockHeight());
+            });
+            if(minBX<maxBX){
+                var w = maxBX - minBX;
+                var h = maxBY - minBY;
+                var cx = w/2 - minBX;
+                var cy = h/2 - minBY;
+
+                var scale = blockWsIns.scale();
+                var areaW = $(blockWsIns.workAreaElement).width() * scale;
+                var areaH = $(blockWsIns.workAreaElement).height()* scale;
+                
+                var scaleW = areaW / w;
+                var scaleH = areaH / h;
+                var scale = Math.min(scaleW,scaleH);
+                scale = Math.min(scale,2.0);
+                blockWsIns.scale(scale * 0.9);
+                areaW = $(blockWsIns.workAreaElement).width() * scale;
+                areaH = $(blockWsIns.workAreaElement).height()* scale;
+
+                blockWsIns.offsetX(-minBX + (areaW-w*scale)/2);
+                blockWsIns.offsetY(-minBY + (areaH-h*scale)/2);
+            }
+        };
+        var accelMove = new AccelMove(
+            function(moveInfo){
+                var dx = moveInfo.deltaValues[0]*1.0/blockWsIns.scale();
+                var dy = moveInfo.deltaValues[1]*1.0/blockWsIns.scale();
+                blockWsIns.offsetX(dx + blockWsIns.offsetX());
+                blockWsIns.offsetY(dy + blockWsIns.offsetY());
+                if(Number.isNaN(blockWsIns.offsetY())){
+                    alert("NaN");
+                }
+            },
+            function(speed,deltaTime){
+                if(speed!=0)
+                {
+                    var decSpeed  = 8*blockWsIns.scale() / 1000 * deltaTime;
+                    var nextSpeed = speed - ((speed>0)?decSpeed:-decSpeed);
+                    if((nextSpeed>0) != (speed > 0)||
+                        Math.abs(nextSpeed)<0.01)
+                    {
+                       nextSpeed = 0;
+                    }
+                    //console.log("s:"+speed+" n:"+nextSpeed+" d:"+decSpeed);
+                }
+                return nextSpeed;
+            }
+        );
+
         var nowControl=false;
         var checkTarget =function(elem){
             if($(elem).hasClass("noDrag")){
@@ -1414,6 +1528,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                     if(e.originalEvent.changedTouches){
                         touchMove.start(e);
                         touchSt.start(e);
+                        touchDblTap.start(e);
                     }
                     if(!nowControl)
                     {
@@ -1426,7 +1541,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                         }
                         lastPos = null;
                         if(isMouseEvent(e)){
-                            lastPos = {x:e.pageX,y:e.posY};       
+                            lastPos = {x:e.pageX,y:e.pageY};       
                         }
                         else if(touchMove.touchInfoFing[0]){
                             lastPos = {
@@ -1434,11 +1549,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                                 y:touchMove.touchInfoFing[0].ly
                             };
                         }
-                        lastTime = +new Date();
-                        if(timeId){
-                            clearInterval(timeId);
-                            timeId = null;
-                        }
+                        accelMove.start(lastPos.x, lastPos.y);
                     }
                 }
             },
@@ -1453,6 +1564,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                 if(e.originalEvent.changedTouches){
                     touchMove.move(e);
                     touchSt.move(e);
+                    touchDblTap.move(e);
                 }
                 var target = $(this);
                 if(isMouseEvent(e) && !mouseDownFlg){
@@ -1460,7 +1572,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                 }
                 var nowPos = null;
                 if(isMouseEvent(e)){
-                    nowPos = {x:e.pageX,y:e.posY};       
+                    nowPos = {x:e.pageX,y:e.pageY};       
                 }
                 else if(touchMove.touchInfoFing[0]){
                     nowPos = {
@@ -1488,30 +1600,22 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                     var wsOfy = (blockWsIns.offsetY()-cy) * scaleDelta + cy;
                     blockWsIns.offsetX(wsOfx/scaleDelta);
                     blockWsIns.offsetY(wsOfy/scaleDelta);
+                    if(Number.isNaN(blockWsIns.offsetY())){
+                        alert("NaN");
+                    }
                     blockWsIns.scale(newScale);
                 }
                 else{
                     var nowTime = +new Date();
                     if(lastPos&&nowPos){
-                        var vX = (nowPos.x - lastPos.x)*1.0/blockWsIns.scale();
-                        var vY = (nowPos.y - lastPos.y)*1.0/blockWsIns.scale();
-                        var delta = (nowTime - lastTime)/1000;
-                        if(delta==0){
-                            return;
-                        }
                         if(!blockWsIns.scrollLock){
-                            blockWsIns.offsetX(vX + blockWsIns.offsetX());
-                            blockWsIns.offsetY(vY + blockWsIns.offsetY());
-                            accsV.x = accsV.x * 0.9 + vX / delta * 0.1;
-                            accsV.y = accsV.y * 0.9 + vY / delta * 0.1;
+                            accelMove.move(nowPos.x,nowPos.y);
                         }
                         else{
-                            accsV.x = 0;
-                            accsV.y = 0;
+                            accelMove.move(0,0);
                         }
                     }
                     lastPos = nowPos;
-                    lastTime = nowTime;
                 }
             },
             'mouseout': function (e) {
@@ -1526,6 +1630,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                 if(e.originalEvent.changedTouches){
                     touchMove.end(e);
                     touchSt.end(e);
+                    touchDblTap.end(e);
                 }
                 if(!nowControl){
                     return;
@@ -1535,31 +1640,7 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                     mouseDownFlg = false;
                 }
                 if(!nowControl && !blockWsIns.scrollLock){
-                    //とりあえずな慣性
-                    var accLastTime = +new Date();
-                    if(timeId){
-                        clearInterval(timeId);
-                        timeId = null;
-                    }
-                    timeId = setInterval(function(){
-                        var accNowTime = +new Date();
-                        var delta = (accNowTime - accLastTime)/1000; 
-                        accLastTime = accNowTime;
-                        blockWsIns.offsetX(accsV.x*delta + blockWsIns.offsetX());
-                        blockWsIns.offsetY(accsV.y*delta + blockWsIns.offsetY());
-                        var len = Math.sqrt(accsV.x*accsV.x + accsV.y*accsV.y);
-                        if(len > 0.001){
-                            var vx = accsV.x / len;
-                            var vy = accsV.y / len;
-                            len = len - (len*50.3/1000);
-                            accsV.x = vx * len;
-                            accsV.y = vy * len;
-                        }else{
-                            accsV.x = accsV.y = 0;
-                            clearInterval(timeId);
-                            timeId = null;
-                        }
-                    },10);
+                    accelMove.end();
                 }
             },
         });
