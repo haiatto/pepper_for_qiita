@@ -374,9 +374,7 @@
                <div class="box-workspace graphPaper" 
                     data-bind="blockWorkSpaceSetup: $data, 
                                attr:{id:$data.id},
-                               style:{'-webkit-transform':'scale('+$data.scale()+','+
-                                                                   $data.scale()+')'+
-                                                          '',
+                               style:{'-webkit-transform':$data.transformStyle,
                                       width:(100.0/$data.scale())+'%',
                                       height:(100.0/$data.scale())+'%',
                                       backgroundPosition:$data.offsetX()+'px '+

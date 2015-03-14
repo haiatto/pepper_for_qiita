@@ -117,8 +117,21 @@ pepperBlock.registBlockDef = function(callbackFunc)
 // http://tokkono.cute.coocan.jp/blog/slow/index.php/programming/jquery-deferred-for-responsive-applications-basic/
 //
 
+var userAgent  = window.navigator.userAgent.toLowerCase();
+var appVersion = window.navigator.appVersion.toLowerCase();
 
-
+if (userAgent.indexOf('safari') != -1) {
+    window.onerror = function (msg, file, line, column, err) {
+        /*
+        msg: error message
+        file: file path
+        line: row number
+        column: column number
+        err: error object
+        */ 
+        alert(msg + file + ':' + line);
+    };
+}
 
 function _base64ToArrayBuffer(base64) {
     var binary_string =  window.atob(base64);
@@ -152,9 +165,6 @@ function getUrlParameter(sParam)
         }
     }
 }
-
-var userAgent = window.navigator.userAgent.toLowerCase();
-var appVersion = window.navigator.appVersion.toLowerCase();
 
 //ドラッグ時にフォーカス外れない対策いるか？(現状はChrome対策)
 function checkAgent_NeedDragUnselect()
@@ -938,6 +948,7 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
     self.offsetX = ko.observable(0);
     self.offsetY = ko.observable(0);
     self.scale   = ko.observable(1.0);
+    self.transformStyle = ko.observable("");
     self.scrollLock = false;
 
     var updateBlockDispPositions_ = function(){
@@ -948,8 +959,21 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
             block.dispPosY(Math.floor(block.posY()+self.offsetY()));
         });
     };
-    self.offsetX.subscribe(updateBlockDispPositions_);
-    self.offsetY.subscribe(updateBlockDispPositions_);
+    updateBlockDispPositions_();
+
+    var updateWorkSpaceOffset_ = function(){
+        var ox = 0;self.offsetX();
+        var oy = 0;self.offsetY();
+        var s  = self.scale();
+        self.transformStyle(
+//            " translate3d("+ox+"px,"+oy+"px,0)"+
+            " scale("+s+","+s+")"
+        );
+        updateBlockDispPositions_();
+    }
+
+    self.offsetX.subscribe(updateWorkSpaceOffset_);
+    self.offsetY.subscribe(updateWorkSpaceOffset_);
 
     // シリアライズ関連です
     self.toJSON = function()
@@ -1480,9 +1504,6 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                 var dy = moveInfo.deltaValues[1]*1.0/blockWsIns.scale();
                 blockWsIns.offsetX(dx + blockWsIns.offsetX());
                 blockWsIns.offsetY(dy + blockWsIns.offsetY());
-                if(Number.isNaN(blockWsIns.offsetY())){
-                    alert("NaN");
-                }
             },
             function(speed,deltaTime){
                 if(speed!=0)
@@ -1600,9 +1621,6 @@ ko.bindingHandlers.blockWorkSpaceSetup = {
                     var wsOfy = (blockWsIns.offsetY()-cy) * scaleDelta + cy;
                     blockWsIns.offsetX(wsOfx/scaleDelta);
                     blockWsIns.offsetY(wsOfy/scaleDelta);
-                    if(Number.isNaN(blockWsIns.offsetY())){
-                        alert("NaN");
-                    }
                     blockWsIns.scale(newScale);
                 }
                 else{
@@ -2010,12 +2028,15 @@ ko.bindingHandlers.guide = {
 
                 isLastSizeMove = false;
                 var touchInfo  = touchMove.touchInfoFing[0];
-                $.each(event.originalEvent.touches,function(k,touch){
-                    if(touchInfo.touchId != touch.identifier){
-                        // 複数のタッチを検知したら拡縮モードにします
-                        isLastSizeMove = true;
-                    }
-                });
+                if(touchInfo)
+                {
+                    $.each(event.originalEvent.touches,function(k,touch){
+                        if(touchInfo.touchId != touch.identifier){
+                            // 複数のタッチを検知したら拡縮モードにします
+                            isLastSizeMove = true;
+                        }
+                    });
+                }
                 if(isLastSizeMove){
                     if(touchMove.opt.useSelfMove){
                         touchMove.opt.useSelfMove = false;

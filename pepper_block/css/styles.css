@@ -130,7 +130,6 @@ body{
     top:0.0em;
     left:0.0em;
     text-shadow:none;
-    /*transform:translate3d(0,0,0);*/
 }
 .executeNow{
   box-shadow: 0 0 1em 0.5em red;
@@ -377,7 +376,6 @@ body{
   height: 100%;
   /* overflow: hidden; */
   -webkit-transform-origin: 0px 0px;
-  transform-origin: 0px 0px;
   /* background: mediumvioletred; */
   /* opacity: 0.1; */
 }
