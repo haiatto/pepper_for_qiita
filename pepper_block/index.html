@@ -70,8 +70,8 @@
   <script type="text/html" id="block-template">
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
-                      style:{left:   $data.dispPosX(),
-                             top:    $data.dispPosY(),
+                      style:{left:   $data.posX(),
+                             top:    $data.posY(),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
                       updateBlockSizeLayout:$data,">
@@ -380,10 +380,11 @@
                                       backgroundPosition:$data.offsetX()+'px '+
                                                          $data.offsetY()+'px',
                                      },">
-                  <div class="testPt"></div>
-                  <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
-                    <!-- ko template:'block-template',data:$data -->
-                    <!-- /ko -->
+                  <div class="box-workspace-transform-root">
+                    <div data-bind="foreach:$data.blockListObsv, blockWorkSpaceAutoLayout:$data">
+                      <!-- ko template:'block-template',data:$data -->
+                      <!-- /ko -->
+                    </div>
                   </div>
               </div>
             <!-- /ko -->

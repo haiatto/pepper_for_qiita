@@ -255,16 +255,14 @@ function Block(blockManager, blockTemplate, callback) {
     self.blockHeight = ko.observable(0);
     self.posX        = ko.observable(0);
     self.posY        = ko.observable(0);
-    self.dispPosX    = ko.observable(0);
-    self.dispPosY    = ko.observable(0);
     self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
     self.textColor   = ko.observable(self.blockTemplate.blockOpt.textColor||"white");
 
     // パフォーマンスのために反映を遅延させます
     //(反映の遅延のレスポンスに影響は殆どなく寧ろ処理が軽くなって反応あがる効果あるみたいです)
 //    TODO:パフォーマンス計測等のため一旦OFFあとでもどす
-//    self.dispPosX.extend({ rateLimit: 1 });
-//    self.dispPosY.extend({ rateLimit: 1 });
+//    self.posX.extend({ rateLimit: 1 });
+//    self.posY.extend({ rateLimit: 1 });
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
@@ -951,29 +949,44 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
     self.transformStyle = ko.observable("");
     self.scrollLock = false;
 
-    var updateBlockDispPositions_ = function(){
-        var topBlockList = [];
-        $.each(self.blockListObsv(),function(k,blockObsv){
-            var block = blockObsv();
-            block.dispPosX(Math.floor(block.posX()+self.offsetX()));
-            block.dispPosY(Math.floor(block.posY()+self.offsetY()));
-        });
-    };
-    updateBlockDispPositions_();
-
+    var updateWsOffsetTimer_=null;
     var updateWorkSpaceOffset_ = function(){
-        var ox = 0;self.offsetX();
-        var oy = 0;self.offsetY();
-        var s  = self.scale();
-        self.transformStyle(
-//            " translate3d("+ox+"px,"+oy+"px,0)"+
-            " scale("+s+","+s+")"
-        );
-        updateBlockDispPositions_();
+        if(self.workAreaElement)
+        {
+            if(updateWsOffsetTimer_)
+            {
+                clearInterval(updateWsOffsetTimer_);
+                updateWsOffsetTimer_ = null;
+            }
+            var ox = self.offsetX();
+            var oy = self.offsetY();
+            var s  = self.scale();
+
+            //★速度アップにかなり効果あり！★
+            self.transformStyle(
+                //" translate3d("+ox+"px,"+oy+"px,0)"+
+                " scale("+s+","+s+")"
+            );
+            // 軽い処理で移動させる(Chromeとsafariで効果を確認)
+            var rootElm = $(".box-workspace-transform-root",self.workAreaElement);
+            rootElm.css({
+                "-webkit-transform":
+                  " translate3d("+ox+"px,"+oy+"px,0)",
+            });
+            updateWsOffsetTimer_ = setInterval(function(){
+                //ぼやけた画像をくっきりさせる(Chromeとsafariで効果を確認)
+                rootElm.css({
+                    "-webkit-transform":
+                      " translate("+ox+"px,"+oy+"px)",
+                });
+            },300);
+        }
     }
 
     self.offsetX.subscribe(updateWorkSpaceOffset_);
     self.offsetY.subscribe(updateWorkSpaceOffset_);
+
+
 
     // シリアライズ関連です
     self.toJSON = function()
@@ -1067,8 +1080,10 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
     };
 
     // ブロックを並べるレイアウトを行います
+    self.autoLayoutDirty = false;
     self.autoLayoutCb = null;
     self.setAutoArrayLayout = function(){
+        self.autoLayoutDirty = true;
         self.autoLayoutCb = function(){
             var posX = 10;
             var posY = 20;
@@ -1079,7 +1094,6 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
                 posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
                 //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
             });
-            updateBlockDispPositions_();
         };
     };
 
@@ -1677,8 +1691,11 @@ ko.bindingHandlers.blockWorkSpaceAutoLayout = {
     },
     update: function(element, valueAccessor) {
         var blockWs = ko.unwrap(valueAccessor());
-        if(blockWs.autoLayoutCb){
-            blockWs.autoLayoutCb();
+        if(blockWs.autoLayoutDirty){
+            if(blockWs.autoLayoutCb){
+                blockWs.autoLayoutCb();
+            }
+            blockWs.autoLayoutDirty = false;
         }
     }
 };
@@ -2415,8 +2432,6 @@ function BlockManager(){
         // レイアウトします
         self.traverseUnderBlock(topBlock,{
             blockCb:function(block){
-                block.dispPosX(Math.floor(block.posX()+offsetX));
-                block.dispPosY(Math.floor(block.posY()+offsetY));                
             },
             // 位置のみなのでブロック内の処理順は自由にやれます
             valueInCb:function(block,k,valueInBlock,valueIn){
@@ -2502,8 +2517,8 @@ function BlockManager(){
         if(workSpace){
             //posX = posX - $(workSpace.workAreaElement).offset().left;
             //posY = posY - $(workSpace.workAreaElement).offset().top;
-            posX = posX - workSpace.offsetX();
-            posY = posY - workSpace.offsetY();
+//            posX = posX - workSpace.offsetX();
+//            posY = posY - workSpace.offsetY();
         }
         block.posX(posX);
         block.posY(posY);
@@ -2519,8 +2534,8 @@ function BlockManager(){
         if(workSpace){
             //posX = posX - $(workSpace.workAreaElement).offset().left;
             //posY = posY - $(workSpace.workAreaElement).offset().top;
-            posX = posX - workSpace.offsetX();
-            posY = posY - workSpace.offsetY();
+//            posX = posX - workSpace.offsetX();
+//            posY = posY - workSpace.offsetY();
         }
         block.posX(posX);
         block.posY(posY);
@@ -3123,12 +3138,14 @@ function BlockManager(){
                   if(dragInfo)
                   {
                       // This is the parameter for scale()
-                      var zoom = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
+                      var zoom  = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
+                      var offsX = dragInfo.blockWs? dragInfo.blockWs.offsetX() : 0.0;
+                      var offsY = dragInfo.blockWs? dragInfo.blockWs.offsetY() : 0.0;
                       var original = ui.originalPosition;
                       // jQuery will simply use the same object we alter here
                       ui.position = {
-                          left: (event.clientX - dragInfo.click.x + original.left) / zoom,
-                          top:  (event.clientY - dragInfo.click.y + original.top ) / zoom
+                          left: (event.clientX - dragInfo.click.x + original.left) / zoom - offsX,
+                          top:  (event.clientY - dragInfo.click.y + original.top ) / zoom - offsY
                       };
                   }
                   self.move(cloneBlock||block, ui.position);
