@@ -63,7 +63,7 @@ function Block(blockManager, blockTemplate, callback) {
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
-        self.blockManager.updatePositionLayout(self);
+        self.blockManager.updatePositionLayout(self,false);
     });
 
     // SVG要素作成のための補助
@@ -753,8 +753,14 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
             //block.dispPosY(Math.floor(block.posY()+self.offsetY()));
             var x = block.posX();
             var y = block.posY();
-            //block.transformStyle("translate("+x+"px,"+y+"px)");
-            block.transformStyle("translate3d("+x+"px,"+y+"px,0)");
+            block.transformStyle("translate("+x+"px,"+y+"px)");
+            //block.transformStyle("translate3d("+x+"px,"+y+"px,0)");
+            /*
+            $(block.element).css({
+                "-webkit-transform":
+                  " translate3d("+x+"px,"+y+"px,0)",
+            });
+            */
         });
     };
     updateBlockDispPositions_();
@@ -890,7 +896,7 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
 
             dropBlockTop.posX(dropX);
             dropBlockTop.posY(dropY);
-            self.blockManager.updatePositionLayout( dropBlockTop );
+            self.blockManager.updatePositionLayout( dropBlockTop, false );
             self.blockManager.dropConnectUpdate( dropBlockTop );
         };
         $(self.workAreaElement).droppable({
@@ -2168,7 +2174,7 @@ function BlockManager(){
     };
     
     // 位置のレイアウト処理です(サイズはカスタムバインドで処理します)
-    self.updatePositionLayout = function(updateBlock){
+    self.updatePositionLayout = function(updateBlock,useGpu){
         //console.log("updatePositionLayout");
 
         // 更新する一番上のブロックを探します
@@ -2181,10 +2187,6 @@ function BlockManager(){
             offsetY = workSpace.offsetY();
         }
 
-//ぶろっくのローカルとスクリーン座標いれるさき分ける
-//すくりーん座標変更時のみDOM更新がかかればいいので
-//画面が居の扱いとかでなかなかいいかんじになるかも？
-
         // レイアウトします
         self.traverseUnderBlock(topBlock,{
             blockCb:function(block){
@@ -2192,8 +2194,13 @@ function BlockManager(){
                 //block.dispPosY(Math.floor(block.posY()+offsetY));
                 var x = block.posX();
                 var y = block.posY();
-                //block.transformStyle("translate("+x+"px,"+y+"px)");
-                block.transformStyle("translate3d("+x+"px,"+y+"px,0)");
+                if(useGpu){
+                    block.transformStyle("translate3d("+x+"px,"+y+"px,0)");
+                }
+                else{
+                    block.transformStyle("translate("+x+"px,"+y+"px)");
+                }
+                console.log("translate3d("+x+"px,"+y+"px,0)");
             },
             // 位置のみなのでブロック内の処理順は自由にやれます
             valueInCb:function(block,k,valueInBlock,valueIn){
@@ -2232,6 +2239,27 @@ function BlockManager(){
             },
         });
     };
+    self.updatePositionLayoutEnd = function(updateBlock){
+        // 更新する一番上のブロックを探します
+        var topBlock = self.getLumpTopBlock(updateBlock);
+        var workSpace = self.findBlockWorkSpaceByBlock(topBlock);
+        var offsetX = 0;
+        var offsetY = 0;
+        if(workSpace){
+            offsetX = workSpace.offsetX();
+            offsetY = workSpace.offsetY();
+        }
+        self.traverseUnderBlock(topBlock,{
+            blockCb:function(block){
+                var x = block.posX();
+                var y = block.posY();
+                block.transformStyle("translate("+x+"px,"+y+"px)");
+
+                console.log("translate("+x+"px,"+y+"px)");
+            },
+        });
+    };
+
 
     self.moveStart = function(block,uiOffsPosition){
         block.clearIn();
@@ -2284,7 +2312,7 @@ function BlockManager(){
         }
         block.posX(posX);
         block.posY(posY);
-        self.updatePositionLayout(block);
+        self.updatePositionLayout(block,true);
         self.dropGuideUpdate(block);
     };
     self.moveStop = function(block,scaledUiRelativePosition){
@@ -2301,7 +2329,9 @@ function BlockManager(){
         }
 //        block.posX(posX);
 //        block.posY(posY);
-//        self.updatePositionLayout(block);               
+//        self.updatePositionLayout(block);
+//        self.updatePositionLayoutEnd(block);
+        self.updatePositionLayout(block,false);
         self.dropConnectUpdate(block,{x:scaledUiRelativePosition.left,
                                       y:scaledUiRelativePosition.top });
     };
@@ -2329,7 +2359,7 @@ function BlockManager(){
             else{
                 hit.srcBlock.connectOut(hit.hitBlock);
             }
-            self.updatePositionLayout(block);
+            self.updatePositionLayout(block,false);
         }
         // zIndexを振りなおします
         var zIndex = 100;
