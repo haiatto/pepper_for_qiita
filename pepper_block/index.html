@@ -70,8 +70,7 @@
   <script type="text/html" id="block-template">
       <div class="block" 
            data-bind="with:$data,blockSetup:$data,
-                      style:{left:   $data.posX(),
-                             top:    $data.posY(),
+                      style:{'-webkit-transform':$data.transformStyle(),
                              width:  $data.blockWidth(),
                              height: $data.blockHeight(),},
                       updateBlockSizeLayout:$data,">

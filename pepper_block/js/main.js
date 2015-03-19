@@ -257,6 +257,7 @@ function Block(blockManager, blockTemplate, callback) {
     self.posY        = ko.observable(0);
     self.blockColor  = ko.observable(self.blockTemplate.blockOpt.color||"red");
     self.textColor   = ko.observable(self.blockTemplate.blockOpt.textColor||"white");
+    self.transformStyle = ko.observable("");
 
     // パフォーマンスのために反映を遅延させます
     //(反映の遅延のレスポンスに影響は殆どなく寧ろ処理が軽くなって反応あがる効果あるみたいです)
@@ -266,7 +267,7 @@ function Block(blockManager, blockTemplate, callback) {
 
     //レイアウトにかかわるパラメータが更新されたら更新をかけます
     self.blockHeight.subscribe(function(){
-        self.blockManager.updatePositionLayout(self);
+        self.blockManager.updatePositionLayout(self,false);
     });
 
     // SVG要素作成のための補助
@@ -1016,7 +1017,7 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
             self.addBlock( block );
             block.posX(block.posX()/block.pix2em);
             block.posY(block.posY()/block.pix2em);
-            self.blockManager.updatePositionLayout(block);
+            self.blockManager.updatePositionLayout(block,false);
         });
     };
 
@@ -1093,6 +1094,8 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
                 blockIns.posY(posY);
                 posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
                 //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
+
+                self.blockManager.updatePositionLayout( blockIns, false );
             });
         };
     };
@@ -1115,7 +1118,7 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
 
             dropBlockTop.posX(dropX);
             dropBlockTop.posY(dropY);
-            self.blockManager.updatePositionLayout( dropBlockTop );
+            self.blockManager.updatePositionLayout( dropBlockTop, false );
             self.blockManager.dropConnectUpdate( dropBlockTop );
         };
         $(self.workAreaElement).droppable({
@@ -2412,7 +2415,7 @@ function BlockManager(){
     };
     
     // 位置のレイアウト処理です(サイズはカスタムバインドで処理します)
-    self.updatePositionLayout = function(updateBlock){
+    self.updatePositionLayout = function(updateBlock,useGpu){
         //console.log("updatePositionLayout");
 
         // 更新する一番上のブロックを探します
@@ -2425,13 +2428,17 @@ function BlockManager(){
             offsetY = workSpace.offsetY();
         }
 
-//ぶろっくのローカルとスクリーン座標いれるさき分ける
-//すくりーん座標変更時のみDOM更新がかかればいいので
-//画面が居の扱いとかでなかなかいいかんじになるかも？
-
         // レイアウトします
         self.traverseUnderBlock(topBlock,{
             blockCb:function(block){
+                var x = block.posX();
+                var y = block.posY();
+                if(useGpu){
+                    block.transformStyle("translate3d("+x+"px,"+y+"px,0)");
+                }
+                else{
+                    block.transformStyle("translate("+x+"px,"+y+"px)");
+                }
             },
             // 位置のみなのでブロック内の処理順は自由にやれます
             valueInCb:function(block,k,valueInBlock,valueIn){
@@ -2517,12 +2524,12 @@ function BlockManager(){
         if(workSpace){
             //posX = posX - $(workSpace.workAreaElement).offset().left;
             //posY = posY - $(workSpace.workAreaElement).offset().top;
-//            posX = posX - workSpace.offsetX();
-//            posY = posY - workSpace.offsetY();
+            posX = posX - workSpace.offsetX();
+            posY = posY - workSpace.offsetY();
         }
         block.posX(posX);
         block.posY(posY);
-        self.updatePositionLayout(block);
+        self.updatePositionLayout(block,true);
         self.dropGuideUpdate(block);
     };
     self.moveStop = function(block,scaledUiRelativePosition){
@@ -2531,15 +2538,15 @@ function BlockManager(){
         var offsetY = 0;
         var posX = scaledUiRelativePosition.left;
         var posY = scaledUiRelativePosition.top;
-        if(workSpace){
-            //posX = posX - $(workSpace.workAreaElement).offset().left;
-            //posY = posY - $(workSpace.workAreaElement).offset().top;
+//        if(workSpace){
+//            //posX = posX - $(workSpace.workAreaElement).offset().left;
+//            //posY = posY - $(workSpace.workAreaElement).offset().top;
 //            posX = posX - workSpace.offsetX();
 //            posY = posY - workSpace.offsetY();
-        }
-        block.posX(posX);
-        block.posY(posY);
-        self.updatePositionLayout(block);               
+//        }
+//        block.posX(posX);
+//        block.posY(posY);
+        self.updatePositionLayout(block,false);
         self.dropConnectUpdate(block,{x:scaledUiRelativePosition.left,
                                       y:scaledUiRelativePosition.top });
     };
@@ -2567,7 +2574,7 @@ function BlockManager(){
             else{
                 hit.srcBlock.connectOut(hit.hitBlock);
             }
-            self.updatePositionLayout(block);
+            self.updatePositionLayout(block,false);
         }
         // zIndexを振りなおします
         var zIndex = 100;
@@ -3139,8 +3146,8 @@ function BlockManager(){
                   {
                       // This is the parameter for scale()
                       var zoom  = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
-                      var offsX = dragInfo.blockWs? dragInfo.blockWs.offsetX() : 0.0;
-                      var offsY = dragInfo.blockWs? dragInfo.blockWs.offsetY() : 0.0;
+                      var offsX = 0;//dragInfo.blockWs? dragInfo.blockWs.offsetX() : 0.0;
+                      var offsY = 0;//dragInfo.blockWs? dragInfo.blockWs.offsetY() : 0.0;
                       var original = ui.originalPosition;
                       // jQuery will simply use the same object we alter here
                       ui.position = {
@@ -3149,6 +3156,10 @@ function BlockManager(){
                       };
                   }
                   self.move(cloneBlock||block, ui.position);
+                  ui.position = {
+                      left: 0,
+                      top:  0,
+                  };
               },
               stop:function(event, ui){
                   clearDragGuide();
