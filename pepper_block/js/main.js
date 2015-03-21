@@ -2056,31 +2056,31 @@ ko.bindingHandlers.guide = {
                             isLastSizeMove = true;
                         }
                     });
-                }
-                if(isLastSizeMove){
-                    if(touchMove.opt.useSelfMove){
-                        touchMove.opt.useSelfMove = false;
-                        touchMove.start(event);
+                    if(isLastSizeMove){
+                        if(touchMove.opt.useSelfMove){
+                            touchMove.opt.useSelfMove = false;
+                            touchMove.start(event);
+                        }
+                        else{
+                            var newH = boxElem.height()+touchInfo.dy;
+                            if(newH < 50){
+                                newH = 50;
+                            }
+                            boxElem.height(newH);
+                            accelMove.clear();
+                            guidLayoutUpdate();
+                        }
                     }
                     else{
-                        var newH = boxElem.height()+touchInfo.dy;
-                        if(newH < 50){
-                            newH = 50;
+                        if(!touchMove.opt.useSelfMove){
+                            touchMove.opt.useSelfMove = true;
+                            touchMove.start(event);
+                        }else{
+                            if(!accelMove.isStart()){
+                                accelMove.start(touchInfo.ly);
+                            }
+                            accelMove.move(touchInfo.ly);
                         }
-                        boxElem.height(newH);
-                        accelMove.clear();
-                        guidLayoutUpdate();
-                    }
-                }
-                else{
-                    if(!touchMove.opt.useSelfMove){
-                        touchMove.opt.useSelfMove = true;
-                        touchMove.start(event);
-                    }else{
-                        if(!accelMove.isStart()){
-                            accelMove.start(touchInfo.ly);
-                        }
-                        accelMove.move(touchInfo.ly);
                     }
                 }
                 return false;
@@ -2615,17 +2615,23 @@ function BlockManager(){
                 v.blockObsv();
             });
             var calcHitAreaRect = function(block,hitArea){
+                var scaleRootElm = $(block.element).parents(".box-workspace");
+                var matrixRegex  = /matrix\((-?\d*\.?\d+),\s*0,\s*0,\s*(-?\d*\.?\d+),\s*0,\s*0\)/;
+                var transformMtx = $(scaleRootElm).css('transform');
+                var matches      = transformMtx && transformMtx.match(matrixRegex);
+                var scaleX=1;
+                var scaleY=1;
+                if(matches){
+                    scaleX = parseFloat(matches[1]);
+                    scaleY = parseFloat(matches[2]);
+                }
                 return {
-                    x:hitArea.offset().left- $(block.element).offset().left,
-                    y:hitArea.offset().top - $(block.element).offset().top,
+                    x:(hitArea.offset().left- $(block.element).offset().left)/scaleX,
+                    y:(hitArea.offset().top - $(block.element).offset().top )/scaleY,
                     w:hitArea.width(),
                     h:hitArea.height(),
                 };
-            };
-            //
-            if(block.in){
-                block.in.blockObsv();
-            }
+            };            
             // レイアウトします
             var blkConnectorHalfMargin = 0.25 / block.pix2em;
             var blkLocalPosY  = 0;
@@ -2743,6 +2749,14 @@ function BlockManager(){
             });
             if(block.out){
                 block.out.hitAreaRect = calcHitAreaRect(block,block.out.hitArea);
+                /*
+                var elm=$("<div class='testBox'></div>");
+                elm.css({left:block.out.hitAreaRect.x + block.posX.peek(),
+                         top: block.out.hitAreaRect.y + block.posY.peek(),
+                         width:  block.out.hitAreaRect.w,
+                         height: block.out.hitAreaRect.h,});
+                $(block.element.parentElement.parentElement).append(elm);
+                */
             }
         }
     };
