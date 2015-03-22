@@ -988,7 +988,6 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
     self.offsetY.subscribe(updateWorkSpaceOffset_);
 
 
-
     // シリアライズ関連です
     self.toJSON = function()
     {
@@ -1102,53 +1101,41 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
 
     self.setup = function(workAreaElement){
         self.workAreaElement = workAreaElement;
-
-        //■ ドロップ処理 ■
-        var dropAction_ = function(ui){
-            self.blockManager.floatDraggingInfo.droppedWs = self;
-
-            var findBlockTop = self.blockManager.popFloatDraggingListByElem( ui.helper.get(0) );
-            var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
-            self.addBlock( dropBlockTop );
-            var areaElmOffset = $(self.workAreaElement).offset();
-            var dropX = (ui.offset.left - areaElmOffset.left);
-            var dropY = (ui.offset.top  - areaElmOffset.top );
-            dropX = dropX * 1/self.scale() - self.offsetX();
-            dropY = dropY * 1/self.scale() - self.offsetY();
-
-            dropBlockTop.posX(dropX);
-            dropBlockTop.posY(dropY);
-            self.blockManager.updatePositionLayout( dropBlockTop, false );
-            self.blockManager.dropConnectUpdate( dropBlockTop );
+        //■ゴミ箱■
+        var topElm = $(self.workAreaElement).parent().parent();
+        var trashBox = $(".box-trash-box",topElm);
+        var trashBoxUpdate = function(){
+            $(trashBox).css({
+               left:0,
+               top:$(self.workAreaElement).height()-$(trashBox).outerHeight(), 
+            });
         };
+        $(workAreaElement).scroll(function(e){
+            trashBoxUpdate();
+        });
+        $(window).resize(function(e){
+            trashBoxUpdate();
+        });
+        trashBoxUpdate();
+        
+        //■ ドロップ処理 ■
+/*
         $(self.workAreaElement).droppable({
             scope: self.dragScopeName,
             drop: function(e, ui) {
-                dropAction_(ui);
+                self.blockManager.dropWorkspace(self,ui);
             },
         });
+        $(trashBox).droppable({
+            scope: self.dragScopeName,
+            drop: function(e, ui) {
+                self.blockManager.dropTrashbox(ui);
+            },
+        });
+*/
     };
 
     // コリジョン判定
-    /*
-    var checkHitDist = function(area0, area1){
-        var offs0 = area0.offset();
-        var offs1 = area1.offset();
-        var w0    = area0.width();
-        var h0    = area0.height();
-        var w1    = area1.width();
-        var h1    = area1.height();
-        if(offs0.top < offs1.top + h1&&
-           offs1.top < offs0.top + h0&&
-           offs0.left < offs1.left + w1&&
-           offs1.left < offs0.left + w0)
-        {
-            var vx = (offs0.left + w0/2) - (offs1.left + w1/2);
-            var vy = (offs0.top  + h0/2) - (offs1.top  + h1/2);
-            return Math.sqrt(vx*vx + vy*vy);
-        }
-    };
-    */
     var checkHitRectDist = function(block0, block1, rect0, rect1){
         var offs0 = {left:block0.posX()+rect0.x, top:block0.posY()+rect0.y};
         var offs1 = {left:block1.posX()+rect1.x, top:block1.posY()+rect1.y};
@@ -2207,7 +2194,7 @@ function BlockManager(){
                 if(startCb){
                     startCb();
                 }
-            },1000);
+            },500);
         };
         self.lazyHoldModeCancel = function(){
             clearTimeout(holdModeTimeId);
@@ -2532,23 +2519,11 @@ function BlockManager(){
         self.updatePositionLayout(block,true);
         self.dropGuideUpdate(block);
     };
-    self.moveStop = function(block,scaledUiRelativePosition){
+    self.moveStop = function(block){
         var workSpace = self.findBlockWorkSpaceByBlock(block);
-        var offsetX = 0;
-        var offsetY = 0;
-        var posX = scaledUiRelativePosition.left;
-        var posY = scaledUiRelativePosition.top;
-//        if(workSpace){
-//            //posX = posX - $(workSpace.workAreaElement).offset().left;
-//            //posY = posY - $(workSpace.workAreaElement).offset().top;
-//            posX = posX - workSpace.offsetX();
-//            posY = posY - workSpace.offsetY();
-//        }
-//        block.posX(posX);
-//        block.posY(posY);
         self.updatePositionLayout(block,false);
-        self.dropConnectUpdate(block,{x:scaledUiRelativePosition.left,
-                                      y:scaledUiRelativePosition.top });
+        self.dropConnectUpdate(block,{x:0,
+                                      y:0 });
     };
 
     // ドロップする場所のガイドを更新します
@@ -2795,6 +2770,27 @@ function BlockManager(){
         return newBlockIns;
     };
 
+    // ■ブロック作業場のインスタンス生成など
+
+    // ブロックの作業場のインスタンスを生成します
+    self.createBlockWorkSpaceIns = function(dragScopeName,workspaceName){
+        var blkWsIns = new BlockWorkSpace(self, dragScopeName, workspaceName);
+        self.blockWorkSpaceList.push(blkWsIns);
+        return blkWsIns;
+    };
+
+    // ブロックからブロックの作業場を探します
+    self.findBlockWorkSpaceByBlock = function(block){
+        for(var ii=0; ii < self.blockWorkSpaceList.length ; ii++){
+            if(self.blockWorkSpaceList[ii].isContainsBlock(block)){
+                return self.blockWorkSpaceList[ii];
+            }
+        }
+    };
+
+
+    // ■以下内部的な連携のための処理
+
 
     // ■ブロック移動・編集・ドラッグなどの操作
 
@@ -2946,6 +2942,7 @@ function BlockManager(){
         };
     };
 
+    // 
     var setDragGuide = function(block)
     {
         // ドラッグ先のガイド表示をします
@@ -2978,32 +2975,103 @@ function BlockManager(){
         $(".hitAreaDragging").removeClass("hitAreaDragging");
     };
 
+    // 別ボックスへ移動するためのドラッグ向けのリストに追加
+    self.addFloatDraggingList = function(newBlock){
+        self.traverseUnderBlock(newBlock,{
+            blockCb:function(block){
+                block.setCloneDragMode(false);
+                block.setNoConnectMode(false);                
+                self.floatDraggingList.push(ko.observable(block));
+            },
+        });
+    };
+    self.popFloatDraggingListByElem = function(elem){
+        for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
+        {
+            var blockObsv = self.floatDraggingList()[ii];
+            if($(blockObsv().element).get(0) == $(elem).get(0))
+            {
+                var block = blockObsv();
+                self.traverseUnderBlock(block,{
+                    blockCb:function(block){
+                        //TODO:検索効率悪そうなので直したい
+                        for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
+                        {
+                            var blockObsv = self.floatDraggingList()[ii];
+                            if(blockObsv() == block){
+                                self.floatDraggingList.splice(ii,1);
+                                break;
+                            }
+                        }
+                        //描画を最後尾に順入れ替えます
+                        self.blockList.splice( self.blockList.indexOf(block), 1 );
+                        self.blockList.push(block);                        
+                    },
+                });
+                return block;
+            }
+        }
+    };
+
+    // ワークスペースに対するドロップ処理
+    self.dropWorkspace = function(workspace,block)
+    {
+        var findBlockTop = block;
+        var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
+
+        workspace.addBlock( dropBlockTop );
+
+        var areaElmOffset = $(workspace.workAreaElement).offset();
+
+        var dropX = ($(findBlockTop.element).offset().left - areaElmOffset.left);
+        var dropY = ($(findBlockTop.element).offset().top  - areaElmOffset.top );
+        dropX = dropX * 1/workspace.scale() - workspace.offsetX();
+        dropY = dropY * 1/workspace.scale() - workspace.offsetY();
+        dropBlockTop.posX(dropX);
+        dropBlockTop.posY(dropY);
+
+        self.updatePositionLayout( dropBlockTop, false );
+        self.dropConnectUpdate( dropBlockTop );
+    };
+    // ゴミ箱に対するドロップ
+    self.dropTrashbox = function(ui)
+    {
+//        self.floatDraggingInfo.droppedWs = workspace;
+
+        var findBlockTop = self.popFloatDraggingListByElem( ui.helper.get(0) );
+/*
+        var dropBlockTop = findBlockTop.cloneThisBlockAndConnectBlock();
+
+        workspace.addBlock( dropBlockTop );
+
+        var areaElmOffset = $(workspace.workAreaElement).offset();
+
+        var dropX = (ui.offset.left - areaElmOffset.left);
+        var dropY = (ui.offset.top  - areaElmOffset.top );
+        dropX = dropX * 1/workspace.scale() - workspace.offsetX();
+        dropY = dropY * 1/workspace.scale() - workspace.offsetY();
+        dropBlockTop.posX(dropX);
+        dropBlockTop.posY(dropY);
+
+        self.updatePositionLayout( dropBlockTop, false );
+        self.dropConnectUpdate( dropBlockTop );
+*/
+    };
+
     var isFloatDragMode = false;
 
     // ブロックに対するタッチとマウス関連の操作をセットアップします
     self.setupBlockTouchAndMouseAction = function(block)
     {
-        var cloneBlock = null;
         var blockElem  = $(block.element);
+        // ■タップ・マウス操作
         var ignoreMouseDown = false;
-        var checkTarget =function(elem){
-            if($(elem).hasClass("noDrag")){
-                return false;   
-            }
-            if(["INPUT","TEXTAREA",
-                "BUTTON","SELECT",
-                "OPTION"].indexOf($(elem).prop("tagName"))>=0)
-            {
-                return false;
-            }
-            return true;
-        };
-        var lastTime = null;
         blockElem.on({
            'touchstart mousedown': function (e) {
               if(["BUTTON","SELECT",
                   "OPTION"].indexOf($(e.target).prop("tagName"))>=0)
               {
+                 //input系の要素に対する操作はデフォルト挙動とします
                  return ;
               }
               e.preventDefault();
@@ -3011,7 +3079,6 @@ function BlockManager(){
                   //タッチをマウスでシミュレーション時のイベントは無視します
                   return;
               }
-
               if(ignoreMouseDown)return;
               if(block != self.editMode.getTargetBlock()){
                   self.editMode.lazyEditModeCancel();
@@ -3022,7 +3089,6 @@ function BlockManager(){
                   // ダブルタップ扱いにします
                   // ■ブロックの実行
                   block.deferred();
-                  console.log("doble tap");
               }
               else{
                   // タップ後の遅延開始でブロック編集を開始します
@@ -3078,68 +3144,51 @@ function BlockManager(){
               self.editMode.lazyHoldModeCancel();
             },
         });
-        var dragInfo = null;
+        // 
+        var dragInfo   = null;
         blockElem
           .draggable({
               scroll:false,
               cancel:".noDrag,input,textarea,button,select,option",
               helper:function(e){
                   self.editMode.lazyHoldModeCancel();
-                  if(block.isCloneDragMode){
-                      // ドロップ先の設定を行います
-                      blockElem.draggable("option", "scope", "droppableScope");
-                      blockElem.draggable("option", "containment", (".blockBoxs"));
-                      // ブロックの複製をして浮遊ドラッグリスト(専用作業場)に追加します
-                      cloneBlock = block.cloneThisBlock();
-                      self.addFloatDraggingList(cloneBlock);
-                      return cloneBlock.element;
+                  dragInfo = {
+                      targetBlock:null,
+                      srcBlock:null,
+                      cloneBlock:null,
+                      blockWs:null,
+                  };
+                  dragInfo.srcBlock = block;
+                  if(block.isCloneDragMode || isFloatDragMode){
+                      // 自ボックスの外にも移動できるモード
+                      // ブロックを複製をして浮遊ドラッグリストに追加します
+                      dragInfo.targetBlock = dragInfo.cloneBlock = block.cloneThisBlockAndConnectBlock();
+                      self.addFloatDraggingList(dragInfo.cloneBlock);
+                      return dragInfo.cloneBlock.element;
                   }
                   else{
-                      if(!self.editMode.holdModeFlag){
-                          self.editMode.lazyHoldModeCancel();
-                      }
-                      if(isFloatDragMode){
-                          // 自ボックスの外にも移動できるモード
-                          blockElem.draggable("option", "scope", "droppableScope");
-                          blockElem.draggable("option", "containment", (".blockBoxs"));
-                          cloneBlock = block.cloneThisBlockAndConnectBlock();
-                          self.addFloatDraggingList(cloneBlock);
-                          return cloneBlock.element;
-                      }
-                      else{
-                          //自ボックスの内限定で移動できるモード
-                          blockElem.draggable("option", "scope", "innerScope");//※ドロップ出来ないようにしてます
-                          blockElem.draggable("option", "containment", null);
-                          return this;
-                      }
+                      //自ボックスの内限定で移動できるモード
+                      dragInfo.targetBlock = block;
+                      dragInfo.blockWs = self.findBlockWorkSpaceByBlock(block);
+                      return this;
                   }
               },
               start:function(event, ui){
                   self.editMode.lazyEditModeCancel();
-
-                  dragInfo = {
-                      click:{
-                          x:event.clientX, 
-                          y:event.clientY
-                      },
-                      blockWs:self.findBlockWorkSpaceByBlock(cloneBlock||block),
+                  dragInfo.click = {
+                      x:event.clientX, 
+                      y:event.clientY
                   };
-
-                  self.moveStart(cloneBlock||block, ui.offset);
-                  
-                  self.floatDraggingInfo.droppedWs = null;
-                  self.floatDraggingInfo.fromWs    = self.findBlockWorkSpaceByBlock(block);
-
-                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
-                  self.floatDraggingInfo.fromWs.scrollLock = true;
-
-                  if(block.isCloneDragMode){
-                      //blockElem.show();
-                  }
-                  else{
-                      if(isFloatDragMode){
-                          //blockElem.hide();
-                          self.traverseUnderBlock(block,{
+                  dragInfo.clickOffs = {
+                      x:event.pageX - $(dragInfo.srcBlock.element).offset().left, 
+                      y:event.pageY - $(dragInfo.srcBlock.element).offset().top,
+                  };
+                  self.moveStart(dragInfo.targetBlock, ui.offset);
+                  if(dragInfo.cloneBlock){
+                      // 複製元ブロックを半透明表示に変更して接続不可にします
+                      if(!dragInfo.srcBlock.isCloneDragMode)
+                      {
+                          self.traverseUnderBlock(dragInfo.srcBlock,{
                               blockCb:function(block){
                                   //$(block.element).hide();
                                   block.setNoConnectMode(true);
@@ -3147,67 +3196,122 @@ function BlockManager(){
                               },
                           });
                       }
-                      else{
-                          //blockElem.show();
-                      }
                   }
-
                   // ドラッグ先のガイド表示をします
-                  setDragGuide(cloneBlock||block);
+                  setDragGuide(dragInfo.targetBlock);
               },
               drag:function(event, ui){
-                  if(dragInfo)
-                  {
-                      // This is the parameter for scale()
-                      var zoom  = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
-                      var offsX = 0;//dragInfo.blockWs? dragInfo.blockWs.offsetX() : 0.0;
-                      var offsY = 0;//dragInfo.blockWs? dragInfo.blockWs.offsetY() : 0.0;
-                      var original = ui.originalPosition;
-                      // jQuery will simply use the same object we alter here
-                      ui.position = {
-                          left: (event.clientX - dragInfo.click.x + original.left) / zoom - offsX,
-                          top:  (event.clientY - dragInfo.click.y + original.top ) / zoom - offsY
-                      };
-                  }
-                  self.move(cloneBlock||block, ui.position);
+                  if(!dragInfo){
+                      return;
+                  }                  
+                  // This is the parameter for scale()
+                  var zoom  = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
+                  var original = ui.originalPosition;
+                  // jQuery will simply use the same object we alter here
+                  ui.position = {
+                      left: (event.clientX - dragInfo.click.x + original.left) / zoom,
+                      top:  (event.clientY - dragInfo.click.y + original.top ) / zoom
+                  };
+                  self.move(dragInfo.targetBlock, ui.position);
                   ui.position = {
                       left: 0,
                       top:  0,
                   };
+                  //ゴミ箱
+                  if(dragInfo.cloneBlock)
+                  {
+                      $.each(self.blockWorkSpaceList,function(k,ws){
+                          if($(ws.workAreaElement).css("display")=='none'){
+                              return;
+                          }
+                          if(ws.dragScopeName=='noDroppable'){
+                              return;
+                          }
+                          var wsTopElm = $(ws.workAreaElement).parent();
+                          var trashBox = $(".box-trash-box",wsTopElm);
+                          var x0 = $(trashBox).offset().left;
+                          var y0 = $(trashBox).offset().top;
+                          var x1 = x0+$(trashBox).outerWidth();
+                          var y1 = y0+$(trashBox).outerHeight();
+                          if(x0 < event.pageX && y0 < event.pageY&&
+                             x1 > event.pageX && y1 > event.pageY)
+                          {
+                              trashBox.addClass("box-trash-box-over");
+                          }
+                          else
+                          {
+                              trashBox.removeClass("box-trash-box-over");
+                          }
+                      });
+                  }
               },
               stop:function(event, ui){
                   clearDragGuide();
-                  self.moveStop(cloneBlock||block, ui.position);
-                  if(cloneBlock){
-                      //self.blockManager.removeBlock(cloneBlock);
-                      cloneBlock = null;
+                  if(!dragInfo){
+                      return;
                   }
-                  if(block.isCloneDragMode){
-                  }
-                  else{
-                      if(isFloatDragMode){
-                          //どっちがいいかテスト中
-                          if(self.floatDraggingInfo.fromWs != self.floatDraggingInfo.droppedWs){
-                              //コピーモード
-                              self.traverseUnderBlock(block,{
-                                  blockCb:function(block){
-                                      block.setNoConnectMode(false);
-                                      $(block.element).css({opacity:1.0});
-                                      $(block.element).show();
-                                  },
-                              });
-                          }else{
-                              //移動モード
-                              self.floatDraggingInfo.fromWs.removeBlock(block);
+                  // フロートリストからのドロップ処理
+                  if(dragInfo.cloneBlock)
+                  {
+                      var zoom  = dragInfo.blockWs? dragInfo.blockWs.scale() : 1.0;
+                      var original = ui.originalPosition;
+                      $.each(self.blockWorkSpaceList,function(k,ws){
+                          if($(ws.workAreaElement).css("display")=='none'){
+                              return;
                           }
-                      }
-                      else{
+                          if(ws.dragScopeName=='noDroppable'){
+                              //TODO:droppableを使っていた旧仕様の名残なので、ちゃんと活用するならここは、
+                              //TODO:ブロックにも属性もたせて通常は何も無し、特別指定があれば制限かけるみたいなのがよさそう。
+                              return;
+                          }
+                          //ゴミ箱
+                          var wsTopElm = $(ws.workAreaElement).parent();
+                          var trashBox = $(".box-trash-box",wsTopElm);
+                          trashBox.removeClass("box-trash-box-over");
+                          var x0 = $(trashBox).offset().left;
+                          var y0 = $(trashBox).offset().top;
+                          var x1 = x0+$(trashBox).outerWidth();
+                          var y1 = y0+$(trashBox).outerHeight();
+                          if(x0 < event.pageX && y0 < event.pageY&&
+                             x1 > event.pageX && y1 > event.pageY)
+                          {
+                              if(!dragInfo.srcBlock.isCloneDragMode)
+                              {
+                                  var srcWs = self.findBlockWorkSpaceByBlock(dragInfo.srcBlock);
+                                  srcWs.removeBlock(dragInfo.srcBlock);
+                              }
+                              self.popFloatDraggingListByElem( dragInfo.cloneBlock.element );
+                              return;
+                          }
+                          //ワークスペースエリア
+                          x0 = $(ws.workAreaElement).offset().left;
+                          y0 = $(ws.workAreaElement).offset().top;
+                          x1 = x0+$(ws.workAreaElement).outerWidth()*ws.scale();
+                          y1 = y0+$(ws.workAreaElement).outerHeight()*ws.scale();
+                          if(x0 < event.pageX && y0 < event.pageY&&
+                             x1 > event.pageX && y1 > event.pageY)
+                          {
+                              self.dropWorkspace(ws,dragInfo.cloneBlock);
+                              self.popFloatDraggingListByElem( dragInfo.cloneBlock.element );
+                          }
+                      });
+                  }
+                  //移動処理
+                  self.moveStop(dragInfo.targetBlock);
+                  if(dragInfo.cloneBlock)
+                  {
+                      if(!dragInfo.srcBlock.isCloneDragMode){
+                          self.traverseUnderBlock(block,{
+                              blockCb:function(block){
+                                  block.setNoConnectMode(false);
+                                  $(block.element).css({opacity:1.0});
+                                  $(block.element).show();
+                              },
+                          });
                       }
                   }
+                  dragInfo = null;
                   isFloatDragMode = false;
-
-                  //TODO:マルチタッチ対応したい(指を認識してロックする感じにするべき？)
-                  self.floatDraggingInfo.fromWs.scrollLock = false;
               },
           });
           //jqueryUIのドラッグのみタッチに限定対応させます
@@ -3266,61 +3370,6 @@ function BlockManager(){
               simulatedEvent.fromTouch = true;
               first.target.dispatchEvent(simulatedEvent);
           }});
-    };
-
-
-    // ブロックの作業場のインスタンスを生成します
-    self.createBlockWorkSpaceIns = function(dragScopeName,workspaceName){
-        var blkWsIns = new BlockWorkSpace(self, dragScopeName, workspaceName);
-        self.blockWorkSpaceList.push(blkWsIns);
-        return blkWsIns;
-    };
-
-    // ブロックからブロックの作業場を探します
-    self.findBlockWorkSpaceByBlock = function(block){
-        for(var ii=0; ii < self.blockWorkSpaceList.length ; ii++){
-            if(self.blockWorkSpaceList[ii].isContainsBlock(block)){
-                return self.blockWorkSpaceList[ii];
-            }
-        }
-    };
-
-    // 別ボックスへ移動するためのドラッグ向けのリストに追加
-    self.addFloatDraggingList = function(newBlock){
-        self.traverseUnderBlock(newBlock,{
-            blockCb:function(block){
-                block.setCloneDragMode(false);
-                block.setNoConnectMode(false);                
-                self.floatDraggingList.push(ko.observable(block));
-            },
-        });
-    };
-    self.popFloatDraggingListByElem = function(elem){
-        for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
-        {
-            var blockObsv = self.floatDraggingList()[ii];
-            if($(blockObsv().element).get(0) == $(elem).get(0))
-            {
-                var block = blockObsv();
-                self.traverseUnderBlock(block,{
-                    blockCb:function(block){
-                        //TODO:検索効率悪そうなので直したい
-                        for(var ii=0; ii < self.floatDraggingList().length ; ii+=1)
-                        {
-                            var blockObsv = self.floatDraggingList()[ii];
-                            if(blockObsv() == block){
-                                self.floatDraggingList.splice(ii,1);
-                                break;
-                            }
-                        }
-                        //描画を最後尾に順入れ替えます
-                        self.blockList.splice( self.blockList.indexOf(block), 1 );
-                        self.blockList.push(block);                        
-                    },
-                });
-                return block;
-            }
-        }
     };
 }
 
