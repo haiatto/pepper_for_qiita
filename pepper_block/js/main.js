@@ -1176,8 +1176,9 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
             if(tgtBlock == inBlock) return;
             if(tgtBlock == outBlock) return;
             if(tgtBlock == valueBlock) return;
-            if(tgtBlock.in && outBlock && outBlock.out){
-                //dist = checkHitDist($(tgtBlock.in.hitArea), $(outBlock.out.hitArea));
+            if(tgtBlock.in && !tgtBlock.in.blockObsv() && 
+               outBlock && outBlock.out){
+                // 出力と入力のヒットは入力が未接続の場合のみやります(その方が直感的そうなので)
                 dist = checkHitRectDist(tgtBlock,outBlock,tgtBlock.in.hitAreaRect,outBlock.out.hitAreaRect);
                 if(dist && dist < nearDist){
                     nearDist = dist;
@@ -2930,7 +2931,13 @@ function BlockManager(){
     {
         // ドラッグ先のガイド表示をします
         if(block.in){
-            $(".hitAreaOut").addClass("hitAreaDragging");
+            $(".hitAreaOut").each(function(k,elm){
+                var tgtElm = $(elm).parents(".block");
+                var tgtBlock = self.elementBlockLookupTbl[$(tgtElm).data("blockId")];
+                if(!tgtBlock.out.blockObsv()){
+                    $(elm).addClass("hitAreaDragging");
+                }
+            });
             $(".hitAreaScopeOut").addClass("hitAreaDragging");
         }
         if(block.out){
@@ -2951,7 +2958,23 @@ function BlockManager(){
                 }
             });
             //$(".hitAreaValueIn").addClass("hitAreaDragging");
-            $(".hitAreaValueOut",block.element).addClass("hitAreaDragging");
+            //$(".hitAreaValueOut",block.element).addClass("hitAreaDragging");
+        }
+        var topBlock = self.getLumpTopBlock(block);        
+        self.traverseUnderBlock(topBlock,{
+            blockCb:function(block){
+                $(".hitAreaDragging",block.element).removeClass("hitAreaDragging");
+            },
+        });
+        var bottomBlock = topBlock;
+        while(bottomBlock.out && bottomBlock.out.blockObsv()){
+            bottomBlock = bottomBlock.out.blockObsv();
+        }
+        if(topBlock.in){
+            $(".hitAreaIn",block.element).addClass("hitAreaDragging");
+        }
+        if(bottomBlock.out){
+            $(".hitAreaOut",bottomBlock.element).addClass("hitAreaDragging");
         }
     };
     var clearDragGuide = function(){

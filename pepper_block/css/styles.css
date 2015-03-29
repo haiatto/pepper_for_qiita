@@ -224,7 +224,7 @@ body{
   width:2em;
   height:1em;
 
-  background:blue;
+  background: mediumspringgreen;
   opacity: 0.5;
   z-index: 99999;
 
@@ -235,7 +235,7 @@ body{
   width:2em;
   height:1em;
 
-  background: blueviolet;
+  background: fuchsia;
   opacity: 0.5;
   z-index: 99999;
 
@@ -273,8 +273,6 @@ body{
 }
 .block .hitAreaDragging{
   visibility: visible;
-  border-style:solid;
-  border-width:1px;
 }
 
 .holdModeStart{
