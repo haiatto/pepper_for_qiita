@@ -1101,38 +1101,21 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
 
     self.setup = function(workAreaElement){
         self.workAreaElement = workAreaElement;
-        //■ゴミ箱■
-        var topElm = $(self.workAreaElement).parent().parent();
+        //■ゴミ箱■        
+        var topElm = $(self.workAreaElement).parent();
         var trashBox = $(".box-trash-box",topElm);
         var trashBoxUpdate = function(){
-            $(trashBox).css({
-               left:0,
-               top:$(self.workAreaElement).height()-$(trashBox).outerHeight(), 
-            });
+            if($(self.workAreaElement).css("display")!="none"){
+                $(trashBox).css({
+                   left:0,
+                   top:$(self.workAreaElement).height()-$(trashBox).outerHeight(), 
+                });
+            }
         };
-        $(workAreaElement).scroll(function(e){
-            trashBoxUpdate();
-        });
         $(window).resize(function(e){
             trashBoxUpdate();
         });
         trashBoxUpdate();
-        
-        //■ ドロップ処理 ■
-/*
-        $(self.workAreaElement).droppable({
-            scope: self.dragScopeName,
-            drop: function(e, ui) {
-                self.blockManager.dropWorkspace(self,ui);
-            },
-        });
-        $(trashBox).droppable({
-            scope: self.dragScopeName,
-            drop: function(e, ui) {
-                self.blockManager.dropTrashbox(ui);
-            },
-        });
-*/
     };
 
     // コリジョン判定
