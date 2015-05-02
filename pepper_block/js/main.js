@@ -2094,11 +2094,11 @@ ko.bindingHandlers.guide = {
 // 管理エリア毎にリストを作ってそこに格納するだけ。
 
 // ■ブロック管理
-function BlockManager(){
+function BlockManager(execContext){
     var self = this;
 
     // 
-    self.execContext  = {};//実行環境(各種グローバルな要素を入れるテーブル)
+    self.execContext  = execContext;//実行環境(各種グローバルな要素を入れるテーブル)
 
     // ブロックのリストなど
     self.blockList = [];
@@ -3437,108 +3437,109 @@ $(function(){
         }
     };
 
+    //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
+    var makeExecContext = function()
+    {
+        var exeContext = {};
+        // バージョン
+        exeContext.contextVersion = "0.01";
+
+        // 最後に認識した単語データ
+        exeContext.lastRecoData   = {rawData:null,};
+
+        // 最後に調べた人データ
+        exeContext.lastPeopleData   = {rawData:null,};
+
+        // qiMessaging経由のインスタンス   
+        exeContext.setupExecContextFromQim = function(qims)
+        {
+            // 初期化とsubscribeが必要なモノの起動を行います
+
+            // MEMO:
+            // (まだ理解しきれてないけどsubscibeしておけばALEngagementZonesなど
+            //  とりあえず色々動くみたいなのでやっておきます
+            //  …名前付きでやる割にはグローバルに影響してるのが良く理解できてない部分
+            //  …色んなものが再起動を超えてグローバルのようなので値の初期化もなるべく最初にやっておくことに
+            //  (これだと多人数で遊ぶと毎回で初期化されかねないけど基本的に変えたい人は直前に変えるブロックを
+            //   配置するべきという概念でやるべきっぽい匂いがする…寧ろ積極的に定期的に初期化するべきな予感…
+            //   知らないだけでサンドボックスとかあるのだろうか？)
+            //  (起動を超えて保存される感じからどこかに初期値一覧がありそう。ALMemoryの機能だろうか…全リセットコマンド作りたい)
+            //  (しかしGPUのコマンド生で扱ってる感じでバグの温床っぽくてヤナ感じ。
+            //   GPU周りみたいに差分とか全書き出しとかを管理するステートキャッシュみたいなの作るべきかな…)
+
+            exeContext.qims      = qims;
+            exeContext.alIns     = {};
+            exeContext.cameraIns = null;
+            exeContext.qims.service("ALTextToSpeech").done(function(ins){
+              exeContext.alIns.alTextToSpeech = ins;
+            });
+            exeContext.qims.service("ALAudioDevice").done(function(ins){
+              exeContext.alIns.alAudioDevice = ins;
+            });
+            exeContext.qims.service("ALMotion").done(function(ins){
+              exeContext.alIns.alMotion = ins;
+            });
+            exeContext.qims.service("ALRobotPosture").done(function(ins){
+              exeContext.alIns.alRobotPosture = ins;
+            });
+            exeContext.qims.service("ALVideoDevice").done(function(ins){
+              exeContext.alIns.alVideoDevice = ins;
+              exeContext.pepperCameraIns = new PepperCamera(ins);
+            });
+            exeContext.qims.service('ALMemory').then(function(ins){
+              exeContext.alIns.alMemory = ins;
+            });
+            exeContext.qims.service('ALPeoplePerception').then(function(ins){
+              exeContext.alIns.alPeoplePerception = ins;
+              exeContext.alIns.alPeoplePerception.subscribe("PepperBlock");
+            });
+            exeContext.qims.service('ALMovementDetection').then(function(ins){
+              exeContext.alIns.alMovementDetection = ins;
+              exeContext.alIns.alMovementDetection.subscribe("PepperBlock");
+            });
+            exeContext.qims.service('ALEngagementZones').then(function(ins){
+              exeContext.alIns.alEngagementZones = ins;
+              exeContext.alIns.alEngagementZones.subscribe("PepperBlock");
+
+              exeContext.alIns.alEngagementZones.setFirstLimitDistance(1.5);
+              exeContext.alIns.alEngagementZones.setSecondLimitDistance(2.5);
+              exeContext.alIns.alEngagementZones.setLimitAngle(90);
+            });
+            exeContext.qims.service('ALVisualSpaceHistory').then(function(ins){
+              exeContext.alIns.alVisualSpaceHistory = ins;
+              exeContext.alIns.alVisualSpaceHistory.subscribe("PepperBlock");
+            });
+
+        };
+
+        //■便利そうな補助関数など
+        exeContext.onFail = function(e) {
+            //dfd向けエラー関数
+            console.error('fail:' + e);
+        };
+        exeContext.onFailPass = function(e) {
+            //dfd向けエラー関数 スルー付
+            //MEMO: 
+            // チェイン時のおそらくお望みの動作は、
+            //  処理A.then(処理B,fail).then(null,onFailPass)
+            // かも。thenの仕様は処理Aの結果を分岐するので、処理Bのエラーをスルーする際自分は勘違いしたことあり。
+            console.log('fail:' + e); 
+            return $.Deferred().resolve();
+        };
+
+        //■デバッグ用
+        exeContext.debugCanvas = $("#debugCanvas")[0];
+
+        return exeContext;
+    }
+
     // -- MVVMのモデル(このアプリの中枢です) --
     function MyModel() {
         var self = this;
 
         //■ ブロック管理を作成 ■
-        self.blockManager = new BlockManager();
-
-        //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
-        var makeExecContext = function()
-        {
-            var exeContext = {};
-            // バージョン
-            exeContext.contextVersion = "0.01";
-
-            // 最後に認識した単語データ
-            exeContext.lastRecoData   = {rawData:null,};
-
-            // 最後に調べた人データ
-            exeContext.lastPeopleData   = {rawData:null,};
-
-            // qiMessaging経由のインスタンス   
-            exeContext.setupExecContextFromQim = function(qims)
-            {
-                // 初期化とsubscribeが必要なモノの起動を行います
-
-                // MEMO:
-                // (まだ理解しきれてないけどsubscibeしておけばALEngagementZonesなど
-                //  とりあえず色々動くみたいなのでやっておきます
-                //  …名前付きでやる割にはグローバルに影響してるのが良く理解できてない部分
-                //  …色んなものが再起動を超えてグローバルのようなので値の初期化もなるべく最初にやっておくことに
-                //  (これだと多人数で遊ぶと毎回で初期化されかねないけど基本的に変えたい人は直前に変えるブロックを
-                //   配置するべきという概念でやるべきっぽい匂いがする…寧ろ積極的に定期的に初期化するべきな予感…
-                //   知らないだけでサンドボックスとかあるのだろうか？)
-                //  (起動を超えて保存される感じからどこかに初期値一覧がありそう。ALMemoryの機能だろうか…全リセットコマンド作りたい)
-                //  (しかしGPUのコマンド生で扱ってる感じでバグの温床っぽくてヤナ感じ。
-                //   GPU周りみたいに差分とか全書き出しとかを管理するステートキャッシュみたいなの作るべきかな…)
-                
-                exeContext.qims      = qims;
-                exeContext.alIns     = {};
-                exeContext.cameraIns = null;
-                exeContext.qims.service("ALTextToSpeech").done(function(ins){
-                  exeContext.alIns.alTextToSpeech = ins;
-                });
-                exeContext.qims.service("ALAudioDevice").done(function(ins){
-                  exeContext.alIns.alAudioDevice = ins;
-                });
-                exeContext.qims.service("ALMotion").done(function(ins){
-                  exeContext.alIns.alMotion = ins;
-                });
-                exeContext.qims.service("ALRobotPosture").done(function(ins){
-                  exeContext.alIns.alRobotPosture = ins;
-                });
-                exeContext.qims.service("ALVideoDevice").done(function(ins){
-                  exeContext.alIns.alVideoDevice = ins;
-                  exeContext.pepperCameraIns = new PepperCamera(ins);
-                });
-                exeContext.qims.service('ALMemory').then(function(ins){
-                  exeContext.alIns.alMemory = ins;
-                });
-                exeContext.qims.service('ALPeoplePerception').then(function(ins){
-                  exeContext.alIns.alPeoplePerception = ins;
-                  exeContext.alIns.alPeoplePerception.subscribe("PepperBlock");
-                });
-                exeContext.qims.service('ALMovementDetection').then(function(ins){
-                  exeContext.alIns.alMovementDetection = ins;
-                  exeContext.alIns.alMovementDetection.subscribe("PepperBlock");
-                });
-                exeContext.qims.service('ALEngagementZones').then(function(ins){
-                  exeContext.alIns.alEngagementZones = ins;
-                  exeContext.alIns.alEngagementZones.subscribe("PepperBlock");
-
-                  exeContext.alIns.alEngagementZones.setFirstLimitDistance(1.5);
-                  exeContext.alIns.alEngagementZones.setSecondLimitDistance(2.5);
-                  exeContext.alIns.alEngagementZones.setLimitAngle(90);
-                });
-                exeContext.qims.service('ALVisualSpaceHistory').then(function(ins){
-                  exeContext.alIns.alVisualSpaceHistory = ins;
-                  exeContext.alIns.alVisualSpaceHistory.subscribe("PepperBlock");
-                });
-
-            };
-
-            //■便利そうな補助関数など
-            exeContext.onFail = function(e) {
-                //dfd向けエラー関数
-                console.error('fail:' + e);
-            };
-            exeContext.onFailPass = function(e) {
-                //dfd向けエラー関数 スルー付
-                //MEMO: 
-                // チェイン時のおそらくお望みの動作は、
-                //  処理A.then(処理B,fail).then(null,onFailPass)
-                // かも。thenの仕様は処理Aの結果を分岐するので、処理Bのエラーをスルーする際自分は勘違いしたことあり。
-                console.log('fail:' + e); 
-                return $.Deferred().resolve();
-            };
-
-            return exeContext;
-        }
-        self.blockManager.execContext = makeExecContext();
-
-
+        var execContext = makeExecContext();
+        self.blockManager = new BlockManager( execContext );
 
         //■ URLパラメータより ■
         if(getUrlParameter("lunchPepper")){
@@ -3713,12 +3714,12 @@ $(function(){
             }
             qims.socket()
             .on('connect', function () {
-              self.nowState("接続中");              
-              qims.service("ALTextToSpeech")
-              .done(function (tts) {
-                  tts.say("せつぞく、ぺっぷ");
-              });
-              self.blockManager.execContext.setupExecContextFromQim(qims);
+                self.nowState("接続中");              
+                qims.service("ALTextToSpeech")
+                .done(function (tts) {
+                    tts.say("せつぞく、ぺっぷ");
+                });
+                execContext.setupExecContextFromQim(qims);
             })
             .on('disconnect', function () {
               self.nowState("切断");

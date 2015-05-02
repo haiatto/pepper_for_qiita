@@ -378,6 +378,103 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // 障害物避け移動させるブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"navigateTo@basicBlk",
+              color:'red',
+              head:'in',
+              tail:'out'
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'前後'},
+                  {string:{default:'0.1'}, dataName:'x',acceptTypes:["number"]},
+                  {label:'左右'},
+                  {string:{default:'0.0'}, dataName:'y',acceptTypes:["number"]},
+                  {label:'に物をよけながら進む'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var x = parseFloat(valueDataTbl.x);
+          var y = parseFloat(valueDataTbl.y);
+          var dfd = $.Deferred();
+          if(ctx.qims){
+              ctx.qims.service('ALNavigation').then(
+                function(alNavigation){
+                  alNavigation.navigateTo(x,y).then(function(){    
+                    dfd.resolve();
+                  },
+                  function(e){
+                      ctx.onFail(e);
+                      dfd.reject();
+                  });
+                },
+                function(e){
+                  ctx.onFail(e);
+                  dfd.reject();
+                }
+              );
+          }
+          else{
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
+    // 移動させるブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"moveTo@basicBlk",
+              color:'red',
+              head:'in',
+              tail:'out'
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'前後に'},
+                  {string:{default:'0.1'}, dataName:'x',acceptTypes:["number"]},
+                  {label:'m左右に'},
+                  {string:{default:'0.0'}, dataName:'y',acceptTypes:["number"]},
+                  {label:'m進みながら'},
+                  {string:{default:'0.0'}, dataName:'rot',acceptTypes:["number"]},
+                  {label:'度回る'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var x = parseFloat(valueDataTbl.x);
+          var y = parseFloat(valueDataTbl.y);
+          var rot = parseFloat(valueDataTbl.rot) / 180 * Math.PI;
+          var dfd = $.Deferred();
+          if(ctx.qims){
+              ctx.qims.service('ALMotion').then(
+                function(alMotion){
+                  alMotion.moveTo(x,y,rot).then(function(){    
+                    dfd.resolve();
+                  },
+                  function(e){
+                      ctx.onFail(e);
+                      dfd.reject();
+                  });
+                },
+                function(e){
+                  ctx.onFail(e);
+                  dfd.reject();
+                }
+              );
+          }
+          else{
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
     // ソナーセンサーブロック
     blockManager.registBlockDef(
       {
@@ -411,6 +508,106 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           } else {
               dfd.reject();
           }
+          return dfd.promise();
+      }
+    );
+
+    // レーザーセンサーブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"laserSensor@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["bool"],
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'レーザーが正面'},
+                  {string:{default:'0.5'}, dataName:'dist',acceptTypes:["number"]},
+                  {label:'ｍ内にある'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var onFail = function(e) {console.error('fail:' + e);};
+          var keys = [];
+          var keyBase = 'Device/SubDeviceList/Platform/LaserSensor/';
+          var infoTbl = 
+          [{key:'Front/Shovel/',        segNum:3, deg:   0,value:[]},
+           {key:'Front/Vertical/Left/', segNum:1, deg:   0,value:[]},
+           {key:'Front/Vertical/Right/',segNum:1, deg:   0,value:[]},
+           {key:'Front/Horizontal/',    segNum:15,deg:   0,value:[]},
+           {key:'Left/Horizontal/',     segNum:15,deg:-90,value:[]},
+           {key:'Right/Horizontal/',    segNum:15,deg: 90,value:[]},
+          ];
+          for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
+              for(var ii=1; ii <= infoTbl[kbIdx].segNum; ii++){
+                  var segNumber = 'Seg' + ("0" + ii).substr(-2);
+                  keys.push(keyBase + infoTbl[kbIdx].key + segNumber + '/X/Sensor/Value');
+                  keys.push(keyBase + infoTbl[kbIdx].key + segNumber + '/Y/Sensor/Value');
+              }
+          }
+          if(ctx.qims){
+              ctx.qims.service('ALMemory').then(function(alMemory){
+                  alMemory.getListData(keys).then(function(values){
+                      console.log('value:' + values);
+                      var valIdx = 0;
+                      for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
+                          for(var ii=0; ii < infoTbl[kbIdx].segNum; ii++){
+                              infoTbl[kbIdx].value.push({x:values[valIdx],
+                                                         y:values[valIdx+1]});
+                              valIdx+=2;
+                          }
+                      }
+
+if(ctx.debugCanvas)
+{
+    var c = ctx.debugCanvas.getContext('2d')
+    var cw = ctx.debugCanvas.width;
+    var ch = ctx.debugCanvas.height;
+    var centerX=cw/2;
+    var centerY=ch/3;
+    var pixPerMeter = 70;
+    c.clearRect(0, 0, cw, ch);
+    for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
+        var r = infoTbl[kbIdx].deg / 180 * Math.PI;
+        var rOffs = Math.PI/2;
+        $.each([pixPerMeter,pixPerMeter*2,pixPerMeter*3],function(k,v){
+            c.beginPath();
+            c.moveTo(centerX, centerY);
+            c.arc(centerX, centerY, v, r+rOffs-Math.PI/6, r+rOffs+Math.PI/6, false);
+            c.lineTo(centerX, centerY);
+            c.stroke();
+        });
+        for(var ii=0; ii < infoTbl[kbIdx].value.length; ii++){
+            var x = infoTbl[kbIdx].value[ii].x;
+            var y = infoTbl[kbIdx].value[ii].y;
+            var rx = x * Math.cos(r+rOffs) + -y * Math.sin(r+rOffs);
+            var ry = x * Math.sin(r+rOffs) +  y * Math.cos(r+rOffs);
+            c.beginPath();
+            c.arc((rx)*pixPerMeter+centerX, (ry)*pixPerMeter+centerY, 3, 0, Math.PI*2, false);
+            c.stroke();
+        }
+    }
+}
+                      dfd.resolve(true);
+                  }, onFail);
+              }, onFail);
+          } else {
+              dfd.reject();
+          }
+/*
+var c = ctx.debugCanvasCtx2d;
+c.beginPath();
+c.moveTo(150,20);
+c.lineTo(250, 130);
+c.lineTo(50, 130);
+c.closePath();
+c.stroke();
+*/
           return dfd.promise();
       }
     );
@@ -690,6 +887,8 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","うごき");
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("faceMotion@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("navigateTo@basicBlk"));    
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("moveTo@basicBlk"));    
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","あたい");
@@ -707,6 +906,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","調べる");
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("eq@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("sonarSimple@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("laserSensor@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("nowTime@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZone@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
