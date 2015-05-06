@@ -3450,7 +3450,10 @@ $(function(){
         // 最後に調べた人データ
         exeContext.lastPeopleData   = {rawData:null,};
 
-        // qiMessaging経由のインスタンス   
+        // 最後に移動物体データ
+        exeContext.lastMovementData   = {rawData:null,};
+
+        // qiMessaging経由のインスタンス
         exeContext.setupExecContextFromQim = function(qims)
         {
             // 初期化とsubscribeが必要なモノの起動を行います
@@ -3528,7 +3531,7 @@ $(function(){
         };
 
         //■デバッグ用
-        exeContext.debugCanvas = $("#debugCanvas")[0];
+        exeContext.debugCanvasList ={};
 
         return exeContext;
     }
@@ -3634,7 +3637,7 @@ $(function(){
             self.fromJSON(saveData);
         };
 
-        // 共有
+        // 共有(仮)
         self.shareBlock = function(){
             var saveData = {
                 version:"00.01",
@@ -3652,7 +3655,29 @@ $(function(){
             );
         };
 
-
+        // デバッグキャンバス(仮)
+        self.debugCanvasList = ko.observableArray();
+        self.debugCanvasList.push({id:0,btnW:"1em",layers:[{id:"0"},{id:"1"},{id:"2"},{id:"3"},{id:"4"},]});
+        self.debugCanvasList.push({id:1,btnW:"1em",layers:[{id:"0"},{id:"1"},{id:"2"},{id:"3"},{id:"4"},]});
+        self.debugCanvasList.push({id:2,btnW:"1em",layers:[{id:"0"},{id:"1"},{id:"2"},{id:"3"},{id:"4"},]});
+        self.debugCanvasList.push({id:3,btnW:"1em",layers:[{id:"0"},{id:"1"},{id:"2"},{id:"3"},{id:"4"},]});
+        self.debugCanvasList.push({id:4,btnW:"1em",layers:[{id:"0"},{id:"1"},{id:"2"},{id:"3"},{id:"4"},]});
+        self.debugCanvasTabBtnClick = function(data,e){
+            $(".debugCanvas").addClass("debugCanvasNoSel");
+            if(typeof data.id !== 'undefined')
+            {
+                var debugCanvasElm = $($(".debugCanvas")[data.id]);
+                $(debugCanvasElm).removeClass("debugCanvasNoSel");
+                execContext.debugCanvasList ={};
+                execContext.debugCanvasList[data.id] = {};
+                $(".debugCanvasLayer",debugCanvasElm).each(function(k,v){
+                    execContext.debugCanvasList[data.id][k] = v;
+                });
+            }else{
+                execContext.debugCanvasList ={};
+            }
+        };
+        $(".debugCanvas").addClass("debugCanvasNoSel");
 
         // ■ 接続処理 ■
 
@@ -3707,23 +3732,28 @@ $(function(){
             pepper_ip.ip[2] + "." +
             pepper_ip.ip[3];
             var qims;
-            if(self.lunchPepper){
-                 qims = new QiSession();
-            }else{
-                 qims = new QiSession(ip);
+            if(execContext.qims){
+                //TODO: 接続状態の確認と再接続の方法を考える
             }
-            qims.socket()
-            .on('connect', function () {
-                self.nowState("接続中");              
-                qims.service("ALTextToSpeech")
-                .done(function (tts) {
-                    tts.say("せつぞく、ぺっぷ");
+            else{
+                if(self.lunchPepper){
+                     qims = new QiSession();
+                }else{
+                     qims = new QiSession(ip);
+                }
+                qims.socket()
+                .on('connect', function () {
+                    self.nowState("接続中");              
+                    qims.service("ALTextToSpeech")
+                    .done(function (tts) {
+                        tts.say("せつぞく、ぺっぷ");
+                    });
+                    execContext.setupExecContextFromQim(qims);
+                })
+                .on('disconnect', function () {
+                  self.nowState("切断");
                 });
-                execContext.setupExecContextFromQim(qims);
-            })
-            .on('disconnect', function () {
-              self.nowState("切断");
-            });
+            }
         };
 
         // ■ 作業場の構築をします ■

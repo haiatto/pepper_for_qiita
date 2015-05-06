@@ -360,9 +360,24 @@
           <button data-bind="click: $root.shareBlock">しぇあ(仮)</button>
         </div>
         <textarea class="debugLogBox" id="debugLogBox"></textarea>
-        <div>
-          <canvas id="debugCanvas" class="debugCanvas" width="400" height="300"></canvas>
+        
+        <div class="debugCanvasArea">
+          <div class="debugCanvasTabBtn">
+            キャンバス
+            <button data-bind="click: $root.debugCanvasTabBtnClick">Off</button>
+            <!-- ko foreach:$root.debugCanvasList -->
+              <button data-bind="click: $root.debugCanvasTabBtnClick,text:$data.id"></button>
+            <!-- /ko -->
+          </div>
+          <div data-bind="foreach:$root.debugCanvasList">
+            <div class="debugCanvas">
+              <div data-bind="foreach:$data.layers">
+                <canvas class="debugCanvasLayer" width="400" height="300"></canvas>
+              </div>
+            </div>
+          </div>
         </div>
+        
         <div class="blockBoxs">
           <div id="pix2em" class="pix2em"></div>
           <div class="floatDraggingArea">
