@@ -228,23 +228,41 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           // スコープの先頭ブロックからpromiseを返します
           // (ブロックの返すpromissは自身と繋がるフローが全部進めるときにresolveになります)
           var dfd = $.Deferred();
-          if(scopeBlkObsvTbl.scope0())
-          {
-              //無限ループ停止がまだ実装できてないのでひとまずこれで対処
-              var cnt = 99;
-              var loopFunc = function(){
-                  console.log("loop " + cnt);
-                  // 実行中にブロック外された場合もあるので毎回接続をチェックします
-                  if(cnt-->0 && scopeBlkObsvTbl.scope0()){
-                     dfd
-                     .then(scopeBlkObsvTbl.scope0().deferred)
-                     .then(loopFunc);
-                     return dfd.promise();
+
+          //無限ループ停止がまだ実装できてないのでひとまずこれで対処
+          var cnt = 99;
+          var loopFunc = function(){
+              //console.log("loop " + cnt);
+              if(--cnt<0 || !scopeBlkObsvTbl.scope0()){
+                  // ブロックがつながってない場合は即おしまいです
+                  // (実行中にブロックが外される場合もあるので毎回をチェックします)
+                  dfd.resolve();
+              }
+              else{
+                  var scopeDfd = scopeBlkObsvTbl.scope0().deferred();
+                  //↓これだけだと scopeDfd が非同期でない場合、スタックを食い尽くします
+                  // scopeDfd.then(
+                  //     loopFunc
+                  // );
+                  if(scopeDfd.state()=="pending"){
+                      // ペンディング中なら非同期待ちなのでthenで連結です
+                      scopeDfd.then(
+                        loopFunc,
+                        function(){
+                            dfd.reject();
+                        }
+                      );
+                  }
+                  else if(scopeDfd.state()=="rejected"){
+                      dfd.reject();
+                  }
+                  else{
+                      // ペンディング以外なら
+                      setTimeout(loopFunc,0);                       
                   }
               }
-              dfd.then(loopFunc);
           }
-          dfd.resolve();
+          loopFunc();          
           return dfd.promise();
       }
     );
@@ -616,20 +634,40 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           blockContents:[
               {expressions:[
                   {label:'レーザーセンサーを'},
-                  {options:{default:'キャンバス１',
-                            list:[{text:"キャンバス１",value:"1"},
-                                  {text:"キャンバス２",value:"2"},
-                                  {text:"キャンバス３",value:"3"},
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},
+                                  {text:"キャンバス1",value:"1"},
+                                  {text:"キャンバス2",value:"2"},
+                                  {text:"キャンバス3",value:"3"},
+                                  {text:"キャンバス4",value:"4"},
                                  ]}, 
                    dataName:'targetCanvas',
                    acceptTypes:['string'],
                   },
-                  {label:'に描画'},
+                  {options:{default:'レイヤー0',
+                            list:[{text:"レイヤー0",value:"0"},
+                                  {text:"レイヤー1",value:"1"},
+                                  {text:"レイヤー2",value:"2"},
+                                  {text:"レイヤー3",value:"3"},
+                                  {text:"レイヤー4",value:"4"},
+                                 ]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'に描く'},
               ]}
           ],
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvas = ctx.debugCanvasList[targetCanvasIdx] && ctx.debugCanvasList[targetCanvasIdx][targetLayerIdx];
+          if(!tgtCanvas) 
+          {
+              dfd.resolve();
+              return dfd.promise();
+          }
           var onFail = function(e) {console.error('fail:' + e);};
           var keys = [];
           var keyBase = 'Device/SubDeviceList/Platform/LaserSensor/';
@@ -651,7 +689,6 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           if(ctx.qims){
               ctx.qims.service('ALMemory').then(function(alMemory){
                   alMemory.getListData(keys).then(function(values){
-                      console.log('value:' + values);
                       var valIdx = 0;
                       for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
                           for(var ii=0; ii < infoTbl[kbIdx].segNum; ii++){
@@ -660,38 +697,35 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                               valIdx+=2;
                           }
                       }
-
-                      if(ctx.debugCanvas)
-                      {
-                        var c = ctx.debugCanvas.getContext('2d')
-                        var cw = ctx.debugCanvas.width;
-                        var ch = ctx.debugCanvas.height;
-                        var centerX=cw/2;
-                        var centerY=ch/3;
-                        var pixPerMeter = 70;
-                        c.clearRect(0, 0, cw, ch);
-                        for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
-                            var r = infoTbl[kbIdx].deg / 180 * Math.PI;
-                            var rOffs = Math.PI/2;
-                            $.each([pixPerMeter,pixPerMeter*2,pixPerMeter*3],function(k,v){
-                                c.beginPath();
-                                c.moveTo(centerX, centerY);
-                                c.arc(centerX, centerY, v, r+rOffs-Math.PI/6, r+rOffs+Math.PI/6, false);
-                                c.lineTo(centerX, centerY);
-                                c.stroke();
-                            });
-                            for(var ii=0; ii < infoTbl[kbIdx].value.length; ii++){
-                                var x = infoTbl[kbIdx].value[ii].x;
-                                var y = infoTbl[kbIdx].value[ii].y;
-                                var rx = x * Math.cos(r+rOffs) + -y * Math.sin(r+rOffs);
-                                var ry = x * Math.sin(r+rOffs) +  y * Math.cos(r+rOffs);
-                                c.beginPath();
-                                c.arc((rx)*pixPerMeter+centerX, (ry)*pixPerMeter+centerY, 3, 0, Math.PI*2, false);
-                                c.stroke();
-                            }
-                        }
+                      
+                      var c = tgtCanvas.getContext('2d')
+                      var cw = tgtCanvas.width;
+                      var ch = tgtCanvas.height;
+                      var centerX=cw/2;
+                      var centerY=ch/3;
+                      var pixPerMeter = 70;
+                      //c.clearRect(0, 0, cw, ch);
+                      for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
+                          var r = infoTbl[kbIdx].deg / 180 * Math.PI;
+                          var rOffs = Math.PI/2;
+                          $.each([pixPerMeter,pixPerMeter*2,pixPerMeter*3],function(k,v){
+                              c.beginPath();
+                              c.moveTo(centerX, centerY);
+                              c.arc(centerX, centerY, v, r+rOffs-Math.PI/6, r+rOffs+Math.PI/6, false);
+                              c.lineTo(centerX, centerY);
+                              c.stroke();
+                          });
+                          for(var ii=0; ii < infoTbl[kbIdx].value.length; ii++){
+                              var x = infoTbl[kbIdx].value[ii].x;
+                              var y = infoTbl[kbIdx].value[ii].y;
+                              var rx = x * Math.cos(r+rOffs) + -y * Math.sin(r+rOffs);
+                              var ry = x * Math.sin(r+rOffs) +  y * Math.cos(r+rOffs);
+                              c.beginPath();
+                              c.arc((rx)*pixPerMeter+centerX, (ry)*pixPerMeter+centerY, 3, 0, Math.PI*2, false);
+                              c.stroke();
+                          }
                       }
-                      dfd.resolve(true);
+                      dfd.resolve();
                   }, onFail);
               }, onFail);
           } else {
@@ -862,6 +896,66 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     );
 
 
+/*
+    // [ぼくの[領域(ゾーン)]に [うごくもの] がいたら] を待ってすすむ
+    //[頭のタッチが検知された] を待ってすすむ
+    //[頭を触られた]　を待ってすすむ
+    //[頭を触られる]　を待ってすすむ
+    // 
+    //  [腕をタッチされた] なら
+    //   さわりました？としゃべる
+    //  [頭をタッチされた]　なら
+    //   はわわわわーとしゃべる
+    //  [音が鳴った] なら
+    //   きこえる？としゃべる
+    //  のどれか１つが起こり終るまで待ってすすむ or のどれか１つが起こり終るか[10秒]待ってすすむ
+
+
+// ポーリングする入力枠を作る
+// この枠はある意味遅延評価的な感じで、
+// ブロックのコールバック実行時には値ブロックは評価(deferedの実行)されてない
+// コールバック内で使う側が遅延評価。
+// 遅延評価の時、valueTbl['遅延する入力枠１'].startPolling(endCheckCallback)みたいな感じにする
+// endCheckCallback は true を返すとポーリング終了。encCheckCallbakには値ブロックの評価結果の値が引数に渡される
+
+for_polling:true,
+
+valueBlock{
+    defered=function(){
+
+    },
+    startPooling = function(cb){
+        //対応時
+        var id = alMemory.subscribe(function(v){
+            if(cb(v)){
+                alMemory.unscribe(id);
+            }
+        });
+    },
+}
+{
+    normalCallback:function(ctx,valueDataTbl,scopeBlkObsvTbl){
+    },
+    poolingCallback:function(ctx,valueDataTbl,scopeBlkObsvTbl){
+    },
+}
+
+// dfd{入力枠評価->型変換->コールバック呼び出し}-> 次のdfdにバトンタッチ
+// dfd{[入力枠即時評価->型変換]->コールバック呼び出し}-> 次のdfdにバトンタッチ
+// dfd{[入力枠遅延評価->型変換]->コールバック呼び出し}-> 次のdfdにバトンタッチ
+
+
+//変化検知用値の式(見た目を変えるEVENTと薄ら表示とか雷マークを表示とか…リサイクルっぽいまーく(ポーリングの意味で)？)
+//受け付けるのは型…boolが多いかも…boolの場合は、[○○]になるのを待って…とか
+//数値とかなら[10m]以下になるのをまって…とかかも
+//で、値の変化対応ブロックは…
+
+
+    // 集中する？概念？　集中レベル１をセットする　集中レベルを解除する
+    // 集中レベルは割り込み概念、集中レベルが低いなら後回しorスルー
+    // そんな優先度管理ってわかりやすい？　ある意味ミューテックスとプライオリティ制御の愛の子？ 
+*/
+
     // ぼくの領域(ゾーン)に何か居る（エンゲージメントゾーン）ブロック
     blockManager.registBlockDef(
       {
@@ -972,6 +1066,255 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // イベント系ブロックテスト中 ブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"eventFoward@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'イベントが起きたら進む'}
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
+
+
+    // カメラ可視化ブロック(デバッグ用)
+    blockManager.registBlockDef({
+          blockOpt:{
+              blockWorldId:"clearDebugView@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},{text:"キャンバス1",value:"1"},{text:"キャンバス2",value:"2"},{text:"キャンバス3",value:"3"},{text:"キャンバス4",value:"4"},]}, 
+                   dataName:'targetCanvas',
+                   acceptTypes:['string'],
+                  },
+                  {options:{default:'レイヤー全部',
+                            list:[{text:"レイヤー全部",value:"-1"},{text:"レイヤー0",value:"0"},{text:"レイヤー1",value:"1"},{text:"レイヤー2",value:"2"},{text:"レイヤー3",value:"3"},{text:"レイヤー4",value:"4"},]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'をクリアする'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvasLayers = ctx.debugCanvasList[targetCanvasIdx];
+          if(tgtCanvasLayers)
+          {
+              if(targetLayerIdx<0){
+                  $.each(tgtCanvasLayers,function(k,tgtCanvas)
+                  {
+                      if(tgtCanvas) {
+                          var c = tgtCanvas.getContext('2d');
+                          var cw = tgtCanvas.width;
+                          var ch = tgtCanvas.height;
+                          c.clearRect(0, 0, cw, ch);
+                      }
+                  });
+              }
+              else{
+                  var tgtCanvas = tgtCanvasLayers[targetLayerIdx];
+                  if(tgtCanvas) {
+                      var c = tgtCanvas.getContext('2d');
+                      var cw = tgtCanvas.width;
+                      var ch = tgtCanvas.height;
+                      c.clearRect(0, 0, cw, ch);
+                  }
+              }
+          }
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
+
+    // カメラ可視化ブロック(デバッグ用)
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"cameraDebugView@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {options:{default:'上のカメラ',
+                            list:[{text:"上のカメラ",value:"top"},
+                                  {text:"下のカメラ",value:"bottom"},
+                                  {text:"奥行カメラ",value:"depth"},
+                                  ]}, 
+                   dataName:'srcCamera',
+                   acceptTypes:['string'],
+                  },
+                  {label:'でキャプチャして'},
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},{text:"キャンバス1",value:"1"},{text:"キャンバス2",value:"2"},{text:"キャンバス3",value:"3"},{text:"キャンバス4",value:"4"},]}, 
+                   dataName:'targetCanvas',
+                   acceptTypes:['string'],
+                  },
+                  {options:{default:'レイヤー0',
+                            list:[{text:"レイヤー0",value:"0"},{text:"レイヤー1",value:"1"},{text:"レイヤー2",value:"2"},{text:"レイヤー3",value:"3"},{text:"レイヤー4",value:"4"},]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'に描く'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvas = ctx.debugCanvasList[targetCanvasIdx] && ctx.debugCanvasList[targetCanvasIdx][targetLayerIdx];
+          if(!tgtCanvas) 
+          {
+              dfd.resolve();
+              return dfd.promise();
+          }
+          var onFail = function(e) {console.error('fail:' + e);};
+          if(ctx.qims){
+              var cbCamDraw = function(w,h,data){
+                // 受信したRAWデータをcanvasに
+                var cw = tgtCanvas.width;
+                var ch = tgtCanvas.height;
+                var c = tgtCanvas.getContext('2d');
+                var imageData = c.createImageData(w, h);
+                var pixels = imageData.data;
+                for (var i=0; i < pixels.length/4; i++) {
+                    pixels[i*4+0] = data[i*3+0];
+                    pixels[i*4+1] = data[i*3+1];
+                    pixels[i*4+2] = data[i*3+2];
+                    pixels[i*4+3] = 255;
+                }
+                c.putImageData(imageData, 0, 0);
+              };
+              if(valueDataTbl["srcCamera"]=="top")
+              {
+                ctx.pepperCameraTopIns.captureImage( cbCamDraw );
+              }
+              if(valueDataTbl["srcCamera"]=="bottom")
+              {
+                ctx.pepperCameraBottomIns.captureImage( cbCamDraw );
+              }
+              if(valueDataTbl["srcCamera"]=="depth")
+              {
+                ctx.pepperCameraDepthIns.captureImage( cbCamDraw );
+              }
+              dfd.resolve();
+          } else {
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
+    // 移動物のカメラ内矩形の可視化ブロック(デバッグ用)
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"movementObjCameraDebugView@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'最後に調べたうごくものを'},
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},{text:"キャンバス1",value:"1"},{text:"キャンバス2",value:"2"},{text:"キャンバス3",value:"3"},{text:"キャンバス4",value:"4"},]}, 
+                   dataName:'targetCanvas',
+                   acceptTypes:['string'],
+                  },
+                  {options:{default:'レイヤー0',
+                            list:[{text:"レイヤー0",value:"0"},{text:"レイヤー1",value:"1"},{text:"レイヤー2",value:"2"},{text:"レイヤー3",value:"3"},{text:"レイヤー4",value:"4"},]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'にカメラの視界で描く'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvas = ctx.debugCanvasList[targetCanvasIdx] && ctx.debugCanvasList[targetCanvasIdx][targetLayerIdx];
+          if(!tgtCanvas) 
+          {
+              dfd.resolve();
+              return dfd.promise();
+          }
+          var onFail = function(e) {console.error('fail:' + e);};
+          if(ctx.qims){
+              if(ctx.lastMovementData.rawData)
+              {
+                  var c = tgtCanvas.getContext('2d');
+                  //MovementInfo =
+                  //[
+                  //  TimeStamp,
+                  //  [ClusterInfo_1, ClusterInfo_2, ... ClusterInfo_n],
+                  //  CameraPose_InTorsoFrame,
+                  //  CameraPose_InRobotFrame,
+                  //  Camera_Id
+                  //]
+                  var CamImageW = 320;
+                  var CamImageH = 240;
+                  var timeStamp    = ctx.lastMovementData.rawData[0];
+                  var ClusterInfos = ctx.lastMovementData.rawData[1];
+                  var CameraPose_InTorsoFrame = ctx.lastMovementData.rawData[2];
+                  var CameraPose_InRobotFrame = ctx.lastMovementData.rawData[3];
+                  var Camera_Id = ctx.lastMovementData.rawData[4];
+                  if(Camera_Id==2)
+                  {
+                      // depthカメラが使用されている場合はここに来ます
+                      $.each(ClusterInfos,function(k,clusterInfo){
+                          var PositionOfCog             = clusterInfo[0];
+                          var AngularRoi                = clusterInfo[1];
+                          var ProportionMovingPixels    = clusterInfo[2];
+                          var MeanDistance              = clusterInfo[3];
+                          var RealSizeRoi               = clusterInfo[4];
+                          var PositionOfAssociatedPoint = clusterInfo[5];
+                          var x = CamImageW/2 - AngularRoi[0] * CamImageW;
+                          var y = CamImageH/2 - AngularRoi[1] * CamImageH;
+                          var w = AngularRoi[2] * CamImageW;
+                          var h = AngularRoi[3] * CamImageH;
+                          c.beginPath();
+                          c.moveTo(x, y);
+                          c.lineTo(x+w, y);
+                          c.lineTo(x+w, y+h);
+                          c.lineTo(x, y+h);
+                          c.lineTo(x, y);
+                          c.stroke();
+                      });
+                  }
+              }
+              dfd.resolve();
+          } else {
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
 
     // 素材リスト生成をします
     var materialBoxWs;
@@ -1012,5 +1355,9 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","みえる化");
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("clearDebugView@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("laserSensorDebugView@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("cameraDebugView@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("movementObjCameraDebugView@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 });

@@ -48,7 +48,9 @@ pepperBlock.registBlockDef = function(callbackFunc)
 //     'end' 'out' ’value’
 //   types:
 //      ["","",...]
-
+//   supportPolling
+//      true/false trueの時は、ポーリング用入力枠に入っているときにコールバックにポーリング用の引数が渡される
+//
 // blockContents
 //   expressions
 //     ***下記参照***
@@ -67,11 +69,15 @@ pepperBlock.registBlockDef = function(callbackFunc)
 // },
 // -- expressions --
 // expressions
-//   label
-//   string   ※acceptTypes省略可
-//   number   ※acceptTypes省略可
-//   bool     ※acceptTypes省略可
-//   options  ※acceptTypes必須
+//   [label
+//    string   ※acceptTypes省略可
+//    number   ※acceptTypes省略可
+//    bool     ※acceptTypes省略可
+//    options  ※acceptTypes必須
+//   ]
+//   dataName ※省略不可
+//   acceptTypes
+//   forPolling ※省略可。trueでポーリング用(イベント的な)の入力枠になります 
 // [
 //   {label:"ここに"}.
 //   {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
@@ -90,6 +96,10 @@ pepperBlock.registBlockDef = function(callbackFunc)
 //■■■■■ コールバック ■■■■■ 
 //
 // deferredの関数。promise返す
+//
+// MEMO:凄くわかりやすかったdeferredの解説
+//      http://techblog.yahoo.co.jp/programming/jquery-deferred/
+//      ★注意★ 他の解説読む場合、JQueryのバージョン古いものの説明を読むと混乱するので注意。thenの仕様が結構何度も変わってます
 //
 //  function blcokCallback(execContext, valueDataTbl, scopeTbl){
 //      var dfd = $.Deferred();
@@ -195,15 +205,32 @@ function checkAgent_NeedDragUnselect()
     return false;
 }
 
-function PepperCamera(alVideoDevice) {
+function PepperCamera(alVideoDevice,option) {
     var self = this;
     self.subscribe = function(){
-        self.nameId = alVideoDevice.subscribeCamera(
-            "pepper_remocon_cam", 
-            0, // nao_top
-            1, // 320x240 
-            11,// Rgb
-            5  // frame_rate
+        if(!option){
+            option = {};
+        }
+        option.name  = option.name  || "pepper_block_cam";
+        option.cam   = option.cam   || 0;  // nao_top
+        option.reso  = option.reso  || 1;  // 320x240
+        option.color = option.color || 11; // Rgb
+        option.frame_rate = option.frame_rate || 5; // frame_rate
+        alVideoDevice.getSubscribers().done(function(list){
+            //6個まで制限があるそうなのでゴミ掃除
+            $.each(list,function(k,v){
+                if(v.indexOf(option.name)==0)//とりあえず前方一致で同じと判断してみる
+                {
+                    alVideoDevice.unsubscribe(v);
+                }
+            })
+        });
+        alVideoDevice.subscribeCamera(
+            option.name, 
+            option.cam,
+            option.reso,
+            option.color,
+            option.frame_rate
         ).done(function(nameId){
             self.nameId=nameId;
         });
@@ -218,13 +245,17 @@ function PepperCamera(alVideoDevice) {
         if(self.nameId.length>0)
         {
             alVideoDevice.getImageRemote(self.nameId).done(function(data){
-              var buff = _base64ToArrayBuffer(data[6]);
-              callback(data[0],data[1], buff);
+              if(data)
+              {
+                  var buff = _base64ToArrayBuffer(data[6]);
+                  callback(data[0],data[1], buff);
+              }
             });
         }
     };
     self.subscribe();
 }
+
 
 $(function(){
     if(!getUrlParameter("lunchPepper"))
@@ -317,9 +348,12 @@ function Block(blockManager, blockTemplate, callback) {
             };
         }
     }
+    if(self.blockTemplate.blockOpt.supportPolling){
+        self.supportPolling = true;
+    }
 
     // 行のような部分の中身を作ります
-    self.valueDataTbl = {};//後で整理する(今はコールバックに渡すだけの目的で使ってるので)
+    self.valueDataObsvTbl = {};//後で整理する(今はコールバックに渡すだけの目的で使ってるので)
     self.valueInTbl = {};
     self.scopeTbl = {};
     self.rowContents = [];
@@ -341,11 +375,12 @@ function Block(blockManager, blockTemplate, callback) {
                 };
                 if(dataTemplate.dataName){
                     expression.acceptTypes = dataTemplate.acceptTypes;
+                    expression.forPolling  = dataTemplate.forPolling;
                     expression.blockObsv   = ko.observable();
                     expression.hitArea     = null;
                     expression.valueObsv   = ko.observable();
                     self.valueInTbl[dataTemplate.dataName] = expression;
-                    self.valueDataTbl[dataTemplate.dataName] = expression.valueObsv;
+                    self.valueDataObsvTbl[dataTemplate.dataName] = expression.valueObsv;
                     if(dataTemplate.bool)
                     {
                         if(!expression.acceptTypes){
@@ -480,123 +515,182 @@ function Block(blockManager, blockTemplate, callback) {
     // ■実行関連の処理
     
     // Deferred の promise作って返します
-    self.deferred = function()
+    self.deferred = function(option)
     {
-        // 値の受け取りを行います
-        // HACK: この形が良いかは要検討。コールバック内に委ねる方がいいかも？
-        var valuePromiseList = [];
+        option = option || {};
+        var makeFormatedValue_ = function(valueIn, valueData)
+        {
+            // 値のデータフォーマットの加工を行います
+            // ※値ブロックは主にコールバック実装者の利便性の為に、
+            // 対応するタイプが１種類の場合、
+            // データそのものを受け渡すルールにしてます。
+            // (具体的には値ブロックが返す・入力枠が受けとるの時に値自体がわたってゆく)
+            // 対応数タイプが２種類以上の場合は、
+            //   valueData.タイプ名 = データ
+            // といったタイプ名をキーにしたテーブルの形で受け渡します。
+            // ここでは、返すブロックと受ける枠が、違うフォーマ形式、
+            //   複数対応から１種対応、１種対応から複数
+            // の場合の
+            // データフォーマットの変換を行っています。
+            // なお、未対応の組み合わせはない前提です(接続時にチェック済み)
+            var formatedValue;
+            if(!valueIn.blockObsv())
+            {
+                // 入力が即値(値ブロックでは無い)場合
+                if(valueIn.acceptTypes.length>1){
+                    //UI =>多
+                    formatedValue = {};
+                    formatedValue[valueIn.acceptTypes[0]] = valueData;
+
+                }else{
+                    //UI =>１
+                    formatedValue = valueData;
+                }
+            }
+            else if(valueIn.acceptTypes.length>1 && 
+                    valueIn.blockObsv().valueOut.types.length == 1)
+            {
+                //１ => 多
+                var inType = valueIn.blockObsv().valueOut.types[0];
+                formatedValue = {};
+                formatedValue[inType] = valueData;
+            }
+            else if(valueIn.blockObsv().valueOut.types.length > 1)
+            {
+                //多 => １
+                var inType = valueIn.acceptTypes[0];
+                formatedValue = valueData[inType];
+            }
+            else{
+                //１ => １ or 多 => 多
+                formatedValue = valueData;
+            }
+            return formatedValue;
+        };
+        var makeScopeBlockObsvDfdTbl_ = function(){
+            var scopeObsvTbl = {};
+            $.each(self.scopeTbl,function(k,scope){
+                scopeObsvTbl[k] = scope.scopeOut.blockObsv;
+            });
+            return scopeObsvTbl;
+        };
+        
+        $(self.element).removeClass("executeError"); 
+        $(self.element).removeClass("executeNow");
+
+        // 入力枠の値の評価を行います(deferredはリストにして纏めます)
+        var argValueDataTbl      = {};
+        var valueEvalPromiseList = [];
         $.each(self.valueInTbl,function(k,valueIn){
-            if(valueIn.blockObsv()){
-                // 値ブロックのpromiseを実行してその結果をvalueDataTblにセットするpromiseを作成
-                valuePromiseList.push(
+            if(valueIn.forPolling){
+                // 入力枠がポーリング用なので評価関数を渡します(遅延評価的な雰囲気)
+                if(valueIn.blockObsv()){
+                    argValueDataTbl[k] = {
+                        // Deferredとして実装します。ポーリングが終わるとresolveします
+                        //(Deferredは利用しなくても別にOKです。あくまで利便性のため)
+                        startPolling:function(endCheckCallback)
+                        {
+                            return valueIn.blockObsv().deferredForPolling(endCheckCallback);
+                        },
+                    };
+                }else{
+                    //値ブロックが無い場合はポーリング不可という事で空にします
+                    argValueDataTbl[k] = {};
+                }
+            }
+            else if(valueIn.blockObsv()){
+                // 値ブロックの結果をargValueDataTblにセットします(deferredで実行)
+                // HACK: この形が良いかは要検討。コールバック内に委ねる方がいいかも？
+                valueEvalPromiseList.push(
                     $.Deferred(function(dfd) {
-                        var valuePromise = valueIn.blockObsv().deferred();
-                        valuePromise.then(function(value){
-                            var valueDataObsv = self.valueDataTbl[valueIn.dataTemplate.dataName];
-                            valueDataObsv(value);
+                        valueIn.blockObsv().deferred().then(function(valueData){
+                            // 値入力枠に代入しておきます(値ブロックを枠から外した時に最後の評価結果が残る挙動になります)
+                            self.valueDataObsvTbl[valueIn.dataTemplate.dataName](valueData);
+                            // 受け渡し用のテーブルを構築します
+                            argValueDataTbl[k] = makeFormatedValue_(valueIn,valueData);
                             dfd.resolve();
+                        },function(){
+                            dfd.reject();
                         });
                     }).promise()
                 );
-            } 
-        });
-        // 入力する値ブロックが全部完了したら自身のコールバックを実行します
-        return $.when.apply($,valuePromiseList).then(function(){
-            var makeFormatedValueDataTable_ = function(){
-                // 値のフォーマットの加工を行います
-                // ※値ブロックは利便性の為に対応するタイプが１種類の場合、
-                // データそのものが渡すルールにしてます。
-                // ２つ以上あった場合は、
-                //   valueData.タイプ名 = データ
-                // といったタイプ名をキーにしたテーブルの形で受け渡されます。
-                // ここでは、複数対応から１種対応、１種対応から複数、の場合の
-                // データフォーマットの変換を行っています。
-                var formatedValueDataTbl = {};
-                $.each(self.valueInTbl,function(k,valueIn){
-                    if(!valueIn.blockObsv())
-                    {
-                        if(valueIn.acceptTypes.length>1){
-                            //UI =>多
-                            formatedValueDataTbl[k] = {};
-                            formatedValueDataTbl[k][valueIn.acceptTypes[0]] = self.valueDataTbl[k]();
-
-                        }else{
-                            //UI =>１
-                            formatedValueDataTbl[k] = self.valueDataTbl[k]();
-                        }
-                    }
-                    else if(valueIn.acceptTypes.length>1 && 
-                            valueIn.blockObsv().valueOut.types.length == 1)
-                    {
-                        //１ => 多
-                        var inType = valueIn.blockObsv().valueOut.types[0];
-                        formatedValueDataTbl[k] = {};
-                        formatedValueDataTbl[k][inType] = self.valueDataTbl[k]();
-                    }
-                    else if(valueIn.blockObsv().valueOut.types.length > 1)
-                    {
-                        //多 => １
-                        var inType = valueIn.acceptTypes[0];
-                        formatedValueDataTbl[k] = self.valueDataTbl[k][inType]();
-                    }
-                    else{
-                        //１ => １ or 多 => 多
-                        formatedValueDataTbl[k] = self.valueDataTbl[k]();
-                    }
-                });
-                return formatedValueDataTbl;
-            };
-            var makeScopeBlockObsvDfdTbl_ = function(){
-                var scopeObsvTbl = {};
-                $.each(self.scopeTbl,function(k,scope){
-                    scopeObsvTbl[k] = scope.scopeOut.blockObsv;
-                });
-                return scopeObsvTbl;
-            };
-
-            //out部分のみここで繋ぎます(スコープ以下はコールバック内でやります)
-            if(self.out && self.out.blockObsv()){
-                return $.Deferred(function(dfd){
-                    // 自身の処理を実行します
-                    $(self.element).removeClass("executeError"); 
-                    $(self.element).addClass("executeNow");
-                    var valueDataTbl    = makeFormatedValueDataTable_();
-                    var scopeBlkObsvTbl = makeScopeBlockObsvDfdTbl_();
-                    self.callback(self.blockManager.execContext, valueDataTbl, scopeBlkObsvTbl)
-                    .then(
-                      function(){
-                        // outに繋がるブロックを実行(先がoutにつながってるならば連鎖していき終るまで帰りません)
-                        $(self.element).removeClass("executeNow"); 
-                        self.out.blockObsv().deferred().then(function(){
-                            // 繋がるブロック移行が完了したら自身も完了させます
-                            dfd.resolve();
-                        });
-                      },
-                      function(){
-                        //失敗時
-                        $(self.element).removeClass("executeNow"); 
-                        $(self.element).addClass("executeError");                        
-                      }
-                    );
-                }).promise();
             }
             else{
-                $(self.element).removeClass("executeError"); 
-                $(self.element).addClass("executeNow");
-                var valueDataTbl = makeFormatedValueDataTable_();
-                var scopeBlkObsvTbl = makeScopeBlockObsvDfdTbl_();
-                return self.callback(self.blockManager.execContext, valueDataTbl, scopeBlkObsvTbl)
-                    .then(function(v){
-                        $(self.element).removeClass("executeNow"); 
-                        return v;
-                     },
-                     function(){
-                         //失敗時
-                         $(self.element).removeClass("executeNow"); 
-                         $(self.element).addClass("executeError");
-                     });
+                // 値入力枠の値を使用します
+                var valueData = self.valueDataObsvTbl[valueIn.dataTemplate.dataName]();
+                // 受け渡し用のテーブルにセットします
+                argValueDataTbl[k] = makeFormatedValue_(valueIn,valueData);
             }
         });
+
+        // 入力する値ブロックを評価するpromiseが全部完了したら自身のコールバックを実行します
+        return $.when.apply($,valueEvalPromiseList).then(function(){
+            // 自身の処理の前の処理
+            $(self.element).removeClass("executeError"); 
+            $(self.element).addClass("executeNow");
+
+            // 自身の処理を実行します
+            var scopeBlkObsvTbl = makeScopeBlockObsvDfdTbl_();            
+            var dfdMain = self.callback(
+                self.blockManager.execContext, 
+                argValueDataTbl, 
+                scopeBlkObsvTbl,
+                option.endCheckPollingCallback
+            );
+
+            //MEMO: deferredの学習用メモ
+            //      dfdMainは内部で非同期処理が一つもなければここで結果が出ています
+            //      非同期処理があればペンティング状態で結果が出るのを待っている状態です
+            //      同期処理だった場合は以降の処理の登録の瞬間にその場で実行されます
+            
+            // 自身の処理の後の処理を登録(実行)します
+            return dfdMain.then(
+                function(value){
+                    // 自身の処理が成功時
+                    $(self.element).removeClass("executeNow"); 
+                    if(self.out && self.out.blockObsv())
+                    {
+                        // out部分のみここで繋ぎます(スコープ以下はコールバック内で処理するルールです)
+                        return self.out.blockObsv().deferred();
+                    }
+                    return $.Deferred().resolve(value);
+                },
+                function(){
+                    // 自身の処理が失敗時
+                    $(self.element).removeClass("executeNow"); 
+                    $(self.element).addClass("executeError");
+                }
+            );
+        });
+    };
+    self.deferredForPolling = function(endCheckCallback)
+    {
+        $(self.element).removeClass("executeError"); 
+        $(self.element).addClass("executeNow");
+
+        var dfd = $.Deferred();
+        if(self.supportPolling){
+            //値ブロックが値更新ポーリング処理を提供している場合は
+            //オプション付きでdeferredを呼びます
+            dfd = self.deferred({
+                endCheckPollingCallback : endCheckCallback,
+            });
+        }
+        else{
+            //値更新ポーリング処理を提供してない場合は
+            //setTimeoutで繰り返します
+            var pooling = function(){
+                self.deferred().then(function(value){                                    
+                    if(!endCheckCallback(value)){
+                        setTimeout(pooling,0);
+                    }else{
+                        dfd.resolve(value);
+                    }
+                })
+            };
+            setTimeout(pooling,0);
+        }
+        return dfd;
     };
 
     //■ 接続関連の処理
@@ -2567,7 +2661,7 @@ function BlockManager(execContext){
              
             var block = ko.utils.unwrapObservable(valueAccessor());
             // ブロック内のデータの通知を受けることを伝えます
-            $.each(block.valueDataTbl,function(k,v){
+            $.each(block.valueDataObsvTbl,function(k,v){
                 v();
             });
             $.each(block.valueInTbl,function(k,v){
@@ -3444,6 +3538,13 @@ $(function(){
         // バージョン
         exeContext.contextVersion = "0.01";
 
+        // 複数人接続用の自分の固有ID
+        // (カメラ等で同じIDは6個までしか使えない＆切断処理しないとゴミが残る等、
+        //  サンドボックス化されて無いひどい状態なので
+        //  自身でサンドボックスを実現するためのID。)
+        // TODO: 複数人対応時はキープアライブ等でIDの管理を実装する…（乱数だとゴミ掃除出来ないのでダメ。空きを再利用して必ず初期化して使えスタイルがいいかも)
+        exeContext.sandBoxID = "SandBoxA";
+
         // 最後に認識した単語データ
         exeContext.lastRecoData   = {rawData:null,};
 
@@ -3487,7 +3588,9 @@ $(function(){
             });
             exeContext.qims.service("ALVideoDevice").done(function(ins){
               exeContext.alIns.alVideoDevice = ins;
-              exeContext.pepperCameraIns = new PepperCamera(ins);
+              exeContext.pepperCameraTopIns    = new PepperCamera(ins,{name:"pepper_block_top_cam"   +exeContext.sandBoxID,cam:0});
+              exeContext.pepperCameraBottomIns = new PepperCamera(ins,{name:"pepper_block_bottom_cam"+exeContext.sandBoxID,cam:1});
+              exeContext.pepperCameraDepthIns  = new PepperCamera(ins,{name:"pepper_block_depth_cam"+exeContext.sandBoxID,cam:2});
             });
             exeContext.qims.service('ALMemory').then(function(ins){
               exeContext.alIns.alMemory = ins;
@@ -3734,6 +3837,10 @@ $(function(){
             var qims;
             if(execContext.qims){
                 //TODO: 接続状態の確認と再接続の方法を考える
+                if(self.nowState()=="切断")
+                {
+                    execContext.qims.socket().socket.connect();
+                }
             }
             else{
                 if(self.lunchPepper){
