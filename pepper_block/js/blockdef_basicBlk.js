@@ -25,7 +25,8 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               var dfd = $.Deferred();
               ctx.qims.service("ALTextToSpeech").then(function(tss){
                   ctx.alIns.alMemory.subscriber("ALTextToSpeech/TextDone")
-                  //deferred不慣れで勘違いした結果のコード。ここでは不要だったけど参考のため残してきます
+                  //deferred不慣れで勘違いした結果のコード。
+                  //ここ場面では不要だったけど価値がありそうなので参考のため残してきます
                   //.then(
                   //    function (subscriber) {
                   //        var id = null;
@@ -896,65 +897,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     );
 
 
-/*
-    // [ぼくの[領域(ゾーン)]に [うごくもの] がいたら] を待ってすすむ
-    //[頭のタッチが検知された] を待ってすすむ
-    //[頭を触られた]　を待ってすすむ
-    //[頭を触られる]　を待ってすすむ
-    // 
-    //  [腕をタッチされた] なら
-    //   さわりました？としゃべる
-    //  [頭をタッチされた]　なら
-    //   はわわわわーとしゃべる
-    //  [音が鳴った] なら
-    //   きこえる？としゃべる
-    //  のどれか１つが起こり終るまで待ってすすむ or のどれか１つが起こり終るか[10秒]待ってすすむ
 
-
-// ポーリングする入力枠を作る
-// この枠はある意味遅延評価的な感じで、
-// ブロックのコールバック実行時には値ブロックは評価(deferedの実行)されてない
-// コールバック内で使う側が遅延評価。
-// 遅延評価の時、valueTbl['遅延する入力枠１'].startPolling(endCheckCallback)みたいな感じにする
-// endCheckCallback は true を返すとポーリング終了。encCheckCallbakには値ブロックの評価結果の値が引数に渡される
-
-for_polling:true,
-
-valueBlock{
-    defered=function(){
-
-    },
-    startPooling = function(cb){
-        //対応時
-        var id = alMemory.subscribe(function(v){
-            if(cb(v)){
-                alMemory.unscribe(id);
-            }
-        });
-    },
-}
-{
-    normalCallback:function(ctx,valueDataTbl,scopeBlkObsvTbl){
-    },
-    poolingCallback:function(ctx,valueDataTbl,scopeBlkObsvTbl){
-    },
-}
-
-// dfd{入力枠評価->型変換->コールバック呼び出し}-> 次のdfdにバトンタッチ
-// dfd{[入力枠即時評価->型変換]->コールバック呼び出し}-> 次のdfdにバトンタッチ
-// dfd{[入力枠遅延評価->型変換]->コールバック呼び出し}-> 次のdfdにバトンタッチ
-
-
-//変化検知用値の式(見た目を変えるEVENTと薄ら表示とか雷マークを表示とか…リサイクルっぽいまーく(ポーリングの意味で)？)
-//受け付けるのは型…boolが多いかも…boolの場合は、[○○]になるのを待って…とか
-//数値とかなら[10m]以下になるのをまって…とかかも
-//で、値の変化対応ブロックは…
-
-
-    // 集中する？概念？　集中レベル１をセットする　集中レベルを解除する
-    // 集中レベルは割り込み概念、集中レベルが低いなら後回しorスルー
-    // そんな優先度管理ってわかりやすい？　ある意味ミューテックスとプライオリティ制御の愛の子？ 
-*/
 
     // ぼくの領域(ゾーン)に何か居る（エンゲージメントゾーン）ブロック
     blockManager.registBlockDef(
@@ -965,6 +908,7 @@ valueBlock{
               head:'value',
               tail:'value',
               types:["bool"],
+              supportPolling:true,
           },
           blockContents:[
               {expressions:[
@@ -989,15 +933,18 @@ valueBlock{
               ]}
           ],
       },
-      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+      function(ctx,valueDataTbl,scopeBlkObsvTbl,pollingValueEndCheckCallback){
           var dfd = $.Deferred();
+
           var onFail = function(e) {
               console.error('fail:' + e);};
           var onFailPass = function(e) {
               console.log('fail:' + e); 
               return $.Deferred().resolve();};
+
           var zone   = valueDataTbl["zone"];
           var target = valueDataTbl["target"];
+
           if(ctx.qims){
               $.when( ctx.qims.service("ALMemory")
               )
@@ -1014,23 +961,69 @@ valueBlock{
                           "3":"EngagementZones/LastMovementsInZone3",
                       },
                   };
-                  alMemory.getData(keyTbl[target][zone]).then(function(v){
-                      if(target=="person")
-                      {
-                          if(v.length>0)
+                  var eventKeyTbl={
+                      "person":  "EngagementZones/PeopleInZonesUpdated",
+                      "movement":"EngagementZones/MovementsInZonesUpdated",
+                  };
+                  if(pollingValueEndCheckCallback)
+                  {
+                      ctx.subscribeAlMemoryEvent(eventKeyTbl[target], function(eventDfd, eventKeyValue){
+                          console.log("get " + keyTbl[target][zone]);
+                          alMemory.getData(keyTbl[target][zone]).then(function(v){
+                              var isEnd = false;
+                              if(target=="person")
+                              {
+                                  if(v.length>0)
+                                  {
+                                      ctx.lastPeopleData.rawData = v[0];
+                                  }
+                                  if(pollingValueEndCheckCallback(v.length>0))
+                                  {
+                                      eventDfd.resolve();
+                                      dfd.resolve(v.length>0);
+                                      return true;
+                                  }
+                              }
+                              if(target == "movement")
+                              {
+                                  if(v.length>0)
+                                  {
+                                      ctx.lastMovementData.rawData = v;
+                                  }
+                                  //console.log("result movement num " + v.length);
+                                  if(pollingValueEndCheckCallback(v.length>0))
+                                  {
+                                      eventDfd.resolve();
+                                      dfd.resolve(v.length>0);
+                                      return true;
+                                  }
+                              }
+                              return false;
+                          }, onFail);
+                      })
+                      .fail(onFail);
+                  }
+                  else{
+                      //
+                      alMemory.getData(keyTbl[target][zone]).then(function(v){
+                          if(target=="person")
                           {
-                              ctx.lastPeopleData.rawData = v[0];
+                              if(v.length>0)
+                              {
+                                  ctx.lastPeopleData.rawData = v[0];
+                              }
+                              dfd.resolve(v.length>0);
                           }
-                      }
-                      if(target == "movement")
-                      {
-                          if(v.length>0)
+                          if(target == "movement")
                           {
-                              ctx.lastMovementData.rawData = v;
+                              if(v.length>0)
+                              {
+                                  ctx.lastMovementData.rawData = v;
+                              }
+                              dfd.resolve(v.length>0);
                           }
-                      }
-                      dfd.resolve(v.length>0);
-                  }, onFail);
+                      }, onFail);
+                  }
               }, onFail);
           }
           else{
@@ -1058,32 +1051,103 @@ valueBlock{
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
           var dfd = $.Deferred();
-          var date = new Date();
-          var h = date.getHours();
-          var m = date.getMinutes();
           dfd.resolve(ctx.lastPeopleData);
           return dfd.promise();
       }
     );
 
+    // 最後に調べた移動物を返すブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"lastMovementData@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["movement"],
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'最後に調べたうごくもの'}
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          dfd.resolve(ctx.lastMovementData);
+          return dfd.promise();
+      }
+    );
+
+/*
+    //  [ぼくの[領域(ゾーン)]に [うごくもの] がいたら] を待ってすすむ
+    //  [頭のタッチが検知された] を待ってすすむ
+    //  [頭を触られた]　を待ってすすむ
+    //  [頭を触られる]　を待ってすすむ
+    // 
+    //  [腕をタッチされた] なら
+    //   さわりました？としゃべる
+    //  [頭をタッチされた]　なら
+    //   はわわわわーとしゃべる
+    //  [音が鳴った] なら
+    //   きこえる？としゃべる
+    //  のどれか１つが起こり終るまで待ってすすむ or のどれか１つが起こり終るか[10秒]待ってすすむ
+
+    // ポーリングする為の入力枠の設定を作る
+    // この枠はある意味遅延評価的な存在、
+    // ブロックのコールバック呼び出し時には値ブロックは評価(deferedの実行)されてない(普通は評価済み)
+    // コールバック内で評価(deferedの実行)する
+    // 評価(deferedの実行)は、
+    //  valueTbl['遅延する入力枠データ名１'].startPolling(pollingValueEndCheckCallback)
+    // とする。
+    // pollingValueEndCheckCallback には値ブロックの評価結果の値が引数に渡される
+    // pollingValueEndCheckCallback は true を返すとポーリング終了。
+    // ポーリングをサポートしている値ブロックならば変化時に pollingValueEndCheckCallback が呼ばれる
+    // ポーリングをサポートしてない値ブロックならばsetTimeOut(0)で pollingValueEndCheckCallback が呼ばれる
+
+    // 変化検知用値の式(見た目を変えるEVENTと薄ら表示とか雷マークを表示とか…リサイクルっぽいまーく(ポーリングの意味で)？)
+    // 受け付けるのは型…boolが多そう
+    //  boolなら    [○○] になるのを待って…とか
+    //  数値とかなら [10m]以下になるのをまって…とか
+
+
+    // 集中する？概念？　集中レベル１をセットする　集中レベルを解除する
+    // 集中レベルは割り込み概念、集中レベルが低いなら後回しorスルー
+    // そんな優先度管理ってわかりやすい？　ある意味ミューテックスとプライオリティ制御の愛の子？ 
+*/
+
     // イベント系ブロックテスト中 ブロック
     blockManager.registBlockDef(
       {
           blockOpt:{
-              blockWorldId:"eventFoward@basicBlk",
+              blockWorldId:"eventWaitForward@basicBlk",
               color:'orange',
               head:'in',
               tail:'out',
           },
           blockContents:[
               {expressions:[
-                  {label:'イベントが起きたら進む'}
+                  {bool:{default:false}, dataName:"waitFlag0", forPolling:true },
+                  {label: 'を待ってすすむ'},
               ]}
           ],
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
-          var dfd = $.Deferred();
-          dfd.resolve();
+          var dfd = $.Deferred();          
+          valueDataTbl["waitFlag0"].startPolling(function(value){
+              if(value){
+                  return true;
+              }
+              return false;
+          })
+          .then(
+              function(){
+                  dfd.resolve();
+              },
+              function(){
+                  dfd.reject();
+              }
+          );
           return dfd.promise();
       }
     );
@@ -1206,6 +1270,7 @@ valueBlock{
                     pixels[i*4+3] = 255;
                 }
                 c.putImageData(imageData, 0, 0);
+                dfd.resolve();
               };
               if(valueDataTbl["srcCamera"]=="top")
               {
@@ -1219,7 +1284,6 @@ valueBlock{
               {
                 ctx.pepperCameraDepthIns.captureImage( cbCamDraw );
               }
-              dfd.resolve();
           } else {
               dfd.reject();
           }
@@ -1292,7 +1356,27 @@ valueBlock{
                           var ProportionMovingPixels    = clusterInfo[2];
                           var MeanDistance              = clusterInfo[3];
                           var RealSizeRoi               = clusterInfo[4];
-                          var PositionOfAssociatedPoint = clusterInfo[5];
+                          var PositionOfAssociatedPoint = clusterInfo[5];                          
+                          $.when( ctx.qims.service("ALVideoDevice")
+                          ).then(function(alVideoDevice){
+                              alVideoDevice.getImageInfoFromAngularInfo(
+                                  Camera_Id,
+                                  AngularRoi
+                              ).then(function(info){
+                                  var x = info[0] * CamImageW;
+                                  var y = info[1] * CamImageH;
+                                  var w = info[2] * CamImageW;
+                                  var h = info[3] * CamImageH;
+                                  c.beginPath();
+                                  c.moveTo(x, y);
+                                  c.lineTo(x+w, y);
+                                  c.lineTo(x+w, y+h);
+                                  c.lineTo(x, y+h);
+                                  c.lineTo(x, y);
+                                  c.stroke();
+                              })
+                          });
+                          /*
                           var x = CamImageW/2 - AngularRoi[0] * CamImageW;
                           var y = CamImageH/2 - AngularRoi[1] * CamImageH;
                           var w = AngularRoi[2] * CamImageW;
@@ -1304,6 +1388,7 @@ valueBlock{
                           c.lineTo(x, y+h);
                           c.lineTo(x, y);
                           c.stroke();
+                          */
                       });
                   }
               }
@@ -1340,6 +1425,7 @@ valueBlock{
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("if_else@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("loop@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("waitNSec@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("eventWaitForward@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","調べる");
@@ -1350,8 +1436,9 @@ valueBlock{
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZone@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
-    materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","ひと");
+    materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","ひと・もの");
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastPeopleData@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastMovementData@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","みえる化");

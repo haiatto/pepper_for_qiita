@@ -30,7 +30,7 @@ pepperBlock.registBlockDef = function(callbackFunc)
 //    変数ドロップあり・なし
 //  などの条件から作られるっぽい？ただし四角とリスト機能と自由入力を組み合わせたものはないみたい。
 
-//■■■■■ データフォーマット案 ■■■■■ 
+//■■■■■ ブロックテンプレフォーマット案 ■■■■■ 
 // -- root --
 // blockOpt
 //   sys_version
@@ -69,15 +69,19 @@ pepperBlock.registBlockDef = function(callbackFunc)
 // },
 // -- expressions --
 // expressions
-//   [label
-//    string   ※acceptTypes省略可
-//    number   ※acceptTypes省略可
-//    bool     ※acceptTypes省略可
-//    options  ※acceptTypes必須
-//   ]
-//   dataName ※省略不可
-//   acceptTypes
-//   forPolling ※省略可。trueでポーリング用(イベント的な)の入力枠になります 
+//   UIの見た目
+//    - label
+//    - string   ※acceptTypes省略可
+//    - number   ※acceptTypes省略可
+//    - bool     ※acceptTypes省略可
+//    - options  ※acceptTypes必須
+//   データ
+//    - dataName    データ名 ※省略不可
+//    - acceptTypes 受け入れる型
+//   挙動
+//    - forPolling ※省略可。trueでポーリング用(イベント的な)の入力枠になります 
+//
+// -- 例 --
 // [
 //   {label:"ここに"}.
 //   {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
@@ -86,7 +90,9 @@ pepperBlock.registBlockDef = function(callbackFunc)
 //   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
 // ],
 //
-//-- データフォーマット --
+//■■■■■ データフォーマット案 ■■■■■ 
+//
+// -- データフォーマット --
 // {string:""},
 // {bool:true},
 // {number:123},
@@ -587,10 +593,10 @@ function Block(blockManager, blockTemplate, callback) {
                 if(valueIn.blockObsv()){
                     argValueDataTbl[k] = {
                         // Deferredとして実装します。ポーリングが終わるとresolveします
-                        //(Deferredは利用しなくても別にOKです。あくまで利便性のため)
-                        startPolling:function(endCheckCallback)
+                        //(Deferredはエラーチェック用に必須ですが、それ以外の用途では利用しなくても別にOKです。そちらはあくまで利便性のため)
+                        startPolling:function(pollingValueEndCheckCallback)
                         {
-                            return valueIn.blockObsv().deferredForPolling(endCheckCallback);
+                            return valueIn.blockObsv().deferredForPolling(pollingValueEndCheckCallback);
                         },
                     };
                 }else{
@@ -635,7 +641,7 @@ function Block(blockManager, blockTemplate, callback) {
                 self.blockManager.execContext, 
                 argValueDataTbl, 
                 scopeBlkObsvTbl,
-                option.endCheckPollingCallback
+                option.pollingValueEndCheckCallback
             );
 
             //MEMO: deferredの学習用メモ
@@ -663,7 +669,7 @@ function Block(blockManager, blockTemplate, callback) {
             );
         });
     };
-    self.deferredForPolling = function(endCheckCallback)
+    self.deferredForPolling = function(pollingValueEndCheckCallback)
     {
         $(self.element).removeClass("executeError"); 
         $(self.element).addClass("executeNow");
@@ -673,20 +679,23 @@ function Block(blockManager, blockTemplate, callback) {
             //値ブロックが値更新ポーリング処理を提供している場合は
             //オプション付きでdeferredを呼びます
             dfd = self.deferred({
-                endCheckPollingCallback : endCheckCallback,
+                pollingValueEndCheckCallback : pollingValueEndCheckCallback,
             });
         }
         else{
             //値更新ポーリング処理を提供してない場合は
             //setTimeoutで繰り返します
             var pooling = function(){
-                self.deferred().then(function(value){                                    
-                    if(!endCheckCallback(value)){
+                self.deferred().then(
+                  function(value){                                    
+                    if(!pollingValueEndCheckCallback(value)){
                         setTimeout(pooling,0);
                     }else{
                         dfd.resolve(value);
                     }
-                })
+                  },
+                  function(){dfd.resolve(value);}
+                );
             };
             setTimeout(pooling,0);
         }
@@ -3329,18 +3338,21 @@ function BlockManager(execContext){
                           }
                           var wsTopElm = $(ws.workAreaElement).parent();
                           var trashBox = $(".box-trash-box",wsTopElm);
-                          var x0 = $(trashBox).offset().left;
-                          var y0 = $(trashBox).offset().top;
-                          var x1 = x0+$(trashBox).outerWidth();
-                          var y1 = y0+$(trashBox).outerHeight();
-                          if(x0 < event.pageX && y0 < event.pageY&&
-                             x1 > event.pageX && y1 > event.pageY)
+                          if($(trashBox).length>0)
                           {
-                              trashBox.addClass("box-trash-box-over");
-                          }
-                          else
-                          {
-                              trashBox.removeClass("box-trash-box-over");
+                              var x0 = $(trashBox).offset().left;
+                              var y0 = $(trashBox).offset().top;
+                              var x1 = x0+$(trashBox).outerWidth();
+                              var y1 = y0+$(trashBox).outerHeight();
+                              if(x0 < event.pageX && y0 < event.pageY&&
+                                 x1 > event.pageX && y1 > event.pageY)
+                              {
+                                  trashBox.addClass("box-trash-box-over");
+                              }
+                              else
+                              {
+                                  trashBox.removeClass("box-trash-box-over");
+                              }
                           }
                       });
                   }
@@ -3367,21 +3379,24 @@ function BlockManager(execContext){
                           //ゴミ箱
                           var wsTopElm = $(ws.workAreaElement).parent();
                           var trashBox = $(".box-trash-box",wsTopElm);
-                          trashBox.removeClass("box-trash-box-over");
-                          var x0 = $(trashBox).offset().left;
-                          var y0 = $(trashBox).offset().top;
-                          var x1 = x0+$(trashBox).outerWidth();
-                          var y1 = y0+$(trashBox).outerHeight();
-                          if(x0 < event.pageX && y0 < event.pageY&&
-                             x1 > event.pageX && y1 > event.pageY)
+                          if($(trashBox).length>0)
                           {
-                              if(!dragInfo.srcBlock.isCloneDragMode)
+                              trashBox.removeClass("box-trash-box-over");
+                              var x0 = $(trashBox).offset().left;
+                              var y0 = $(trashBox).offset().top;
+                              var x1 = x0+$(trashBox).outerWidth();
+                              var y1 = y0+$(trashBox).outerHeight();
+                              if(x0 < event.pageX && y0 < event.pageY&&
+                                 x1 > event.pageX && y1 > event.pageY)
                               {
-                                  var srcWs = self.findBlockWorkSpaceByBlock(dragInfo.srcBlock);
-                                  srcWs.removeBlock(dragInfo.srcBlock);
+                                  if(!dragInfo.srcBlock.isCloneDragMode)
+                                  {
+                                      var srcWs = self.findBlockWorkSpaceByBlock(dragInfo.srcBlock);
+                                      srcWs.removeBlock(dragInfo.srcBlock);
+                                  }
+                                  self.popFloatDraggingListByElem( dragInfo.cloneBlock.element );
+                                  return;
                               }
-                              self.popFloatDraggingListByElem( dragInfo.cloneBlock.element );
-                              return;
                           }
                           //ワークスペースエリア
                           x0 = $(ws.workAreaElement).offset().left;
@@ -3632,6 +3647,39 @@ $(function(){
             console.log('fail:' + e); 
             return $.Deferred().resolve();
         };
+        exeContext.subscribeAlMemoryEvent = function(eventKey, eventCallback){
+            //ALMemoryのイベントキーのコールバックを扱うための関数
+            // eventKey      … メモリイベントキー
+            // eventCallback … イベント時に呼ばれるコールバック。形式は、
+            //   eventCallback(eventDfd, eventKeyValue)
+            //   eventDfd … resolveにするとコールバック呼び出し終了
+            //   eventKeyValue イベントキーの対する値。ない場合はnull
+
+            // イベント用メモリキーよりイベント監視のためのインスタンスを取得します
+            return exeContext.alIns.alMemory.subscriber(eventKey).then(function(subscriber){
+                // イベント監視のコールバックを登録します
+                var id = null;
+                var eventDfd = $.Deferred();
+                console.log("subscribe event" + eventKey);
+                subscriber.signal.connect(function(eventKeyValue){
+                    // ここはALMemoryのイベントキーのハンドラです
+                    //  ※deferredのハンドラではないので混乱注意。qimessagingのsingalというあたりで実装されているコールバック機構です
+                    console.log("update event" + eventKey + " " + eventKeyValue);
+                    eventCallback(eventDfd, eventKeyValue);
+                })
+                .then(function(id_){
+                    id = id_;
+                });
+                eventDfd.promise().then(function(){
+                    // イベント完了したのでイベントコールバックを解除します
+                    console.log("unsubscribe event" + eventKey);
+                    if(id){
+                        subscriber.signal.disconnect(id);
+                        id = null;
+                    }
+                });
+            });
+        };
 
         //■デバッグ用
         exeContext.debugCanvasList ={};
@@ -3849,7 +3897,7 @@ $(function(){
                      qims = new QiSession(ip);
                 }
                 qims.socket()
-                .on('connect', function () {
+                .on('connect', function (aa) {
                     self.nowState("接続中");              
                     qims.service("ALTextToSpeech")
                     .done(function (tts) {
@@ -3857,7 +3905,7 @@ $(function(){
                     });
                     execContext.setupExecContextFromQim(qims);
                 })
-                .on('disconnect', function () {
+                .on('disconnect', function (aa) {
                   self.nowState("切断");
                 });
             }
