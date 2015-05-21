@@ -16,14 +16,13 @@
   <script type='text/javascript' src='libs/jquery-2.1.3.js'></script>
   <script type='text/javascript' src='libs/jquery-ui-1.11.2/jquery-ui.js'></script>
   <script type='text/javascript' src="libs/jquery.mobile-1.4.5/jquery.mobile-1.4.5.min.js"></script>
-<!--
-  <script type='text/javascript' src="libs/jquery.ui.touch-punch.js"></script>
--->
   <script type='text/javascript' src="libs/jquery.ui.dobletap.js"></script>
   <script type='text/javascript' src='libs/knockout-3.2.0.debug.js'></script>
   <script type='text/javascript' src="libs/qimessaging/1.0/qimessaging.js"></script>
   <script type='text/javascript' src="js/main.js"></script>
+
   <script type='text/javascript' src="js/blockdef_basicBlk.js"></script>
+  <script type='text/javascript' src="js/blockdef_caffeBlk.js"></script>
 </head>
 <body>
   <!-- 図形と当たりのテンプレ -->
@@ -250,6 +249,9 @@
                 <!-- ko if: $data.dataTemplate.options -->
                 <!-- /ko -->
 
+                <!-- ko if: $data.dataTemplate.dropOnly -->
+                <!-- /ko -->
+
               <!-- /ko -->
             </div>
           </div>
@@ -308,6 +310,11 @@
                                                                options:$data.dataTemplate.options.list,
                                                                value:$data.valueObsv,"></select>
                 <!-- /ko -->
+
+                <!-- ko if: $data.dataTemplate.dropOnly -->
+                  <div class="dropOnly blockCell" data-bind="attr:{id:$data.dataTemplate.dataName}, text:$data.dataTemplate.dropOnly.label"></div>
+                <!-- /ko -->                
+
               <!-- /ko -->
             </div>
           </div>

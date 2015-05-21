@@ -317,7 +317,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           var wait_time =  function(time){
               return (function(){
                   var dfd = $.Deferred()
-                  setTimeout(function(){  console.log("resolve#wait_time("+time+") ");dfd.resolve(); }, time*1000);
+                  setTimeout(function(){dfd.resolve();}, time*1000);
                   return dfd.promise()
               })
           };              
@@ -590,7 +590,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                         var ch = tgtCanvas.height;
                         var centerX=cw/2;
                         var centerY=ch/3;
-                        var pixPerMeter = 70;
+                        var pixPerMeter = ctx.pixelPerMeter;
                         c.clearRect(0, 0, cw, ch);
                         for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
                             var r = infoTbl[kbIdx].deg / 180 * Math.PI;
@@ -704,7 +704,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                       var ch = tgtCanvas.height;
                       var centerX=cw/2;
                       var centerY=ch/3;
-                      var pixPerMeter = 70;
+                      var pixPerMeter = ctx.pixelPerMeter;
                       //c.clearRect(0, 0, cw, ch);
                       for(var kbIdx=0; kbIdx < infoTbl.length; kbIdx++){
                           var r = infoTbl[kbIdx].deg / 180 * Math.PI;
@@ -896,6 +896,339 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // カメラで写真を撮るブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"cameraCapture@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {options:{default:'上のカメラ',
+                            list:[{text:"上のカメラ",value:"top"},
+                                  {text:"下のカメラ",value:"bottom"},
+                                  {text:"奥行カメラ",value:"depth"},
+                                  ]}, 
+                   dataName:'srcCamera',
+                   acceptTypes:['string'],
+                  },
+                  {label:'で写真をキャプチャする'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var onFail = function(e) {console.error('fail:' + e);};
+          if(ctx.qims){
+              var cbCamDraw = function(w,h,data,camId,l,t,r,b){
+                // 受信したRAWデータをcanvasに                
+                var pixels = new Uint8Array(w*h*4);
+                for (var i=0; i < pixels.length/4; i++) {
+                    pixels[i*4+0] = data[i*3+0];
+                    pixels[i*4+1] = data[i*3+1];
+                    pixels[i*4+2] = data[i*3+2];
+                    pixels[i*4+3] = 255;
+                }
+                ctx.lastCaptureImageData.pixels = pixels;
+                ctx.lastCaptureImageData.w = w;
+                ctx.lastCaptureImageData.h = h;
+                ctx.lastCaptureImageData.camId = camId;
+                ctx.lastCaptureImageData.leftRad   = l;
+                ctx.lastCaptureImageData.topRad    = t;
+                ctx.lastCaptureImageData.rightRad  = r;
+                ctx.lastCaptureImageData.bottomRad = b;
+                dfd.resolve();
+              };
+              if(valueDataTbl["srcCamera"]=="top")
+              {
+                ctx.pepperCameraTopIns.captureImage( cbCamDraw );
+              }
+              if(valueDataTbl["srcCamera"]=="bottom")
+              {
+                ctx.pepperCameraBottomIns.captureImage( cbCamDraw );
+              }
+              if(valueDataTbl["srcCamera"]=="depth")
+              {
+                ctx.pepperCameraDepthIns.captureImage( cbCamDraw );
+              }
+          } else {
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
+    // 最後にキャプチャした写真を返すブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"lastCameraCapture@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["captureImage","image"],
+          },
+          blockContents:[
+              {expressions:[
+                  {label:'最後にキャプチャした写真'}
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          dfd.resolve({
+              captureImage:ctx.lastCaptureImageData,
+              image:{
+                  w:ctx.lastCaptureImageData.w,
+                  h:ctx.lastCaptureImageData.h,
+                  pixels:ctx.lastCaptureImageData.pixels,
+              },
+          });
+          return dfd.promise();
+      }
+    );
+
+    // 良いものが有るかわからなかったので自作…
+    function Vector3(x,y,z){
+        if (x instanceof Vector3){
+            var v=x;
+            return new Vector3(v.x,v.y,v.z);
+        }
+        this.x = x || 0;
+        this.y = y || 0;
+        this.z = z || 0;
+    };
+    Vector3.prototype = {
+        add:function(v){
+            return new Vector3(this.x+v.x,this.y+v.y,this.z+v.z);
+        },
+        sub:function(v){            
+            return new Vector3(this.x-v.x,this.y-v.y,this.z-v.z);
+        },
+        mul:function(v){
+            if(!v instanceof Vector3) return new Vector3(this.x*v,this.y*v,this.z*v);
+            return new Vector3(this.x*v.x,this.y*v.y,this.z*v.z);
+        },
+        div:function(v){            
+            if(!v instanceof Vector3) return new Vector3(this.x/v,this.y/v,this.z/v);
+            return new Vector3(this.x/v.x,this.y/v.y,this.z/v.z);
+        },
+        dot:function(v){            
+            return (this.x*v.x + this.y*v.y + this.z*v.z);
+        },
+        cross:function(v){
+            return new Vector3(this.y*v.z - this.z*v.y,
+                               this.z*v.x - this.x*v.z,
+                               this.x*v.y - this.y*v.x);
+        },
+        len:function(){
+            return Math.sqrt(this.dot(this));
+        },
+        normalize:function(){
+            return this.div(this.len());
+        },
+        rotXAxis:function(rad){            
+          return new Vector3(
+            this.x,
+            this.y * Math.cos(rad) - this.z * Math.sin(rad),
+            this.y * Math.sin(rad) + this.z * Math.cos(rad)
+          );
+        },
+        rotYAxis:function(rad){            
+          return new Vector3(
+            this.x * Math.cos(rad) - this.z * Math.sin(rad),
+            this.y,
+            this.x * Math.sin(rad) + this.z * Math.cos(rad)
+          );
+        },
+        rotZAxis:function(rad){            
+          return new Vector3(
+            this.x * Math.cos(rad) - this.y * Math.sin(rad),
+            this.x * Math.sin(rad) + this.y * Math.cos(rad),
+            this.z
+          );
+        },
+    };
+
+
+
+    // カメラで撮った写真を切り抜くブロック
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"cropCameraCapture@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["image"],
+          },
+          blockContents:[
+              {expressions:[
+                  {dropOnly:{default:null,label:"キャプチャした写真"}, 
+                   dataName:'capImage0',
+                   acceptTypes:['captureImage'],
+                  },
+                  {label:'を'},
+                  {dropOnly:{default:null,label:"ひと・ものなど"}, 
+                   dataName:'cropSrc0',
+                   acceptTypes:['people','movement'],
+                  },
+                  {label:'を囲むように切り抜いた写真'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var onFail = function(e) {console.error('fail:' + e);};
+          if(!valueDataTbl["capImage0"])
+          {
+              dfd.resolve(null);
+              return dfd.promise();
+          }
+          if(!valueDataTbl["cropSrc0"])
+          {
+              dfd.resolve(null);
+              return dfd.promise();
+          }
+          if(ctx.qims){
+              var capImage0 = valueDataTbl["capImage0"];
+              var cropSrc0  = valueDataTbl["cropSrc0"];
+              var CamImageW = capImage0.w;
+              var CamImageH = capImage0.h;
+              var capCamId  = capImage0.camId;
+              var objCamId = 0;              
+              var minX = CamImageW;
+              var minY = CamImageH;
+              var maxX = 0;
+              var maxY = 0;
+              var dfd2 = $.Deferred();
+              dfd2.resolve();
+              if(cropSrc0.people)
+              {
+              }
+              else if(cropSrc0.movement && cropSrc0.movement.rawData)
+              {
+                  //MovementInfo = [
+                  //  TimeStamp,
+                  //  [ClusterInfo_1, ClusterInfo_2, ... ClusterInfo_n],
+                  //  CameraPose_InTorsoFrame,
+                  //  CameraPose_InRobotFrame,
+                  //  Camera_Id
+                  //]
+                  var rawData = JSON.parse(JSON.stringify(cropSrc0.movement.rawData));
+                  var timeStamp               = rawData[0];
+                  var ClusterInfos            = rawData[1];
+                  var CameraPose_InTorsoFrame = rawData[2];
+                  var CameraPose_InRobotFrame = rawData[3];
+                  var Camera_Id               = rawData[4];
+                  objCamId = Camera_Id;
+                  if(Camera_Id==2)
+                  {
+                      // depthカメラが使用されている場合はここに来ます
+                      $.each(ClusterInfos,function(k,clusterInfo){
+                          var PositionOfCog             = clusterInfo[0];
+                          var AngularRoi                = clusterInfo[1];
+                          var ProportionMovingPixels    = clusterInfo[2];
+                          var MeanDistance              = clusterInfo[3];
+                          var RealSizeRoi               = clusterInfo[4];
+                          var PositionOfAssociatedPoint = clusterInfo[5];
+                          // カメラが違うなら変換しないと行けない
+                          if(capCamId==0){
+                              var rz = AngularRoi[0];//PositionOfAssociatedPoint[0];
+                              var ry = AngularRoi[1];//PositionOfAssociatedPoint[1];
+
+                              var v  = new Vector3(MeanDistance,0,0);
+                              v = v.rotZAxis(rz);
+                              v = v.rotYAxis(ry);
+                              //CameraTop       0.0868	0.0000	0.1631	44.30°	57.20°	No
+                              //DepthCamera     0.05138	0.0390	0.1194	45.00°	58.00°
+                              var cameraTopP   = new Vector3(0.0868 ,0.0000,0.1631);
+                              var depthCameraP = new Vector3(0.05138,0.0390,0.1194);
+                              var offsV= depthCameraP.sub(cameraTopP);
+                              v = v.add(offsV);
+                              var nvX = new Vector3(1,0,0);
+                              var nvY = new Vector3(0,1,0);
+                              var nvZ = new Vector3(0,0,1);
+                              var protX = v.dot(nvX);
+                              var protY = v.dot(nvY);
+                              var protZ = v.dot(nvZ);
+                              //AngularRoi[0] = Math.atan2(protY,protX);
+                              //AngularRoi[1] = Math.atan2(protZ,protX);
+                              AngularRoi[0] += 0.01;
+                              AngularRoi[1] += 0.04;
+                          }
+                          if(capCamId==1){
+                              dist;
+                              //CameraBottom    0.0936	0.0000	0.0616	44.30°	57.20°	rotationY(40.0*TO_RAD)
+                              //DepthCamera     0.05138	0.0390	0.1194	45.00°	58.00°
+                          }
+                          dfd2 = dfd2.then(function(){
+                              return $.when( ctx.qims.service("ALVideoDevice") )
+                              .then(function(alVideoDevice){
+                                  return alVideoDevice.getImageInfoFromAngularInfo(
+                                      objCamId,//capCamId,
+                                      AngularRoi
+                                  )
+                                  .then(function(info){
+                                      var x = info[0] * CamImageW;
+                                      var y = info[1] * CamImageH;
+                                      var w = info[2] * CamImageW;
+                                      var h = info[3] * CamImageH;
+                                      minX = Math.min(minX,Math.floor(x));
+                                      minY = Math.min(minY,Math.floor(y));
+                                      maxX = Math.max(maxX,Math.floor(x+w));
+                                      maxY = Math.max(maxY,Math.floor(y+h));
+                                  });
+                              });
+                          });
+                      });
+                  }
+              }
+              dfd2.then(function(){
+                  if ( minX >= maxX || minY >= maxY ){
+                      dfd.resolve(null);
+                  }
+                  else{
+                      //少し大きめにする
+                      var w = (maxX - minX);
+                      var h = (maxY - minY);
+                      maxX += Math.floor(w * 0.1);
+                      maxY += Math.floor(h * 0.1); 
+                      minX -= Math.floor(w * 0.1);
+                      minY -= Math.floor(h * 0.1); 
+                      minX = Math.max(minX,0);
+                      minY = Math.max(minY,0);
+                      maxX = Math.min(maxX,CamImageW);
+                      maxY = Math.min(maxY,CamImageH);
+                      w = (maxX - minX);
+                      h = (maxY - minY);
+                      var pixels = new Uint8Array(w*h*4);
+                      for(var y=0; y < h;y++){
+                          var baseS=((minY+y)*CamImageW + minX)*4;
+                          var baseD=(y*w)*4;
+                          for(var x=0; x < w;x++){
+                              pixels[baseD+x*4+0] = capImage0.pixels[baseS+x*4+0];
+                              pixels[baseD+x*4+1] = capImage0.pixels[baseS+x*4+1];
+                              pixels[baseD+x*4+2] = capImage0.pixels[baseS+x*4+2];
+                              pixels[baseD+x*4+3] = capImage0.pixels[baseS+x*4+3];
+                          }                                  
+                      }
+                      dfd.resolve({
+                          w:w,
+                          h:h,
+                          pixels:pixels,
+                      });
+                  }
+              });
+          } else {
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
 
 
 
@@ -968,17 +1301,14 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                   if(pollingValueEndCheckCallback)
                   {
                       ctx.subscribeAlMemoryEvent(eventKeyTbl[target], function(eventDfd, eventKeyValue){
-                          console.log("get " + keyTbl[target][zone]);
+                          //console.log("get " + keyTbl[target][zone]);
                           alMemory.getData(keyTbl[target][zone]).then(function(v){
                               var isEnd = false;
                               if(target=="person")
                               {
-                                  if(v.length>0)
-                                  {
-                                      ctx.lastPeopleData.rawData = v[0];
-                                  }
                                   if(pollingValueEndCheckCallback(v.length>0))
                                   {
+                                      ctx.lastPeopleData.rawData = v[0];
                                       eventDfd.resolve();
                                       dfd.resolve(v.length>0);
                                       return true;
@@ -986,15 +1316,12 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                               }
                               if(target == "movement")
                               {
-                                  if(v.length>0)
+                                  //console.log("result movement num " + v.length);
+                                  if(pollingValueEndCheckCallback(v.length>0 && v[1].length>0))
                                   {
                                       ctx.lastMovementData.rawData = v;
-                                  }
-                                  //console.log("result movement num " + v.length);
-                                  if(pollingValueEndCheckCallback(v.length>0))
-                                  {
                                       eventDfd.resolve();
-                                      dfd.resolve(v.length>0);
+                                      dfd.resolve(v.length>0 && v[1].length>0);
                                       return true;
                                   }
                               }
@@ -1016,11 +1343,11 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                           }
                           if(target == "movement")
                           {
-                              if(v.length>0)
+                              if(v.length>0 && v[1].length>0)
                               {
                                   ctx.lastMovementData.rawData = v;
                               }
-                              dfd.resolve(v.length>0);
+                              dfd.resolve(v.length>0 && v[1].length>0);
                           }
                       }, onFail);
                   }
@@ -1116,12 +1443,12 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     // そんな優先度管理ってわかりやすい？　ある意味ミューテックスとプライオリティ制御の愛の子？ 
 */
 
-    // イベント系ブロックテスト中 ブロック
+    // イベントを待って進む ブロック
     blockManager.registBlockDef(
       {
           blockOpt:{
               blockWorldId:"eventWaitForward@basicBlk",
-              color:'orange',
+              color:'red',
               head:'in',
               tail:'out',
           },
@@ -1152,6 +1479,119 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // エンゲージメントゾーン可視化ブロック(デバッグ用)
+    blockManager.registBlockDef({
+          blockOpt:{
+              blockWorldId:"engagentZoneDebugView@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},{text:"キャンバス1",value:"1"},{text:"キャンバス2",value:"2"},{text:"キャンバス3",value:"3"},{text:"キャンバス4",value:"4"},]}, 
+                   dataName:'targetCanvas',
+                   acceptTypes:['string'],
+                  },
+                  {options:{default:'レイヤー全部',
+                            list:[{text:"レイヤー0",value:"0"},{text:"レイヤー1",value:"1"},{text:"レイヤー2",value:"2"},{text:"レイヤー3",value:"3"},{text:"レイヤー4",value:"4"},]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'にエンゲージメントゾーンを描く'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvasLayers = ctx.debugCanvasList[targetCanvasIdx];
+          if(tgtCanvasLayers)
+          {
+              var tgtCanvas = tgtCanvasLayers[targetLayerIdx];
+              if(tgtCanvas) {
+                  var c = tgtCanvas.getContext('2d');
+                  var cw = tgtCanvas.width;
+                  var ch = tgtCanvas.height;
+                  var centerX=cw/2;
+                  var centerY=ch/3;
+                  var pixPerMeter = 70;
+                  var alEngagementZones = ctx.alIns.alEngagementZones;
+                  return $.when( alEngagementZones.getFirstLimitDistance(),
+                          alEngagementZones.getSecondLimitDistance(),
+                          alEngagementZones.getLimitAngle()
+                  )
+                  .then(function(firstD,secondD,angle){
+                      var angleRad = angle/180 * Math.PI;
+                      var rOffs = Math.PI/2;
+                      $.each([firstD*pixPerMeter,secondD*pixPerMeter],function(k,v){
+                          c.beginPath();
+                          c.moveTo(centerX, centerY);
+                          c.arc(centerX, centerY, v, rOffs-angleRad/2, rOffs+angleRad/2, false);
+                          c.lineTo(centerX, centerY);
+                          c.stroke();
+                      });
+                  },function(){
+                      console.log("f");
+                  }
+                  ).then(function()
+                  {
+                      var keyTbl={
+                          "person":[
+                              "EngagementZones/PeopleInZone1",
+                              "EngagementZones/PeopleInZone2",
+                              "EngagementZones/PeopleInZone3",
+                          ],
+                          "movement":[
+                              "EngagementZones/LastMovementsInZone1",
+                              "EngagementZones/LastMovementsInZone2",
+                              "EngagementZones/LastMovementsInZone3",
+                          ],
+                      };
+                      $.when( 
+                          ctx.alIns.alMemory.getData(keyTbl["person"][0]),
+                          ctx.alIns.alMemory.getData(keyTbl["person"][1]),
+                          ctx.alIns.alMemory.getData(keyTbl["person"][2]),
+                          ctx.alIns.alMemory.getData(keyTbl["movement"][0]),
+                          ctx.alIns.alMemory.getData(keyTbl["movement"][1]),
+                          ctx.alIns.alMemory.getData(keyTbl["movement"][2])
+                      )
+                      .then(function(p0,p1,p2,m0,m1,m2){
+                          var plst = [p0,p1,p2];
+                          var mlst = [m0,m1,m2];
+                          $.each(mlst,function(k,v)
+                          {
+                              for(var ii=0; ii < v.length; ii++){
+                                  var clusterInfos = v[1];
+                                  var cameraPose_InTorsoFrame = v[2];
+                                  var cameraPose_InRobotFrame = v[3];
+                                  $.each(clusterInfos,function(k,clusterInfo){
+                                      var positionOfCog             = clusterInfo[0];
+                                      var angularRoi                = clusterInfo[1];
+                                      var proportionMovingPixels    = clusterInfo[2];
+                                      var meanDistance              = clusterInfo[3];
+                                      var realSizeRoi               = clusterInfo[4];
+                                      var positionOfAssociatedPoint = clusterInfo[5];
+                                      var x = meanDistance * Math.sin(angularRoi[0]);
+                                      var y = meanDistance * Math.cos(angularRoi[0]);
+                                      c.beginPath();
+                                      c.arc((x)*pixPerMeter+centerX, (y)*pixPerMeter+centerY, 3, 0, Math.PI*2, false);
+                                      c.stroke();
+                                  });
+                              }
+                          });
+                      });
+                  }).fail(function(){
+                      console.log("f");
+                  });
+              }
+          }
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
 
     // カメラ可視化ブロック(デバッグ用)
     blockManager.registBlockDef({
@@ -1255,7 +1695,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               return dfd.promise();
           }
           var onFail = function(e) {console.error('fail:' + e);};
-          if(ctx.qims){
+          if(ctx.qims){              
               var cbCamDraw = function(w,h,data){
                 // 受信したRAWデータをcanvasに
                 var cw = tgtCanvas.width;
@@ -1357,6 +1797,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                           var MeanDistance              = clusterInfo[3];
                           var RealSizeRoi               = clusterInfo[4];
                           var PositionOfAssociatedPoint = clusterInfo[5];                          
+
                           $.when( ctx.qims.service("ALVideoDevice")
                           ).then(function(alVideoDevice){
                               alVideoDevice.getImageInfoFromAngularInfo(
@@ -1400,6 +1841,91 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 
+    // 写真可視化ブロック(デバッグ用)
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"imageDebugView@basicBlk",
+              color:'orange',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {dropOnly:{default:null,label:"写真"}, 
+                   dataName:'srcImage0',
+                   acceptTypes:['image'],
+                  },
+                  {label:'を'},
+                  {options:{default:'キャンバス0',
+                            list:[{text:"キャンバス0",value:"0"},{text:"キャンバス1",value:"1"},{text:"キャンバス2",value:"2"},{text:"キャンバス3",value:"3"},{text:"キャンバス4",value:"4"},]}, 
+                   dataName:'targetCanvas',
+                   acceptTypes:['string'],
+                  },
+                  {options:{default:'レイヤー0',
+                            list:[{text:"レイヤー0",value:"0"},{text:"レイヤー1",value:"1"},{text:"レイヤー2",value:"2"},{text:"レイヤー3",value:"3"},{text:"レイヤー4",value:"4"},]}, 
+                   dataName:'targetLayer',
+                   acceptTypes:['string'],
+                  },
+                  {label:'とうめい度'},
+                  {string:{default:'255'}, dataName:'alpha',acceptTypes:["number"]},
+                  {label:'でX'},
+                  {string:{default:'0'}, dataName:'x',acceptTypes:["number"]},
+                  {label:'Y'},
+                  {string:{default:'0'}, dataName:'y',acceptTypes:["number"]},
+                  {label:'に描く'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var targetCanvasIdx = parseInt(valueDataTbl["targetCanvas"]);
+          var targetLayerIdx  = parseInt(valueDataTbl["targetLayer"]);
+          var tgtCanvas = ctx.debugCanvasList[targetCanvasIdx] && ctx.debugCanvasList[targetCanvasIdx][targetLayerIdx];
+          var srcImage0 = valueDataTbl["srcImage0"];
+          var x = parseFloat(valueDataTbl["x"]);
+          var y = parseFloat(valueDataTbl["y"]);
+          var alpha = parseInt(valueDataTbl["alpha"]);
+          alpha = Math.min(Math.max(alpha,0),255);
+          if(!tgtCanvas) 
+          {
+              dfd.resolve();
+              return dfd.promise();
+          }
+          if(!srcImage0) 
+          {
+              dfd.resolve();
+              return dfd.promise();
+          }
+          // 画像をcanvasに
+          var c = tgtCanvas.getContext('2d');
+          var imageData = c.createImageData(srcImage0.w, srcImage0.h);
+          var pixels = imageData.data;
+          for (var i=0; i < pixels.length/4; i++) {
+                pixels[i*4+0] = srcImage0.pixels[i*4+0];
+                pixels[i*4+1] = srcImage0.pixels[i*4+1];
+                pixels[i*4+2] = srcImage0.pixels[i*4+2];
+                pixels[i*4+3] = alpha;//srcImage0.pixels[i*4+3];
+          }
+          c.putImageData(imageData, x, y);
+/*
+var x = x;
+var y = y;
+var w = srcImage0.w;
+var h = srcImage0.h;
+c.beginPath();
+c.moveTo(x, y);
+c.lineTo(x+w, y);
+c.lineTo(x+w, y+h);
+c.lineTo(x, y+h);
+c.lineTo(x, y);
+c.stroke();
+*/
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
+
 
     // 素材リスト生成をします
     var materialBoxWs;
@@ -1436,15 +1962,23 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZone@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
+    materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","カメラ");
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("cameraCapture@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("cropCameraCapture@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastCameraCapture@basicBlk"));
+    materialBoxWsList.push(ko.observable(materialBoxWs));
+
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","ひと・もの");
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastPeopleData@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastMovementData@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","みえる化");
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("imageDebugView@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("clearDebugView@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("laserSensorDebugView@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("cameraDebugView@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("movementObjCameraDebugView@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("engagentZoneDebugView@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 });

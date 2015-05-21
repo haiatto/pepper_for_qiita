@@ -71,10 +71,16 @@ pepperBlock.registBlockDef = function(callbackFunc)
 // expressions
 //   UIの見た目
 //    - label
-//    - string   ※acceptTypes省略可
-//    - number   ※acceptTypes省略可
-//    - bool     ※acceptTypes省略可
-//    - options  ※acceptTypes必須
+//      - 例 {label:"ここに"}.
+//    - string    ※acceptTypes省略可
+//      - 例 {string:{default:"",},dataName:'dataA', acceptTypes:["string"]},
+//    - number    ※acceptTypes省略可
+//      - 例 {bool:{default:false}}.
+//    - bool      ※acceptTypes省略可
+//    - options   ※acceptTypes必須
+//      - {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
+//    - dropOnly  ※acceptTypes必須
+//      - 例 {dropOnly:{default:{},label:"しゃしん１",dataName:'photo1', acceptTypes:["image"]},
 //   データ
 //    - dataName    データ名 ※省略不可
 //    - acceptTypes 受け入れる型
@@ -88,16 +94,32 @@ pepperBlock.registBlockDef = function(callbackFunc)
 //   {string:{default:"",},dataName:'dataB', acceptTypes:["*"]},
 //   {string:{default:"",},dataName:'dataC'},
 //   {options:{default:'',list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
+//   {dropOnly:{default:{},list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
 // ],
+//
+// -- MEMO --
+// シリアライズ上の問題で今のところ dropOnly に乗ってるデータはシリアライズしない回避策をとりました
+// 後でデータ周りを再考しないと…プリミティブ型以外にはメタ定義データを作るべきか悩む…初心者でも直感で理解できる構造…
 //
 //■■■■■ データフォーマット案 ■■■■■ 
 //
-// -- データフォーマット --
-// {string:""},
-// {bool:true},
-// {number:123},
-// {string_list:["A","B"]},
-// {miscABC:{version:,dataA:,dataB:,}},
+// javascriptのテーブルで、
+//   キーがタイプ名
+//   値が  データ
+// という形
+// タイプは誰でも自由に追加可能。
+// ROSのメッセージを意識したけど今のところバージョン管理などはしない
+// 大規模な環境に耐えられる冗長性を作る気は今は無いので、
+// 必要なら各フォーマット側で用意してシリアライザにチェッカー加えられるようにするとかにするかも
+// でも、json化を考えると、一時的なデータは分けないと駄目かも…シリアライズ不要とか属性欲しい…(画像データとか)
+//
+// -- データ例 --
+//  {string:"",}
+//  {bool:true,}
+//  {number:123,}
+//  {string_list:["A","B"],}
+//  {miscABC:{version:,dataA:,dataB:,},}
+//
 //
 //■■■■■ コールバック ■■■■■ 
 //
@@ -254,7 +276,7 @@ function PepperCamera(alVideoDevice,option) {
               if(data)
               {
                   var buff = _base64ToArrayBuffer(data[6]);
-                  callback(data[0],data[1], buff);
+                  callback(data[0],data[1], buff, data[7], data[8], data[9], data[10], data[11]);
               }
             });
         }
@@ -415,6 +437,11 @@ function Block(blockManager, blockTemplate, callback) {
                     {
                         //ここはデフォルトの受け入れ型指定は 無し です
                         expression.valueObsv(dataTemplate.options.default||"");
+                    }
+                    if(dataTemplate.dropOnly)
+                    {
+                        //ここはデフォルトの受け入れ型指定は 無し です
+                        expression.valueObsv(dataTemplate.dropOnly.default||{});
                     }
                 }
                 rowContent.expressions.push(expression);
@@ -1188,15 +1215,24 @@ var BlockWorkSpace = function (blockManager, dragScopeName, workspaceName){
     self.setAutoArrayLayout = function(){
         self.autoLayoutDirty = true;
         self.autoLayoutCb = function(){
-            var posX = 10;
-            var posY = 20;
+            var posSX = 10;
+            var posSY = 20;
+            var posX  = posSX;
+            var posY  = posSY;
+            var wrapWem   = 30;
+            var nowMaxH = 0;
             $.each(self.blockListObsv(),function(key,blockInsObsv){
                 blockIns = blockInsObsv();
                 blockIns.posX(posX);
                 blockIns.posY(posY);
                 posX += blockIns.blockWidth()  + 3.0 / blockIns.pix2em;
-                //posY += blockIns.blockHeight() + 1.0 / blockIns.pix2em;
-
+                nowMaxH = Math.max(nowMaxH, blockIns.blockHeight());
+                if(posX-posSX > wrapWem/blockIns.pix2em)
+                {
+                    posX  = posSX;
+                    posY += nowMaxH + + 2.0 / blockIns.pix2em;
+                    nowMaxH = 0;
+                }
                 self.blockManager.updatePositionLayout( blockIns, false );
             });
         };
@@ -2413,7 +2449,10 @@ function BlockManager(execContext){
                 if(valueIn.blockObsv()){
                     json.valTbl[k].block=recv(valueIn.blockObsv());
                 }
-                json.valTbl[k].value=valueIn.valueObsv();
+                if(!valueIn.dataTemplate.dropOnly)//都合により今はdropOnlyは除外します(保存しなくても動くのと画像データとか入れてるので保存すると落ちる場合が…)
+                {
+                    json.valTbl[k].value=valueIn.valueObsv();
+                }
             });
             $.each(block.scopeTbl,function(k,scope){
                 if(scope.scopeOut.blockObsv())
@@ -3560,14 +3599,19 @@ $(function(){
         // TODO: 複数人対応時はキープアライブ等でIDの管理を実装する…（乱数だとゴミ掃除出来ないのでダメ。空きを再利用して必ず初期化して使えスタイルがいいかも)
         exeContext.sandBoxID = "SandBoxA";
 
+        // グローバルな作業用データ(最後に○○系。加工前のデータが入ってる事が殆どです)
+
         // 最後に認識した単語データ
         exeContext.lastRecoData   = {rawData:null,};
 
         // 最後に調べた人データ
         exeContext.lastPeopleData   = {rawData:null,};
 
-        // 最後に移動物体データ
+        // 最後に調べた移動物体データ
         exeContext.lastMovementData   = {rawData:null,};
+
+        // 最後にキャプチャした写真データ
+        exeContext.lastCaptureImageData = {pixels:null, w:0, h:0, camId:0, leftRad:0, topRad:0, rightRad:0, bottomRad:0,};
 
         // qiMessaging経由のインスタンス
         exeContext.setupExecContextFromQim = function(qims)
@@ -3589,6 +3633,17 @@ $(function(){
             exeContext.qims      = qims;
             exeContext.alIns     = {};
             exeContext.cameraIns = null;
+            exeContext.qims.service("ALAutonomousLife").done(function(ins){
+              exeContext.alIns.alAutonomousLife = ins;
+              exeContext.alIns.alAutonomousLife.getState().then(function(state){
+                  if(state!="disable"){
+                      return exeContext.alIns.alAutonomousLife.setState("disable");
+                  }
+              });
+            });
+            exeContext.qims.service("ALMemory").done(function(ins){
+              exeContext.alIns.alMemory = ins;
+            });
             exeContext.qims.service("ALTextToSpeech").done(function(ins){
               exeContext.alIns.alTextToSpeech = ins;
             });
@@ -3617,14 +3672,24 @@ $(function(){
             exeContext.qims.service('ALMovementDetection').then(function(ins){
               exeContext.alIns.alMovementDetection = ins;
               exeContext.alIns.alMovementDetection.subscribe("PepperBlock");
+              //TEST
+              exeContext.alIns.alMovementDetection.getColorSensitivity().done(function(v){console.log("getColorSensitivity "+v);});
+              exeContext.alIns.alMovementDetection.getDepthSensitivity().done(function(v){console.log("getDepthSensitivity "+v);});
+              exeContext.alIns.alMovementDetection.getCurrentPrecision().done(function(v){console.log("getCurrentPrecision "+v);});
+              exeContext.alIns.alMovementDetection.getCurrentPeriod().done(function(v){console.log("getCurrentPeriod "+v);});
+              
+              //exeContext.alIns.alMovementDetection.setColorSensitivity(0.001);
+              //exeContext.alIns.alMovementDetection.setDepthSensitivity(0.005);
+              exeContext.alIns.alMovementDetection.setColorSensitivity(0.005);
+              exeContext.alIns.alMovementDetection.setDepthSensitivity(0.008);
             });
             exeContext.qims.service('ALEngagementZones').then(function(ins){
               exeContext.alIns.alEngagementZones = ins;
               exeContext.alIns.alEngagementZones.subscribe("PepperBlock");
 
-              exeContext.alIns.alEngagementZones.setFirstLimitDistance(1.5);
-              exeContext.alIns.alEngagementZones.setSecondLimitDistance(2.5);
-              exeContext.alIns.alEngagementZones.setLimitAngle(90);
+              exeContext.alIns.alEngagementZones.setFirstLimitDistance(3.0);
+              exeContext.alIns.alEngagementZones.setSecondLimitDistance(5.5);
+              exeContext.alIns.alEngagementZones.setLimitAngle(180);
             });
             exeContext.qims.service('ALVisualSpaceHistory').then(function(ins){
               exeContext.alIns.alVisualSpaceHistory = ins;
@@ -3660,17 +3725,19 @@ $(function(){
                 // イベント監視のコールバックを登録します
                 var id = null;
                 var eventDfd = $.Deferred();
-                console.log("subscribe event" + eventKey);
+                //@@console.log("subscribe event" + eventKey);
                 subscriber.signal.connect(function(eventKeyValue){
                     // ここはALMemoryのイベントキーのハンドラです
                     //  ※deferredのハンドラではないので混乱注意。qimessagingのsingalというあたりで実装されているコールバック機構です
-                    console.log("update event" + eventKey + " " + eventKeyValue);
+                    //@@console.log("update event" + eventKey + " " + eventKeyValue);
                     eventCallback(eventDfd, eventKeyValue);
                 })
                 .then(function(id_){
                     id = id_;
+                },function(){
+                    eventDfd.reject();
                 });
-                eventDfd.promise().then(function(){
+                return eventDfd.promise().then(function(){
                     // イベント完了したのでイベントコールバックを解除します
                     console.log("unsubscribe event" + eventKey);
                     if(id){
@@ -3683,6 +3750,7 @@ $(function(){
 
         //■デバッグ用
         exeContext.debugCanvasList ={};
+        exeContext.pixelPerMeter = 70;
 
         return exeContext;
     }
@@ -3724,16 +3792,16 @@ $(function(){
         //■ ＵＩ関連の準備など ■
 
         self.wakeupPepper = function(){
-          if(self.qims){
-              self.qims.service("ALMotion")
+          if(execContext.qims){
+              execContext.qims.service("ALMotion")
               .then(function(alMotion){
                   return alMotion.wakeUp();
               });
           }
         };
         self.restPepper = function(){
-          if(self.qims){
-              self.qims.service("ALMotion")
+          if(execContext.qims){
+              execContext.qims.service("ALMotion")
               .then(function(alMotion){
                   return alMotion.rest();
               });
@@ -3898,7 +3966,7 @@ $(function(){
                 }
                 qims.socket()
                 .on('connect', function (aa) {
-                    self.nowState("接続中");              
+                    self.nowState("接続中");
                     qims.service("ALTextToSpeech")
                     .done(function (tts) {
                         tts.say("せつぞく、ぺっぷ");

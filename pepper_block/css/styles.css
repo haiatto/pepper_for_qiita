@@ -214,6 +214,16 @@ body{
 .block .expressions .options{ 
     border-style:solid;
 }
+.block .expressions .dropOnly{ 
+    border-style: solid;
+    border-width: 1px;
+    background: cadetblue;
+    border-color:black;
+    border-radius: 0.2em;
+    padding: 0.05em;
+}
+
+div#image0 {}
 
 /*Ã£Æ’â€°Ã£Æ’Â©Ã£Æ’Æ’Ã£â€šÂ°Ã¦â„¢â€šÃ£ÂÂ®Ã£Æ’â€™Ã£Æ’Æ’Ã£Æ’Ë†Ã¥Ë†Â¤Ã¥Â®Å¡Ã§â€Â¨*/
 .block .hitAreaOrigin{
