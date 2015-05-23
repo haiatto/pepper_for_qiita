@@ -233,6 +233,69 @@ function checkAgent_NeedDragUnselect()
     return false;
 }
 
+
+// 良いものが有るかわからなかったので自作…
+function Vector3(x,y,z){
+    if (x instanceof Vector3){
+        var v=x;
+        return new Vector3(v.x,v.y,v.z);
+    }
+    this.x = x || 0;
+    this.y = y || 0;
+    this.z = z || 0;
+};
+Vector3.prototype = {
+    add:function(v){
+        return new Vector3(this.x+v.x,this.y+v.y,this.z+v.z);
+    },
+    sub:function(v){            
+        return new Vector3(this.x-v.x,this.y-v.y,this.z-v.z);
+    },
+    mul:function(v){
+        if(!v instanceof Vector3) return new Vector3(this.x*v,this.y*v,this.z*v);
+        return new Vector3(this.x*v.x,this.y*v.y,this.z*v.z);
+    },
+    div:function(v){            
+        if(!v instanceof Vector3) return new Vector3(this.x/v,this.y/v,this.z/v);
+        return new Vector3(this.x/v.x,this.y/v.y,this.z/v.z);
+    },
+    dot:function(v){            
+        return (this.x*v.x + this.y*v.y + this.z*v.z);
+    },
+    cross:function(v){
+        return new Vector3(this.y*v.z - this.z*v.y,
+                           this.z*v.x - this.x*v.z,
+                           this.x*v.y - this.y*v.x);
+    },
+    len:function(){
+        return Math.sqrt(this.dot(this));
+    },
+    normalize:function(){
+        return this.div(this.len());
+    },
+    rotXAxis:function(rad){            
+      return new Vector3(
+        this.x,
+        this.y * Math.cos(rad) - this.z * Math.sin(rad),
+        this.y * Math.sin(rad) + this.z * Math.cos(rad)
+      );
+    },
+    rotYAxis:function(rad){            
+      return new Vector3(
+        this.x * Math.cos(rad) - this.z * Math.sin(rad),
+        this.y,
+        this.x * Math.sin(rad) + this.z * Math.cos(rad)
+      );
+    },
+    rotZAxis:function(rad){            
+      return new Vector3(
+        this.x * Math.cos(rad) - this.y * Math.sin(rad),
+        this.x * Math.sin(rad) + this.y * Math.cos(rad),
+        this.z
+      );
+    },
+};
+
 function PepperCamera(alVideoDevice,option) {
     var self = this;
     self.subscribe = function(){
