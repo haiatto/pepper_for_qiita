@@ -19,19 +19,17 @@ function getUrlParameter(sParam)
 }
 
 $(function(){
-    if(!getUrlParameter("cmd"))
-    {
-    }
-
     function MyModel() {
         var self = this;
-        self.testUrl   = ko.observable("");
-        self.result       = ko.observable("");
-        if(window.location.href.indexOf("file://")==0){
-            self.testUrl("ws://192.168.11.16:8080");
-        }else{
-            self.testUrl("ws://"+window.location.host);
+        if(getUrlParameter("cmd")){
+            self.isData = true;
+            self.resultJson = JSON.stringify({key:'valueee'});
         }
+        else{
+            self.isTest = true;
+        }
+        self.testUrl   = ko.observable("");
+        self.result    = ko.observable("");
     };
     ko.applyBindings(new MyModel());
 });

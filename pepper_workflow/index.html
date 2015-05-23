@@ -9,7 +9,7 @@
   <script type='text/javascript' src="js/main.js"></script>
 </head>
 <body>
-  <div> 
+  <div data-bind="if:$root.isTest"> 
     <div>
       <h1>Pepperワークフロー</h1>
     </div><!-- /header -->
@@ -23,6 +23,10 @@
         </div>
         <div data-bind="text:$root.result">
         </div>
+    </div>
+  </div>
+  <div data-bind="if:$root.isData"> 
+    <div data-bind="text:$root.resultJson">
     </div>
   </div>
 </body>
