@@ -1,0 +1,29 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Pepperワークフロー</title>
+  <link type="text/css" rel="stylesheet" href="css/styles.css" />
+  <script type='text/javascript' src='libs/jquery-2.1.3.min.js'></script>
+  <script type='text/javascript' src='libs/knockout-3.2.0.debug.js'></script>
+  <script type='text/javascript' src="libs/qimessaging/1.0/qimessaging.js"></script>
+  <script type='text/javascript' src="js/main.js"></script>
+</head>
+<body>
+  <div> 
+    <div>
+      <h1>Pepperワークフロー</h1>
+    </div><!-- /header -->
+    <div>
+        <div>
+          TEST URL:
+          <input type="text" data-bind="value: $root.testUrl" />
+        </div>
+        <div>
+          <button data-bind="click: $root.classifierUrl">テスト！</button>
+        </div>
+        <div data-bind="text:$root.result">
+        </div>
+    </div>
+  </div>
+</body>
+</html>
