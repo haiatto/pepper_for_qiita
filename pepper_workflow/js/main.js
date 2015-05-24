@@ -23,7 +23,33 @@ $(function(){
         var self = this;
         if(getUrlParameter("cmd")){
             self.isData = true;
-            self.resultJson = JSON.stringify({key:'valueee'});
+            if(cmd="talk"){
+               var txt  = decodeURIComponent(getUrlParameter("txt"));
+               var ip   = decodeURIComponent(getUrlParameter("ip"));
+               /*
+               var qims = new QiSession(ip);
+               qims.socket()
+               .on('connect', function (aa) {
+                    qims.service("ALTextToSpeech")
+                    .done(function (tts) {
+                        tts.say(txt).done(function(){
+                           qims.socket().disconnect();
+                        });
+                    });
+                })
+               .on('error', function (aa) {
+                });
+                */
+                
+                self.resultJson = ko.observable({});
+                var xx=false;
+                setTimeout(function(){
+                  xx = true;
+                  self.resultJson(JSON.stringify({res:'OK '+txt}));
+                },1000);
+            }else{
+               self.resultJson = JSON.stringify({res:'Unknown Cmd'});
+            }
         }
         else{
             self.isTest = true;
