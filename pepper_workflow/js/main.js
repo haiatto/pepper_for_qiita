@@ -40,17 +40,12 @@ $(function(){
                .on('error', function (aa) {
                 });
                 */
-                var old = window.onload;
-                window.onload = function(){
-
-                };
                 self.resultJson = ko.observable({});
                 var xx=false;
                 setTimeout(function(){
                   xx = true;
                   self.resultJson(JSON.stringify({res:'OK '+txt}));
-                  if(old)old();
-                },1000);
+                },0);
             }else{
                self.resultJson = JSON.stringify({res:'Unknown Cmd'});
             }
