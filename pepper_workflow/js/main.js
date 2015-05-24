@@ -18,6 +18,12 @@ function getUrlParameter(sParam)
     }
 }
 
+function xx(){
+  console.log("xx");
+}
+setTimeout(xx,1000);
+window.open("google.com");
+
 $(function(){
     function MyModel() {
         var self = this;
@@ -40,6 +46,7 @@ $(function(){
                .on('error', function (aa) {
                 });
                 */
+                console.log("xxx");
                 self.resultJson = ko.observable({});
                 var xx=false;
                 setTimeout(function(){
