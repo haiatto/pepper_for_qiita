@@ -18,11 +18,11 @@ function getUrlParameter(sParam)
     }
 }
 
-function xx(){
+window.pageHasLoaded = false;
+setTimeout(function(){
   console.log("xx");
-}
-setTimeout(xx,1000);
-window.open("google.com");
+  window.pageHasLoaded = true;
+},1000);
 
 $(function(){
     function MyModel() {
