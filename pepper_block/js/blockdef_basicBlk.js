@@ -770,7 +770,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                    dataName:'srcCamera',
                    acceptTypes:['string'],
                   },
-                  {label:'で写真をキャプチャする'},
+                  {label:'でカメラ写真をとる'},
               ]}
           ],
       },
@@ -787,6 +787,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                     pixels[i*4+2] = data[i*3+2];
                     pixels[i*4+3] = 255;
                 }
+                ctx.lastCaptureImageData = {};
                 ctx.lastCaptureImageData.pixels = pixels;
                 ctx.lastCaptureImageData.w = w;
                 ctx.lastCaptureImageData.h = h;
@@ -828,7 +829,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {label:'最後にキャプチャした写真'}
+                  {label:'最後のカメラ写真'}
               ]}
           ],
       },
@@ -857,7 +858,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {dropOnly:{default:null,label:"キャプチャした写真"}, 
+                  {dropOnly:{default:null,label:"カメラ写真"}, 
                    dataName:'capImage0',
                    acceptTypes:['captureImage'],
                   },
@@ -868,6 +869,11 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           ],
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var name = valueDataTbl["name0"];
+          ctx.generalDataTable[name] = {captureImage:valueDataTbl["capImage0"]};
+          dfd.resolve();
+          return dfd.promise();
       }
     );
     blockManager.registBlockDef(
@@ -882,11 +888,81 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           blockContents:[
               {expressions:[
                   {string:{default:'写真のなまえ１'}, dataName:'name0',acceptTypes:["string"]},
-                  {label:'という名前のキャプチャした写真'},
+                  {label:'のカメラ写真'},
               ]}
           ],
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var name = valueDataTbl["name0"];
+          var data = ctx.generalDataTable[name].captureImage;
+          if(data){
+              dfd.resolve({captureImage:data,
+                           image:{pixels:data.pixels,
+                                  w:data.w,
+                                  h:data.h,}});
+          }else{
+              dfd.reject();
+          }
+          return dfd.promise();
+      }
+    );
+
+    // 画像を保存するブロック(現状変数ブロックのプロトタイプ的なもの)
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"storeNamedImage@basicBlk",
+              color:'red',
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {dropOnly:{default:null,label:"画像"}, 
+                   dataName:'image0',
+                   acceptTypes:['image'],
+                  },
+                  {label:'を'},
+                  {string:{default:'画像１'}, dataName:'name0',acceptTypes:["string"]},
+                  {label:'という名前で記憶'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var name = valueDataTbl["name0"];
+          ctx.generalDataTable[name]={image:valueDataTbl["image0"]};
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
+    blockManager.registBlockDef(
+      {
+          blockOpt:{
+              blockWorldId:"loadNamedImage@basicBlk",
+              color:'orange',
+              head:'value',
+              tail:'value',
+              types:["image"],
+          },
+          blockContents:[
+              {expressions:[
+                  {string:{default:'写真のなまえ１'}, dataName:'name0',acceptTypes:["string"]},
+                  {label:'の画像'},
+              ]}
+          ],
+      },
+      function(ctx,valueDataTbl,scopeBlkObsvTbl){
+          var dfd = $.Deferred();
+          var name = valueDataTbl["name0"];
+          var data = ctx.generalDataTable[name].image;
+          if(data){
+              dfd.resolve(data);
+          }else{
+              dfd.reject();
+          }
+          return dfd.promise();
       }
     );
 
@@ -898,23 +974,89 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               color:'orange',
               head:'value',
               tail:'value',
-              types:["captureImage","image"],
+              types:["image"],
           },
           blockContents:[
-              {dropOnly:{default:null,label:"写真"}, 
-               dataName:'image0',
-               acceptTypes:['image'],
-              },
-              {label:'と'},
-              {dropOnly:{default:null,label:"写真"}, 
-               dataName:'image1',
-               acceptTypes:['image'],
-              },
-              {label:'の動いた部分を囲むように切り抜いた写真'},
+              {expressions:[
+                  {dropOnly:{default:null,label:"画像1"}, 
+                   dataName:'image0',
+                   acceptTypes:['image'],
+                  },
+                  {label:'と'},
+                  {dropOnly:{default:null,label:"画像2"}, 
+                   dataName:'image1',
+                   acceptTypes:['image'],
+                  },
+                  {label:'の動いた部分を囲むように切り抜いた画像'},
+              ]},
           ],
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl){
           //差が無ければ空が帰る
+          var dfd = $.Deferred();
+          var img0 = valueDataTbl["image0"];
+          var img1 = valueDataTbl["image1"];
+          if(img0 && img1){
+              var minX=9999;
+              var minY=9999;
+              var maxX=0;
+              var maxY=0;
+              var data = {pixels:null,w:0,h:0};
+              if(img0.pixels && img1.pixels){
+                  var checkSize   = 8;
+                  var w = Math.min(img0.w,img1.w);
+                  var h = Math.min(img0.h,img1.h);
+                  var bh = Math.floor(h/checkSize);
+                  var bw = Math.floor(w/checkSize);
+                  for(var by=0; by < bh; by++){
+                      for(var bx=0; bx < bw; bx++){
+                          var sum = 0;
+                          for(var oy=0; oy < checkSize; oy++){
+                              for(var ox=0; ox < checkSize; ox++){
+                                  var p0 = (img0.w * by*checkSize + bx*checkSize)*4;
+                                  var p1 = (img1.w * by*checkSize + bx*checkSize)*4;
+                                  sum += Math.abs(img0.pixels[p0+0] - img1.pixels[p1+0]);
+                                  sum += Math.abs(img0.pixels[p0+1] - img1.pixels[p1+1]);
+                                  sum += Math.abs(img0.pixels[p0+2] - img1.pixels[p1+2]);
+                              }
+                          }
+                          if(sum > checkSize*checkSize * 200){
+                              minX = Math.min(minX, bx*checkSize);
+                              minY = Math.min(minY, by*checkSize);
+                              maxX = Math.max(maxX, bx*checkSize+checkSize);
+                              maxY = Math.max(maxY, by*checkSize+checkSize);
+                          }
+                      }                      
+                  }
+                  if(minX < maxX){
+                      var img1 = valueDataTbl["image1"];
+                      minX = Math.max(minX-0, 0);
+                      minY = Math.max(minY-0, 0);
+                      maxX = Math.min(maxX+0, img1.w);
+                      maxY = Math.min(maxY+0, img1.h);
+                      var w = maxX - minX;
+                      var h = maxY - minY;
+                      var pixels = new Uint8Array(w*h*4);
+                      for(var y=0; y < h; y++){
+                          for(var x=0; x < w; x++){
+                              var pis = (img1.w*(y+minY)+x+minX)*4;
+                              var pid = (w*y+x)*4;
+                              pixels[pid+0] = img1.pixels[pis+0];
+                              pixels[pid+1] = img1.pixels[pis+1];
+                              pixels[pid+2] = img1.pixels[pis+2];
+                              pixels[pid+3] = img1.pixels[pis+3];
+                          }
+                      }
+                      data.w = w;
+                      data.h = h;
+                      data.pixels = pixels;
+                  }
+              }
+              dfd.resolve(data);
+          }else{
+              dfd.reject();
+          }
+          return dfd.promise();
       }
     );
 
@@ -930,7 +1072,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {dropOnly:{default:null,label:"キャプチャした写真"}, 
+                  {dropOnly:{default:null,label:"カメラ写真"}, 
                    dataName:'capImage0',
                    acceptTypes:['captureImage'],
                   },
@@ -1384,6 +1526,8 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("lastCameraCapture@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("storeNamedCameraCapture@basicBlk"));
     materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("loadNamedCameraCapture@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("storeNamedImage@basicBlk"));
+    materialBoxWs.addBlock_CloneDragMode(blockManager.createBlockIns("loadNamedImage@basicBlk"));
     materialBoxWsList.push(ko.observable(materialBoxWs));
 
     materialBoxWs = blockManager.createBlockWorkSpaceIns("noDroppable","ひと・もの");

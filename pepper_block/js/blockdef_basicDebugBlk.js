@@ -533,7 +533,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               dfd.resolve();
               return dfd.promise();
           }
-          if(!srcImage0) 
+          if(!srcImage0 || srcImage0.pixels==null) 
           {
               dfd.resolve();
               return dfd.promise();

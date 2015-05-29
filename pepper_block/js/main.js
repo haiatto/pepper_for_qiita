@@ -357,6 +357,18 @@ $(function(){
     }
 });
 
+
+// データ(試行中)
+
+function makeNullData_CaptureImage(){
+    return {pixels:null, w:0, h:0, camId:0, leftRad:0, topRad:0, rightRad:0, bottomRad:0,};
+}
+function makeNullData_Image(){
+    return {pixels:null, w:0, h:0,};
+}
+
+// ブロック
+
 function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
@@ -616,6 +628,12 @@ function Block(blockManager, blockTemplate, callback) {
         option = option || {};
         var makeFormatedValue_ = function(valueIn, valueData)
         {
+            //HACK: 2015.5.29 コールバック実装的にも、煩雑になる割には、効果が薄いので、
+            //HACK: この省略系は廃止して、{string:でーた}みたいな形に統一する
+            //HACK: 多分そちらの方が遥かに解りやすく、ソースも読みやすく、手間も大した事なさそう
+            //HACK: なにより型情報が付加されるこ事ど同義なので、前提にできれば色々実装が捗る
+            //HACK: コールバック全部やコンテキスト内のデータを書き換えるのであとで一気にやる。
+
             // 値のデータフォーマットの加工を行います
             // ※値ブロックは主にコールバック実装者の利便性の為に、
             // 対応するタイプが１種類の場合、
@@ -733,6 +751,12 @@ function Block(blockManager, blockTemplate, callback) {
                 scopeBlkObsvTbl,
                 option.pollingValueEndCheckCallback
             );
+            if(!dfdMain){
+                var dfd = $.Deferred();
+                alert("コールバックがバグってます");
+                dfd.reject();
+                return dfd;
+            }
 
             //MEMO: deferredの学習用メモ
             //      dfdMainは内部で非同期処理が一つもなければここで結果が出ています
@@ -3674,7 +3698,12 @@ $(function(){
         exeContext.lastMovementData   = {rawData:null,};
 
         // 最後にキャプチャした写真データ
-        exeContext.lastCaptureImageData = {pixels:null, w:0, h:0, camId:0, leftRad:0, topRad:0, rightRad:0, bottomRad:0,};
+        exeContext.lastCaptureImageData = makeNullData_CaptureImage();//{pixels:null, w:0, h:0, camId:0, leftRad:0, topRad:0, rightRad:0, bottomRad:0,};
+
+
+        // 汎用データテーブル
+        exeContext.generalDataTable = {};
+
 
         // qiMessaging経由のインスタンス
         exeContext.setupExecContextFromQim = function(qims)

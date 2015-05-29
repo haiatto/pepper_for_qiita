@@ -18,7 +18,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           blockContents:[
               {expressions:[
                   {label:'この'},
-                  {dropOnly:{default:{},label:"写真",},
+                  {dropOnly:{default:{},label:"画像",},
                    dataName:'image0',
                    acceptTypes:['image'],
                   },
@@ -28,7 +28,11 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       },
       function(ctx,valueDataTbl,scopeBlkObsvTbl,pollingValueEndCheckCallback){
           var dfd = $.Deferred();
-          var image0 = valueDataTbl["image0"];          
+          var image0 = valueDataTbl["image0"];
+          if(!image0 || !image0.pixels){
+              dfd.resolve(false);
+              return dfd.promise();
+          }
 
           var catServerUrl = "ws://192.168.11.23:8080";
 

@@ -18,12 +18,6 @@ function getUrlParameter(sParam)
     }
 }
 
-window.pageHasLoaded = false;
-setTimeout(function(){
-  console.log("xx");
-  window.pageHasLoaded = true;
-},1000);
-
 $(function(){
     function MyModel() {
         var self = this;
@@ -46,13 +40,8 @@ $(function(){
                .on('error', function (aa) {
                 });
                 */
-                console.log("xxx");
                 self.resultJson = ko.observable({});
-                var xx=false;
-                setTimeout(function(){
-                  xx = true;
-                  self.resultJson(JSON.stringify({res:'OK '+txt}));
-                },0);
+                self.resultJson(JSON.stringify({res:'OK '+txt}));
             }else{
                self.resultJson = JSON.stringify({res:'Unknown Cmd'});
             }
@@ -65,3 +54,12 @@ $(function(){
     };
     ko.applyBindings(new MyModel());
 });
+
+document.onreadystatechange = function () {
+   alert(document.readyState);
+
+   var newElement = document.createElement("div");
+   document.body.appendChild(newElement);
+   document.body.onreadystatechange = function(){
+   };
+}
