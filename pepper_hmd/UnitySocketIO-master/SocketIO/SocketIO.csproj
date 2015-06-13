@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="3.5" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
@@ -10,6 +10,12 @@
     <RootNamespace>SocketIO</RootNamespace>
     <AssemblyName>SocketIO</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <UpgradeBackupLocation>
+    </UpgradeBackupLocation>
+    <OldToolsVersion>3.5</OldToolsVersion>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>true</DebugSymbols>
@@ -54,11 +60,9 @@
     <Compile Include="socketio\Messages\RegistrationManager.cs" />
     <Compile Include="socketio\Messages\TextMessage.cs" />
     <Compile Include="socketio\Messages\Helper\JsonEncodedEventMessage.cs" />
+    <Compile Include="socketio\SimpleJson.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="SimpleJson">
-      <HintPath>bin\Debug\SimpleJson.dll</HintPath>
-    </Reference>
     <Reference Include="SuperSocket.ClientEngine.Common">
       <HintPath>bin\Debug\SuperSocket.ClientEngine.Common.dll</HintPath>
     </Reference>

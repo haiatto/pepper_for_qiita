@@ -61,10 +61,29 @@ namespace SocketIOClient.Messages
         public static JsonEncodedEventMessage Deserialize(string jsonString)
         {
 			JsonEncodedEventMessage msg = null;
-			try { msg = SimpleJson.SimpleJson.DeserializeObject<JsonEncodedEventMessage>(jsonString); }
+			try { 
+                msg = SimpleJson.SimpleJson.DeserializeObject<JsonEncodedEventMessage>(jsonString); 
+            }
 			catch (Exception ex)
 			{
-				Trace.WriteLine(ex);
+                //@@
+                try
+                {
+                    var obj = SimpleJson.SimpleJson.DeserializeObject(jsonString);
+                    var table = obj as IDictionary<string,object>;
+                    if(table!=null && table["name"]!=null && table["args"]!=null){
+                        var name = table["name"] as string;
+                        var args = table["args"] as IDictionary<string, object>;
+                        if (name != null && args != null)
+                        {
+                            msg = new JsonEncodedEventMessage(name, args);
+                        }
+                    }
+                }
+                catch (Exception ex2)
+                {
+                    Trace.WriteLine(ex2);
+                }
 			}
             return msg;
         }
