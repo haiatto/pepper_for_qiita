@@ -155,8 +155,19 @@ namespace qiMessaging
             Service = createMetaCall_("ServiceDirectory", "service", null);
         }
 
+        public bool IsConnected
+        {
+            get{
+                return client_ != null && client_.IsConnected;
+            }
+        }
+
         public void Connect(string url)
         {
+            if(IsConnected)
+            {
+                return;
+            }
             client_ = new Client(url);
 
             client_.On("connect", (message) =>
@@ -187,7 +198,7 @@ namespace qiMessaging
                 var idm = data["idm"].Cast<long>();
                 if (data["result"] != null && data["result"]["metaobject"] != null)
                 {
-                    var o = new QiInstance();
+                    var o = new QiServiceJsonData();
 
                     o["__MetaObject"] = data["result"]["metaobject"];
                     var pyobj = data["result"]["pyobject"].Cast<long>();
@@ -226,6 +237,8 @@ namespace qiMessaging
                 System.Diagnostics.Debug.WriteLine("signal");
             });
 
+            client_.Connect();
+
             System.Diagnostics.Debug.WriteLine(client_.LastErrorMessage);
         }
 
@@ -257,7 +270,7 @@ namespace qiMessaging
                 var idm = ++idm_;
                 dfdTbl_[idm] = new DeferredWithCbi();
 
-                if (argments[0] as string == "registerEvent")
+                if (method == "registerEvent")
                 {
                     dfdTbl_[idm].cbi = cbi;
                 }
@@ -308,7 +321,7 @@ namespace qiMessaging
         public FuncArgv<Deferred, object> Disconnect;
     };
 
-    public class QiInstance : JsonData
+    public class QiServiceJsonData : JsonData
     {
         public Dictionary<string, FuncArgv<Deferred, object>> methods = new Dictionary<string, FuncArgv<Deferred, object>>();
         public Dictionary<string, QiSignal> signals = new Dictionary<string, QiSignal>();
@@ -356,6 +369,7 @@ namespace qiMessaging
         }
         public Deferred Reject()
         {
+            state_ = State.Reject;
             if (fail_ != null)
             {
                 fail_(arg_);
@@ -364,7 +378,7 @@ namespace qiMessaging
         }
         public Deferred Reject(object arg)
         {
-            state_ = State.Resolve;
+            state_ = State.Reject;
             arg_ = arg;
             if (fail_ != null)
             {
@@ -372,72 +386,131 @@ namespace qiMessaging
             }
             return this;
         }
-        public Deferred Then(Func<object, Deferred> done, Func<object, Deferred> fail)
+
+        public Deferred Then<T1, T2>(Func<T1, Deferred> done, Func<T2, Deferred> fail)
         {
-            if (state_ == State.Pending)
-            {
-                done_ = done;
-                fail_ = fail;
-            }
-            else if (state_ == State.Resolve)
-            {
-                return done(arg_);
-            }
-            else if (state_ == State.Reject)
-            {
-                return fail(arg_);
-            }
-            return this;
+            done_ = (arg) => { return done((T1)arg); };
+            fail_ = (arg) => { return fail((T2)arg); };
+            return thenExec_();
+        }
+        public Deferred Then(Func<Deferred> done, Func<Deferred> fail)
+        {
+            done_ = (arg) => { return done(); };
+            fail_ = (arg) => { return fail(); };
+            return thenExec_();
         }
         public Deferred Then(Action done, Action fail)
         {
-            var self = this;
-            if (state_ == State.Pending)
-            {
-                done_ = (arg) => { done(); return self; };
-                fail_ = (arg) => { fail(); return self; };
-            }
-            else if (state_ == State.Resolve)
-            {
-                done();
-            }
-            else if (state_ == State.Reject)
-            {
-                fail();
-            }
-            return self;
+            var dfd = new Deferred();
+            done_ = (arg) => { done(); dfd.Resolve(); return dfd; };
+            fail_ = (arg) => { fail(); dfd.Reject(); return dfd; };
+            return thenExec_();
         }
-        public Deferred Then(Action<object> done, Action fail)
+        public Deferred Then<T>(Action<T> done, Action fail)
         {
-            var self = this;
-            if (state_ == State.Pending)
-            {
-                done_ = (arg) => { done(arg); return self; };
-                fail_ = (arg) => { fail(); return self; };
-            }
-            else if (state_ == State.Resolve)
-            {
-                done(arg_);
-            }
-            else if (state_ == State.Reject)
-            {
-                fail();
-            }
-            return self;
+            var dfd = new Deferred();
+            done_ = (arg) => { done((T)arg); dfd.Resolve(); return dfd; };
+            fail_ = (arg) => { fail();       dfd.Reject(); return dfd; };
+            return thenExec_();
         }
-
-        public Deferred Then(Func<object, Deferred> done)
+        
+        public Deferred Then<T>(Func<T, Deferred> done)
         {
-            return Then(done, (Func<object, Deferred>)null);
+            return Then(done, (Func<T, Deferred>)null);
+        }
+        public Deferred Then(Func<Deferred> done)
+        {
+            return Then(done, (Func<Deferred>)null);
         }
         public Deferred Then(Action done)
         {
             return Then(done, (Action)null);
         }
-        public Deferred Then(Action<object> done)
+        public Deferred Then<T>(Action<T> done)
         {
             return Then(done, (Action)null);
         }
+        protected Deferred thenExec_()
+        {
+            if (state_ == State.Pending)
+            {
+            }
+            else if (state_ == State.Resolve)
+            {
+                return done_(arg_);
+            }
+            else if (state_ == State.Reject)
+            {
+                return fail_(arg_);
+            }
+            var dfd = new Deferred();
+            var doneTmp = done_;
+            var failTmp = fail_;
+            done_ = (arg) => {
+                return doneTmp(arg).Then<object>((arg2) => { dfd.Resolve(arg2); });
+            };
+            fail_ = (arg) => {
+                return failTmp(arg_).Then<object>((arg2) => { dfd.Reject(arg2); });
+            };
+            return dfd;
+        }
+
+        #region テストコード
+        /// <summary>
+        /// テストコード仮置き場
+        /// </summary>
+        static public void DeferredTestCode()
+        {
+            var dfd1 = new Deferred();
+            System.Diagnostics.Debug.WriteLine("1:");
+
+            dfd1
+            .Then<object>((obj)=>{
+                System.Diagnostics.Debug.WriteLine("2:arg+Ret");
+                var dfd2 = new Deferred();
+                
+                dfd2.Resolve();
+
+                return dfd2
+                .Then<object>((obj2) =>
+                {
+                    System.Diagnostics.Debug.WriteLine("3:arg");
+                })
+                .Then(() => { 
+                    System.Diagnostics.Debug.WriteLine("4:");
+                })
+                .Then<object>((a) => { 
+                    System.Diagnostics.Debug.WriteLine("5:");
+                })
+                .Then(() => {
+                    System.Diagnostics.Debug.WriteLine("6:");
+                    var dfd3 = new Deferred();
+                    dfd3.Resolve();
+                    return dfd3;
+                })
+                .Then(() => {
+                    System.Diagnostics.Debug.WriteLine("7:");
+                    var dfd4 = new Deferred();
+                    var t1 = new System.Threading.Timer(
+                        (o) => {
+                            dfd4.Resolve();
+                        },
+                        null, 4000, System.Threading.Timeout.Infinite);
+                    return dfd4;
+                })
+                .Then(() =>
+                {
+                    System.Diagnostics.Debug.WriteLine("8:");
+                })
+                ;
+            })
+            .Then<object>((obj)=>{
+                System.Diagnostics.Debug.WriteLine("100:");
+            });
+
+            dfd1.Resolve("arg1");
+        }
+        #endregion
     }
 
     /// <summary>
