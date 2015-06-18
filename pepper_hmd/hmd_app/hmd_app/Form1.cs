@@ -15,6 +15,7 @@ namespace hmd_app
     {
         private QiMessaging qim_;
         private PepperCamera pcam_;
+        private PepperCamera pcam2_;
 
         public Form1()
         {
@@ -22,6 +23,7 @@ namespace hmd_app
 
             qim_ = new QiMessaging();
             pcam_ = new PepperCamera(qim_);
+            pcam2_ = new PepperCamera(qim_);
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -40,7 +42,11 @@ namespace hmd_app
 
                     alTTS.methods["say"]("ぺっぷ");
 
+                    pcam_.Option = new PepperCamera.OptionT {name="tesX", cam=0,};
+                    pcam2_.Option = new PepperCamera.OptionT { name = "tesX2", cam = 1, };
+
                     pcam_.Subscribe();
+                    pcam2_.Subscribe();
 
                     return dfd2;
                 });
@@ -63,6 +69,49 @@ namespace hmd_app
         private void button2_Click(object sender, EventArgs e)
         {
             if (!qim_.IsConnected) return;
+
+             qim_.Service("ALMotion").Then<QiServiceJsonData>((alMotion) =>
+            {
+                var dfd2 = new Deferred();
+
+                alMotion.methods["getSummary"]()
+                .Then<JsonData>((summaryTxt) =>
+                {
+                    System.Diagnostics.Debug.WriteLine(summaryTxt.As<string>());
+
+                    return alMotion.methods["getSensorNames"]();
+                })
+                .Then<JsonData>((names) =>
+                {
+                    foreach (var name in names.JsonList)
+                    {
+                        System.Diagnostics.Debug.WriteLine(name.As<string>());
+                    }
+                    return alMotion.methods["getBodyNames"]();
+                })
+                .Then<JsonData>((names) =>
+                {
+                    foreach (var name in names.JsonList)
+                    {
+                        System.Diagnostics.Debug.WriteLine(name.As<string>());
+                    }
+                    return alMotion.methods["openHand"]("RHand");
+                })
+                .Then<JsonData>((names) =>
+                {
+                    foreach (var name in names.JsonList)
+                    {
+                        System.Diagnostics.Debug.WriteLine(name.As<string>());
+                    }
+                    return alMotion.methods["closeHand"]("RHand");
+                })
+                ;
+
+                return dfd2;
+            });
+
+
+            return;
 
             pcam_.CaptureImage((imageData) => {
                 Bitmap bmp = new Bitmap(imageData.w, imageData.h);
@@ -102,6 +151,9 @@ namespace hmd_app
 
                 bmp.UnlockBits(bmpDate);
                 pictureBox1.BackgroundImage = bmp;
+            });
+            pcam2_.CaptureImage((imageData) =>
+            {
             });
         }
     }
