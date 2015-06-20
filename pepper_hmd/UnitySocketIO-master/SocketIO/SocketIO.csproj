@@ -79,8 +79,5 @@
       <HintPath>bin\Debug\WebSocket4Net.dll</HintPath>
     </Reference>
     <Reference Include="System" />
-    <Reference Include="SocketIO">
-      <HintPath>bin\Debug\SocketIO.dll</HintPath>
-    </Reference>
   </ItemGroup>
 </Project>

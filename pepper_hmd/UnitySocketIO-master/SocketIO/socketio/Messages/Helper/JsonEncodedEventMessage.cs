@@ -66,7 +66,7 @@ namespace SocketIOClient.Messages
             }
 			catch (Exception ex)
 			{
-                //@@
+                //@@何やら形式によって失敗するので再度チャレンジ…@@
                 try
                 {
                     var obj = SimpleJson.SimpleJson.DeserializeObject(jsonString);

@@ -70,7 +70,55 @@ namespace hmd_app
         {
             if (!qim_.IsConnected) return;
 
-             qim_.Service("ALMotion").Then<QiServiceJsonData>((alMotion) =>
+            Func<string, Func<Deferred>> MakeGetProxyFunc = (moduleName) =>
+            {
+                return () => { return qim_.Service(moduleName); };
+            };
+
+            Func<Deferred> getJointAngleTable = ()=>
+            {
+                var dfd = new Deferred();
+                MakeGetProxyFunc("ALMotion")().Then<QiServiceJsonData>((alMotion) =>
+                {
+                    return 
+                    alMotion.methods["getAngles"]("Body",true)
+                    .Then<JsonData>((angles)=>{
+                        var angleLst = angles.JsonList;
+                        dfd.Resolve(new Dictionary<string,float>{
+                            {"HeadYaw",  (float)angleLst[0].Cast<double>()},
+                            {"HeadPitch",(float)angleLst[1].Cast<double>()},
+                            {"LShoulderPitch",(float)angleLst[2].Cast<double>()},
+                            {"LShoulderRoll", (float)angleLst[3].Cast<double>()},
+                            {"LElbowYaw", (float)angleLst[4].Cast<double>()},
+                            {"LElbowRoll",(float)angleLst[5].Cast<double>()},
+                            {"LWristYaw", (float)angleLst[6].Cast<double>()},
+                            {"LHand",     (float)angleLst[7].Cast<double>()},
+                            {"HipRoll",   (float)angleLst[8].Cast<double>()},
+                            {"HipPitch",  (float)angleLst[9].Cast<double>()},
+                            {"KneePitch", (float)angleLst[10].Cast<double>()},
+                            {"RShoulderPitch",(float)angleLst[11].Cast<double>()},
+                            {"RShoulderRoll", (float)angleLst[12].Cast<double>()},
+                            {"RElbowYaw", (float)angleLst[13].Cast<double>()},
+                            {"RElbowRoll",(float)angleLst[14].Cast<double>()},
+                            {"RWristYaw", (float)angleLst[15].Cast<double>()},
+                            {"RHand",     (float)angleLst[16].Cast<double>()},
+                            {"WheelFL",   (float)angleLst[17].Cast<double>()},
+                            {"WheelFR",   (float)angleLst[18].Cast<double>()},
+                            {"WheelB",    (float)angleLst[19].Cast<double>()},
+                        });
+                    });
+                });
+                return dfd;
+            };
+
+            
+
+            getJointAngleTable()
+            .Then<Dictionary<string,float>>((angleTable)=>{
+                angleTable = angleTable;
+            })
+            .Then(MakeGetProxyFunc("ALMotion"))
+            .Then<QiServiceJsonData>((alMotion) =>
             {
                 var dfd2 = new Deferred();
 
@@ -87,7 +135,7 @@ namespace hmd_app
                     {
                         System.Diagnostics.Debug.WriteLine(name.As<string>());
                     }
-                    return alMotion.methods["getBodyNames"]();
+                    return alMotion.methods["getBodyNames"]("Body");
                 })
                 .Then<JsonData>((names) =>
                 {
@@ -95,7 +143,19 @@ namespace hmd_app
                     {
                         System.Diagnostics.Debug.WriteLine(name.As<string>());
                     }
+                    return alMotion.methods["getAngles"]("Body",true);                
+                })
+                .Then<JsonData, JsonData>((angles) =>
+                {
+                    foreach (var angle in angles.JsonList)
+                    {
+                        System.Diagnostics.Debug.WriteLine(angle.Cast<double>());
+                    }
                     return alMotion.methods["openHand"]("RHand");
+                }, 
+                (error) =>
+                {
+                    return new Deferred().Reject(error);
                 })
                 .Then<JsonData>((names) =>
                 {
@@ -105,6 +165,17 @@ namespace hmd_app
                     }
                     return alMotion.methods["closeHand"]("RHand");
                 })
+                .Then(() =>
+                {
+                    string names = "HeadYaw";
+                    float changes = 0.25f;
+                    float fractionMaxSpeed = 0.05f;
+                    alMotion.methods["changeAngles"](names, changes, fractionMaxSpeed);
+                })
+                .Then<object, JsonData>(null, (error) =>
+                {
+                    System.Diagnostics.Debug.WriteLine(error.As<string>());
+                });
                 ;
 
                 return dfd2;
@@ -155,6 +226,14 @@ namespace hmd_app
             pcam2_.CaptureImage((imageData) =>
             {
             });
+        }
+
+        private void Form1_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (qim_ != null)
+            {
+                qim_.Disconnect();
+            }
         }
     }
 
