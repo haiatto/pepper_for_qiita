@@ -170,17 +170,25 @@ namespace qiMessaging
             client_.On("connect", (message) =>
             {
                 System.Diagnostics.Debug.WriteLine("Connect");
-                Connected(this);
+                if (Connected != null) Connected(this);
             });
             client_.On("disconnect", (message) =>
             {
                 System.Diagnostics.Debug.WriteLine("disconnect");
-                Disconnected(this);
+                if (Disconnected != null) Disconnected(this);
             });
-            client_.On("error", (message) =>
+            client_.On("error", (json) =>
             {
+                var data = new JsonData(json.Json.args[0]);
+                if (data["idm"] != null)
+                {
+                    var idm = data["idm"].Cast<long>();
+                    dfdTbl_[idm].Reject(data["result"]);
+                    dfdTbl_.Remove(idm);
+                }
+
                 System.Diagnostics.Debug.WriteLine("error");
-                Error(this);
+                if (Error != null) Error(this);
             });
             client_.On("message", (message) =>
             {
@@ -228,9 +236,12 @@ namespace qiMessaging
                     }
                     dfdTbl_[idm].Resolve(data["result"]);
                 }
+                dfdTbl_.Remove(idm);
             });
             client_.On("signal", (message) =>
             {
+                System.Diagnostics.Debug.Assert(false, "未実装なう");
+
                 System.Diagnostics.Debug.WriteLine("signal");
             });
 
@@ -391,28 +402,26 @@ namespace qiMessaging
 
         public Deferred Then<T1, T2>(Func<T1, Deferred> done, Func<T2, Deferred> fail)
         {
-            done_ = (arg) => { return done((T1)arg); };
-            fail_ = (arg) => { return fail((T2)arg); };
+            done_ = (arg) => { if (done != null) { return done((T1)arg); } return new Deferred().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null) { return fail((T2)arg); } return new Deferred().Reject(arg); };
             return thenExec_();
         }
         public Deferred Then(Func<Deferred> done, Func<Deferred> fail)
         {
-            done_ = (arg) => { return done(); };
-            fail_ = (arg) => { return fail(); };
+            done_ = (arg) => { if (done != null) { return done(); } return new Deferred().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null) { return fail(); } return new Deferred().Reject(arg); };
             return thenExec_();
         }
         public Deferred Then(Action done, Action fail)
         {
-            var dfd = new Deferred();
-            done_ = (arg) => { done(); dfd.Resolve(); return dfd; };
-            fail_ = (arg) => { fail(); dfd.Reject(); return dfd; };
+            done_ = (arg) => { if (done != null)done(); return new Deferred().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null)fail(); return new Deferred().Reject(arg); };
             return thenExec_();
         }
-        public Deferred Then<T>(Action<T> done, Action fail)
+        public Deferred Then<T1, T2>(Action<T1> done, Action<T2> fail)
         {
-            var dfd = new Deferred();
-            done_ = (arg) => { done((T)arg); dfd.Resolve(); return dfd; };
-            fail_ = (arg) => { fail();       dfd.Reject(); return dfd; };
+            done_ = (arg) => { if (done != null)done((T1)arg); return new Deferred().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null)fail((T2)arg); return new Deferred().Reject(arg); };
             return thenExec_();
         }
         
@@ -430,7 +439,7 @@ namespace qiMessaging
         }
         public Deferred Then<T>(Action<T> done)
         {
-            return Then(done, (Action)null);
+            return Then<T, object>(done, (Action<object>)null);
         }
         protected Deferred thenExec_()
         {
@@ -445,16 +454,18 @@ namespace qiMessaging
             {
                 return fail_(arg_);
             }
-            var dfd = new Deferred();
-            var doneTmp = done_;
-            var failTmp = fail_;
+            //非同期実行の為に自分のResolveやRejectが呼ばれたときの次の処理を登録する為のdfdを作ります
+            var callbackDfd = new Deferred();
+
+            var doneOrg = done_;
+            var failOrg = fail_;
             done_ = (arg) => {
-                return doneTmp(arg).Then<object>((arg2) => { dfd.Resolve(arg2); });
+                return doneOrg(arg).Then<object>((arg2) => { callbackDfd.Resolve(arg2); });
             };
             fail_ = (arg) => {
-                return failTmp(arg_).Then<object>((arg2) => { dfd.Reject(arg2); });
+                return failOrg(arg).Then<object,object>(null,(arg2) => { callbackDfd.Reject(arg2); });
             };
-            return dfd;
+            return callbackDfd;
         }
 
         #region テストコード

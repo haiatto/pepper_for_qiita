@@ -16,6 +16,7 @@ namespace hmd_app
         private QiMessaging qim_;
         private PepperCamera pcam_;
         private PepperCamera pcam2_;
+        NaoQiUtils qiUt_;
 
         public Form1()
         {
@@ -24,6 +25,7 @@ namespace hmd_app
             qim_ = new QiMessaging();
             pcam_ = new PepperCamera(qim_);
             pcam2_ = new PepperCamera(qim_);
+            qiUt_ = new NaoQiUtils(qim_);
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -32,20 +34,20 @@ namespace hmd_app
             //var url = "http://192.168.11.23:8002";
             //var url = "http://192.168.3.51/libs/qimessaging/1.0";//192,168.3.51
 
-            var dfd = new Deferred();
+            var dfd = new Deferred<QiMessaging>();
 
-            dfd.Then<QiMessaging>((qim) =>
+            dfd.Then((qim) =>
             {
-                qim.Service("ALTextToSpeech").Then<QiServiceJsonData>((alTTS) =>
+                qim.Service("ALTextToSpeech").Then((alTTS) =>
                 {
-                    var dfd2 = new Deferred();
+                    var dfd2 = new Deferred<object,JsonData>();
 
                     alTTS.methods["say"]("ぺっぷ");
 
                     pcam_.Option = new PepperCamera.OptionT {name="tesX", cam=0,};
                     pcam2_.Option = new PepperCamera.OptionT { name = "tesX2", cam = 1, };
 
-                    pcam_.Subscribe();
+                    pcam_.Subscribe().Then(() => { var test = 0; });
                     pcam2_.Subscribe();
 
                     return dfd2;
@@ -70,19 +72,19 @@ namespace hmd_app
         {
             if (!qim_.IsConnected) return;
 
-            Func<string, Func<Deferred>> MakeGetProxyFunc = (moduleName) =>
+            Func<string, Func<Deferred<QiServiceJsonData,JsonData>>> MakeGetProxyFunc = (moduleName) =>
             {
                 return () => { return qim_.Service(moduleName); };
             };
-
-            Func<Deferred> getJointAngleTable = ()=>
+            
+            Func<Deferred<Dictionary<string, float>>> getJointAngleTable = () =>
             {
-                var dfd = new Deferred();
-                MakeGetProxyFunc("ALMotion")().Then<QiServiceJsonData>((alMotion) =>
+                var dfd = new Deferred<Dictionary<string,float>>();
+                qiUt_.MakeFunc_GetService("ALMotion")().Then((alMotion) =>
                 {
                     return 
                     alMotion.methods["getAngles"]("Body",true)
-                    .Then<JsonData>((angles)=>{
+                    .Then((angles)=>{
                         var angleLst = angles.JsonList;
                         dfd.Resolve(new Dictionary<string,float>{
                             {"HeadYaw",  (float)angleLst[0].Cast<double>()},
@@ -111,25 +113,25 @@ namespace hmd_app
                 return dfd;
             };
 
-            
 
             getJointAngleTable()
-            .Then<Dictionary<string,float>>((angleTable)=>{
+            .Then((angleTable) =>
+            {
                 angleTable = angleTable;
             })
-            .Then(MakeGetProxyFunc("ALMotion"))
-            .Then<QiServiceJsonData>((alMotion) =>
+            .Then(qiUt_.MakeFunc_GetService("ALMotion"), () => { })
+            .Then((alMotion) =>
             {
-                var dfd2 = new Deferred();
+                var dfd2 = new Deferred<object,JsonData>();
 
                 alMotion.methods["getSummary"]()
-                .Then<JsonData>((summaryTxt) =>
+                .Then((summaryTxt) =>
                 {
                     System.Diagnostics.Debug.WriteLine(summaryTxt.As<string>());
 
                     return alMotion.methods["getSensorNames"]();
                 })
-                .Then<JsonData>((names) =>
+                .Then((names) =>
                 {
                     foreach (var name in names.JsonList)
                     {
@@ -137,27 +139,27 @@ namespace hmd_app
                     }
                     return alMotion.methods["getBodyNames"]("Body");
                 })
-                .Then<JsonData>((names) =>
+                .Then((names) =>
                 {
                     foreach (var name in names.JsonList)
                     {
                         System.Diagnostics.Debug.WriteLine(name.As<string>());
                     }
-                    return alMotion.methods["getAngles"]("Body",true);                
+                    return alMotion.methods["getAngles"]("Body", true);
                 })
-                .Then<JsonData, JsonData>((angles) =>
+                .Then((angles) =>
                 {
                     foreach (var angle in angles.JsonList)
                     {
                         System.Diagnostics.Debug.WriteLine(angle.Cast<double>());
                     }
                     return alMotion.methods["openHand"]("RHand");
-                }, 
+                },
                 (error) =>
                 {
-                    return new Deferred().Reject(error);
+                    return new Deferred<JsonData, JsonData>().Reject(error);
                 })
-                .Then<JsonData>((names) =>
+                .Then((names) =>
                 {
                     foreach (var name in names.JsonList)
                     {
@@ -172,10 +174,10 @@ namespace hmd_app
                     float fractionMaxSpeed = 0.05f;
                     alMotion.methods["changeAngles"](names, changes, fractionMaxSpeed);
                 })
-                .Then<object, JsonData>(null, (error) =>
+                .Fail((error) =>
                 {
                     System.Diagnostics.Debug.WriteLine(error.As<string>());
-                });
+                })
                 ;
 
                 return dfd2;
@@ -271,16 +273,16 @@ namespace hmd_app
             qim_ = qim;
         }
 
-        public Deferred Subscribe()
+        public Deferred<QiServiceJsonData, JsonData> Subscribe()
         {
             return qim_.Service("ALVideoDevice")
-            .Then<QiServiceJsonData>((ins) =>
+            .Then((ins) =>
             {
                 alVideoDevice_ = ins;
             })
             .Then(() =>
             {
-                return alVideoDevice_.methods["getSubscribers"]().Then<JsonData>((list) =>
+                return alVideoDevice_.methods["getSubscribers"]().Then((list) =>
                 {
                     // 6個まで制限があるそうなのでゴミ掃除
                     foreach (var v in list.JsonList)
@@ -301,7 +303,7 @@ namespace hmd_app
                         Option.frame_rate
                     );
                 })
-                .Then<JsonData>((nameId) =>
+                .Then((nameId) =>
                 {
                     nameId_ = nameId.As<string>();
                 });
@@ -316,7 +318,7 @@ namespace hmd_app
         {
             if (nameId_ != null && nameId_.Length > 0)
             {
-                alVideoDevice_.methods["getImageRemote"](nameId_).Then<JsonData>((data) =>
+                alVideoDevice_.methods["getImageRemote"](nameId_).Then((data) =>
                 {
                     if (data != null)
                     {
