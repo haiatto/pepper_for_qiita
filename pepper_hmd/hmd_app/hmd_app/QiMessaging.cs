@@ -454,6 +454,14 @@ namespace qiMessaging
         /// 
         /// なお、適切な引数を使えば基本的に型推論されるのでThen関数の型パラメタの指定は不要(なはず)です。
         /// 必要になっていたら使い方間違いの可能性ありです。
+        /// 
+        /// 注意点。http://stackoverflow.com/questions/29706054/wrong-overload-giving-compiler-error こちらで議論されてるような制約（バグ？仕様？）により、
+        /// ★Then(()=>{return new Deferred{A,B}} OK
+        /// ★Deferred{A,B} somefunc(){return return new Deferred{A,B};} 
+        /// 　Then(somefunc) error CS0121
+        /// になります。
+        /// 渡すモノを明示的にキャストすれば回避できるみたいですが、不便きわまるので、
+        /// ThenAとThenFを別途用意してるのでラムダ式やデリゲートでなく、関数を渡したいときは、こちらを使ってください。
         /// </remarks>
         public Deferred<NextDoneArgT, NextFailArgT> Then<NextDoneArgT, NextFailArgT>(
             Func<DoneArgT, Deferred<NextDoneArgT, NextFailArgT>> done, 
@@ -488,6 +496,7 @@ namespace qiMessaging
             };
             return callbackDfd;
         }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenF<NextDoneArgT, NextFailArgT>(Func<DoneArgT, Deferred<NextDoneArgT, NextFailArgT>> done, Func<FailArgT, Deferred<NextDoneArgT, NextFailArgT>> fail) { return Then(done, fail); }
         /// <summary>
         /// Then Done引数○ 戻り値× Fail引数○ 戻り値×
         /// </summary>
@@ -497,6 +506,7 @@ namespace qiMessaging
             var fail = make_fail_noRet_<object, object>(fail_noRet);
             return Then(done, fail);
         }
+        public Deferred<object, object> ThenA(Action<DoneArgT> done_noRet, Action<FailArgT> fail_noRet) { return Then(done_noRet, fail_noRet); }
         /// <summary>
         /// Then Done引数○ 戻り値○ Fail引数○ 戻り値○
         /// </summary>
@@ -506,6 +516,7 @@ namespace qiMessaging
             var fail = make_fail_noArg_<NextDoneArgT, NextFailArgT>(fail_noArg);
             return Then(done, fail);
         }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenF<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Func<Deferred<NextDoneArgT, NextFailArgT>> fail_noArg) { return Then(done_noArg, fail_noArg); }
         /// <summary>
         /// Then Done引数○ 戻り値○ Fail引数× 戻り値×
         /// </summary>
@@ -515,6 +526,7 @@ namespace qiMessaging
             var fail = make_fail_noArgRet_<NextDoneArgT, NextFailArgT>(fail_noArgRet);
             return Then(done, fail);
         }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenFA<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Action fail_noArgRet) { return Then(done_noArg, fail_noArgRet); }
         /// <summary>
         /// Then Done引数× 戻り値× Fail引数× 戻り値×
         /// </summary>
@@ -524,6 +536,7 @@ namespace qiMessaging
             var fail = make_fail_noArgRet_<object, object>(fail_noArgRet);
             return Then(done, fail);
         }
+        public Deferred<object, object> ThenA(Action done_noArgRet, Action fail_noArgRet) { return Then(done_noArgRet, fail_noArgRet); }
         /// <summary>
         /// Then Done引数○ 戻り値○ Fail無し
         /// </summary>
@@ -532,6 +545,7 @@ namespace qiMessaging
             var fail = make_fail_Pass_<NextDoneArgT>();
             return Then(done, fail);
         }
+        public Deferred<NextDoneArgT, FailArgT> ThenF<NextDoneArgT>(Func<DoneArgT, Deferred<NextDoneArgT, FailArgT>> done) { return Then<NextDoneArgT>(done); }
         /// <summary>
         /// Then Done引数× 戻り値○ Fail無し
         /// </summary>
@@ -541,6 +555,7 @@ namespace qiMessaging
             var fail = make_fail_Pass_<NextDoneArgT>();
             return Then(done, fail);
         }
+        public Deferred<NextDoneArgT, FailArgT> ThenF<NextDoneArgT>(Func<Deferred<NextDoneArgT, FailArgT>> done_noArg) { return Then<NextDoneArgT>(done_noArg); }
         /// <summary>
         /// Then Done引数○ 戻り値× Fail無し
         /// </summary>
@@ -550,6 +565,7 @@ namespace qiMessaging
             var fail = make_fail_Pass_<object>();
             return Then(done, fail);
         }
+        public Deferred<object, FailArgT> ThenA(Action<DoneArgT> done_noRet) { return Then(done_noRet); }
         /// <summary>
         /// Then Done引数× 戻り値× Fail無し
         /// </summary>
@@ -559,7 +575,7 @@ namespace qiMessaging
             var fail = make_fail_Pass_<object>();
             return Then(done, fail);
         }
-
+        public Deferred<object, FailArgT> ThenA(Action done_noArgRet) { return Then(done_noArgRet); }
 
 
 
@@ -572,6 +588,7 @@ namespace qiMessaging
             var done = make_done_Pass_<NextFailArgT>();
             return Then(done, fail);
         }
+        public Deferred<DoneArgT, NextFailArgT> FailF<NextFailArgT>(Func<FailArgT, Deferred<DoneArgT, NextFailArgT>> fail) { return Fail(fail); }
         /// <summary>
         /// Fail Done引数× 戻り値○ Fail無し
         /// </summary>
@@ -581,6 +598,7 @@ namespace qiMessaging
             var fail = make_fail_noArg_<DoneArgT, NextFailArgT>(fail_noArg);
             return Then(done, fail);
         }
+        public Deferred<DoneArgT, NextFailArgT> FailF<NextFailArgT>(Func<Deferred<DoneArgT, NextFailArgT>> fail_noArg) { return Fail(fail_noArg); }
         /// <summary>
         /// Fail Done引数○ 戻り値× Fail無し
         /// </summary>
@@ -590,6 +608,7 @@ namespace qiMessaging
             var fail = make_fail_noRet_<DoneArgT, object>(fail_noRet);
             return Then(done, fail);
         }
+        public Deferred<DoneArgT, object> FailA(Action<FailArgT> fail_noRet) { return Fail(fail_noRet); }
         /// <summary>
         /// Fail Done引数× 戻り値× Fail無し
         /// </summary>
@@ -599,6 +618,7 @@ namespace qiMessaging
             var fail = make_fail_noArgRet_<DoneArgT, object>(fail_noArgRet);
             return Then(done, fail);
         }
+        public Deferred<DoneArgT, object> FailA(Action fail_noArgRet) { return Fail(fail_noArgRet); }
 
 
         #region Then implements

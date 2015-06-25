@@ -2,42 +2,51 @@
 using System.Collections.Generic;
 using qiMessaging;
 
-public class NaoQiUtils
+namespace NaoQiUtils
 {
-    protected QiMessaging qim_;
-
-    /// <summary>
-    /// QiMessagingを使ったNaoQi関連の補助クラス
-    /// </summary>
-    /// <remarks>
-    /// 便利クラスを追加してゆくところ
-    /// </remarks>
-    public NaoQiUtils(QiMessaging qim)
+    public class QiUt
     {
-        qim_ = qim;
-    }
+        protected QiMessaging qim_;
 
-    /// <summary>
-    /// APIアクセスのためのサービス取得の為のDeferred関数を生成します
-    /// </summary>
-    /// <param name="moduleName">モジュール名</param>
-    /// <returns>チェイン可能なDfd関数</returns>
-    public Func<Deferred<QiServiceJsonData, JsonData>> MakeFunc_GetService(string moduleName)
-    {
-        return () => { return qim_.Service(moduleName); };
-    }
-
-    public Deferred<Dictionary<string, float>> GetJointAngleTable()
-    {
-        var dfd = new Deferred<Dictionary<string, float>>();
-        MakeFunc_GetService("ALMotion")().Then((alMotion) =>
+        /// <summary>
+        /// QiMessagingを使ったNaoQi関連の補助クラス
+        /// </summary>
+        /// <remarks>
+        /// 便利クラスを追加してゆくところ
+        /// </remarks>
+        public QiUt(QiMessaging qim)
         {
-            return
-            alMotion.methods["getAngles"]("Body", true)
-            .Then((angles) =>
+            qim_ = qim;
+        }
+
+        /// <summary>
+        /// APIアクセスのためのサービス取得の為のDeferred関数を生成します
+        /// </summary>
+        /// <param name="moduleName">モジュール名</param>
+        /// <returns>チェイン可能なDfd関数</returns>
+        public Func<Deferred<QiServiceJsonData, JsonData>> MakeFunc_GetService(string moduleName)
+        {
+            return () => { return qim_.Service(moduleName); };
+        }
+
+        /// <summary>
+        /// 関節の角度のテーブルを取得します
+        /// HeadYaw, HeadPitch, HipRoll, HipPitch, KneePitch , 
+        /// LShoulderPitch, LShoulderRoll , LElbowYaw , LElbowRoll, LWristYaw , LHand     , 
+        /// RShoulderPitch, RShoulderRoll , RElbowYaw , RElbowRoll, RWristYaw , RHand     , 
+        /// WheelFL, WheelFR, WheelB    
+        /// </summary>
+        public Deferred<Dictionary<string, float>> GetJointAngleTable()
+        {
+            var dfd = new Deferred<Dictionary<string, float>>();
+            MakeFunc_GetService("ALMotion")().Then((alMotion) =>
             {
-                var angleLst = angles.JsonList;
-                dfd.Resolve(new Dictionary<string, float>{
+                return
+                alMotion.methods["getAngles"]("Body", true)
+                .Then((angles) =>
+                {
+                    var angleLst = angles.JsonList;
+                    dfd.Resolve(new Dictionary<string, float>{
                             {"HeadYaw",  (float)angleLst[0].Cast<double>()},
                             {"HeadPitch",(float)angleLst[1].Cast<double>()},
                             {"LShoulderPitch",(float)angleLst[2].Cast<double>()},
@@ -59,10 +68,129 @@ public class NaoQiUtils
                             {"WheelFR",   (float)angleLst[18].Cast<double>()},
                             {"WheelB",    (float)angleLst[19].Cast<double>()},
                         });
+                });
             });
-        });
-        return dfd;
+            return dfd;
+        }
     }
 
+    public class PepperCamera
+    {
+        QiMessaging qim_;
+        QiServiceJsonData alVideoDevice_;
+        string nameId_;
 
+        public class OptionT
+        {
+            public string name = "pepper_cs_cam";
+            public int cam = 0;  // nao_top
+            public int reso = 1;  // 320x240
+            public int color = 11; // Rgb
+            public int frame_rate = 5; // frame_rate
+        }
+
+        public class ImageData
+        {
+            public int w;
+            public int h;
+            public int camId;
+            public double camLRad;
+            public double camTRad;
+            public double camRRad;
+            public double camBRad;
+            public byte[] pixels;
+        }
+
+        public OptionT Option = new OptionT();
+
+        public PepperCamera(QiMessaging qim)
+        {
+            qim_ = qim;
+        }
+
+        public Deferred<object, JsonData> Subscribe()
+        {
+            return qim_.Service("ALVideoDevice")
+            .Then((ins) =>
+            {
+                alVideoDevice_ = ins;
+
+                return alVideoDevice_.methods["getSubscribers"]().Then((list) =>
+                {
+                    // 6個まで制限があるそうなのでゴミ掃除
+                    foreach (var v in list.JsonList)
+                    {
+                        if (v.As<string>().IndexOf(Option.name) == 0)//とりあえず前方一致で同じと判断してみる
+                        {
+                            alVideoDevice_.methods["unsubscribe"](v.JsonDataRaw);
+                        }
+                    }
+                })
+                .Then(() =>
+                {
+                    return alVideoDevice_.methods["subscribeCamera"](
+                        Option.name,
+                        Option.cam,
+                        Option.reso,
+                        Option.color,
+                        Option.frame_rate
+                    );
+                })
+                .Then((nameId) =>
+                {
+                    nameId_ = nameId.As<string>();
+                });
+            });
+        }
+        public void Unsubscribe()
+        {
+            alVideoDevice_.methods["Unsubscribe"](nameId_);
+            nameId_ = null;
+        }
+        public Deferred<ImageData, string> CaptureImage()
+        {
+            var dfd = new Deferred<ImageData, string>();
+            if (nameId_ != null && nameId_.Length > 0)
+            {
+                alVideoDevice_.methods["getImageRemote"](nameId_).Then((data) =>
+                {
+                    if (data != null)
+                    {
+                        /*
+                        [0]: width.
+                        [1]: height.
+                        [2]: number of layers.
+                        [3]: ColorSpace.
+                        [4]: time stamp (seconds).
+                        [5]: time stamp (micro-seconds).
+                        [6]: binary array of size height * width * nblayers containing image data.
+                        [7]: camera ID (kTop=0, kBottom=1).
+                        [8]: left angle (radian).
+                        [9]: topAngle (radian).
+                        [10]: rightAngle (radian).
+                        [11]: bottomAngle (radian).
+                        */
+                        var img = new ImageData();
+                        img.w = (int)data.JsonList[0].Cast<long>();
+                        img.h = (int)data.JsonList[1].Cast<long>();
+                        img.pixels = System.Convert.FromBase64String(data.JsonList[6].As<string>());
+                        img.camId = (int)data.JsonList[7].Cast<long>();
+                        img.camLRad = data.JsonList[8].Cast<double>();
+                        img.camTRad = data.JsonList[9].Cast<double>();
+                        img.camRRad = data.JsonList[10].Cast<double>();
+                        img.camBRad = data.JsonList[11].Cast<double>();
+                        dfd.Resolve(img);
+                    }
+                },
+                (error) => {
+                    dfd.Reject(error.As<string>());
+                });
+            }
+            else
+            {
+                dfd.Reject("error not ready");
+            }
+            return dfd;
+        }
+    }
 }

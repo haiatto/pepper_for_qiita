@@ -8,6 +8,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using qiMessaging;
+using NaoQiUtils;
+
 
 namespace hmd_app
 {
@@ -16,7 +18,7 @@ namespace hmd_app
         private QiMessaging qim_;
         private PepperCamera pcam_;
         private PepperCamera pcam2_;
-        NaoQiUtils qiUt_;
+        QiUt qiUt_;
 
         public Form1()
         {
@@ -25,7 +27,7 @@ namespace hmd_app
             qim_ = new QiMessaging();
             pcam_ = new PepperCamera(qim_);
             pcam2_ = new PepperCamera(qim_);
-            qiUt_ = new NaoQiUtils(qim_);
+            qiUt_ = new QiUt(qim_);
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -72,52 +74,18 @@ namespace hmd_app
         {
             if (!qim_.IsConnected) return;
 
-            Func<string, Func<Deferred<QiServiceJsonData,JsonData>>> MakeGetProxyFunc = (moduleName) =>
-            {
-                return () => { return qim_.Service(moduleName); };
-            };
-            
-            Func<Deferred<Dictionary<string, float>>> getJointAngleTable = () =>
-            {
-                var dfd = new Deferred<Dictionary<string,float>>();
-                qiUt_.MakeFunc_GetService("ALMotion")().Then((alMotion) =>
-                {
-                    return 
-                    alMotion.methods["getAngles"]("Body",true)
-                    .Then((angles)=>{
-                        var angleLst = angles.JsonList;
-                        dfd.Resolve(new Dictionary<string,float>{
-                            {"HeadYaw",  (float)angleLst[0].Cast<double>()},
-                            {"HeadPitch",(float)angleLst[1].Cast<double>()},
-                            {"LShoulderPitch",(float)angleLst[2].Cast<double>()},
-                            {"LShoulderRoll", (float)angleLst[3].Cast<double>()},
-                            {"LElbowYaw", (float)angleLst[4].Cast<double>()},
-                            {"LElbowRoll",(float)angleLst[5].Cast<double>()},
-                            {"LWristYaw", (float)angleLst[6].Cast<double>()},
-                            {"LHand",     (float)angleLst[7].Cast<double>()},
-                            {"HipRoll",   (float)angleLst[8].Cast<double>()},
-                            {"HipPitch",  (float)angleLst[9].Cast<double>()},
-                            {"KneePitch", (float)angleLst[10].Cast<double>()},
-                            {"RShoulderPitch",(float)angleLst[11].Cast<double>()},
-                            {"RShoulderRoll", (float)angleLst[12].Cast<double>()},
-                            {"RElbowYaw", (float)angleLst[13].Cast<double>()},
-                            {"RElbowRoll",(float)angleLst[14].Cast<double>()},
-                            {"RWristYaw", (float)angleLst[15].Cast<double>()},
-                            {"RHand",     (float)angleLst[16].Cast<double>()},
-                            {"WheelFL",   (float)angleLst[17].Cast<double>()},
-                            {"WheelFR",   (float)angleLst[18].Cast<double>()},
-                            {"WheelB",    (float)angleLst[19].Cast<double>()},
-                        });
-                    });
-                });
-                return dfd;
-            };
 
-
-            getJointAngleTable()
+            qiUt_.GetJointAngleTable()
             .Then((angleTable) =>
             {
-                angleTable = angleTable;
+                qim_.Service("ALMotion").Then((almotion)=>{
+                    //almotion.methods[""]()
+                    //.Then(almotion.methods[""]())
+                    //;
+                    
+                    //angleTable["HeadYaw"];
+                    //angleTable["HeadPitch"];
+                });
             })
             .Then(qiUt_.MakeFunc_GetService("ALMotion"), () => { })
             .Then((alMotion) =>
@@ -183,10 +151,8 @@ namespace hmd_app
                 return dfd2;
             });
 
-
-            return;
-
-            pcam_.CaptureImage((imageData) => {
+            pcam_.CaptureImage().Then((imageData) =>
+            {
                 Bitmap bmp = new Bitmap(imageData.w, imageData.h);
                 //Bitmap bmp = new Bitmap(@"C:\Users\USER\Pictures\imagesFSV35AQP.jpg");
 
@@ -194,14 +160,15 @@ namespace hmd_app
                 int pixelSize = 4;
                 if (bmp.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppArgb &&
                     bmp.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppPArgb &&
-                    bmp.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppRgb){
+                    bmp.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppRgb)
+                {
                     return;
                 }
 
                 //Bitmapをロックする
                 var bmpDate = bmp.LockBits(
                     new Rectangle(0, 0, bmp.Width, bmp.Height),
-                    System.Drawing.Imaging.ImageLockMode.ReadWrite, bmp.PixelFormat 
+                    System.Drawing.Imaging.ImageLockMode.ReadWrite, bmp.PixelFormat
                 );
 
                 IntPtr ptr = bmpDate.Scan0;
@@ -224,10 +191,17 @@ namespace hmd_app
 
                 bmp.UnlockBits(bmpDate);
                 pictureBox1.BackgroundImage = bmp;
-            });
-            pcam2_.CaptureImage((imageData) =>
+            })
+            .ThenF(pcam2_.CaptureImage)
+            .Then((imageData) =>
             {
             });
+        }
+        void TES<T>(Func<T> tt)
+        {
+        }
+        void TES(Action tt)
+        {
         }
 
         private void Form1_FormClosed(object sender, FormClosedEventArgs e)
@@ -239,116 +213,4 @@ namespace hmd_app
         }
     }
 
-    public class PepperCamera
-    {
-        QiMessaging qim_;
-        QiServiceJsonData alVideoDevice_;
-        string nameId_;
-
-        public class OptionT
-        {
-            public string name = "pepper_cs_cam";
-            public int cam = 0;  // nao_top
-            public int reso = 1;  // 320x240
-            public int color = 11; // Rgb
-            public int frame_rate = 5; // frame_rate
-        }
-
-        public class ImageData
-        {
-            public int w;
-            public int h;
-            public int camId;
-            public double camLRad;
-            public double camTRad;
-            public double camRRad;
-            public double camBRad;
-            public byte[] pixels;
-        }
-
-        public OptionT Option = new OptionT();
-
-        public PepperCamera(QiMessaging qim)
-        {
-            qim_ = qim;
-        }
-
-        public Deferred<QiServiceJsonData, JsonData> Subscribe()
-        {
-            return qim_.Service("ALVideoDevice")
-            .Then((ins) =>
-            {
-                alVideoDevice_ = ins;
-            })
-            .Then(() =>
-            {
-                return alVideoDevice_.methods["getSubscribers"]().Then((list) =>
-                {
-                    // 6個まで制限があるそうなのでゴミ掃除
-                    foreach (var v in list.JsonList)
-                    {
-                        if (v.As<string>().IndexOf(Option.name) == 0)//とりあえず前方一致で同じと判断してみる
-                        {
-                            alVideoDevice_.methods["unsubscribe"](v.JsonDataRaw);
-                        }
-                    }
-                })
-                .Then(() =>
-                {
-                    return alVideoDevice_.methods["subscribeCamera"](
-                        Option.name,
-                        Option.cam,
-                        Option.reso,
-                        Option.color,
-                        Option.frame_rate
-                    );
-                })
-                .Then((nameId) =>
-                {
-                    nameId_ = nameId.As<string>();
-                });
-            });
-        }
-        public void Unsubscribe()
-        {
-            alVideoDevice_.methods["Unsubscribe"](nameId_);
-            nameId_ = null;
-        }
-        public void CaptureImage(Action<ImageData> callback)
-        {
-            if (nameId_ != null && nameId_.Length > 0)
-            {
-                alVideoDevice_.methods["getImageRemote"](nameId_).Then((data) =>
-                {
-                    if (data != null)
-                    {
-                        /*
-                        [0]: width.
-                        [1]: height.
-                        [2]: number of layers.
-                        [3]: ColorSpace.
-                        [4]: time stamp (seconds).
-                        [5]: time stamp (micro-seconds).
-                        [6]: binary array of size height * width * nblayers containing image data.
-                        [7]: camera ID (kTop=0, kBottom=1).
-                        [8]: left angle (radian).
-                        [9]: topAngle (radian).
-                        [10]: rightAngle (radian).
-                        [11]: bottomAngle (radian).
-                        */
-                        var img = new ImageData();
-                        img.w = (int)data.JsonList[0].Cast<long>();
-                        img.h = (int)data.JsonList[1].Cast<long>();
-                        img.pixels = System.Convert.FromBase64String(data.JsonList[6].As<string>());
-                        img.camId = (int)data.JsonList[7].Cast<long>();
-                        img.camLRad = data.JsonList[8].Cast<double>();
-                        img.camTRad = data.JsonList[9].Cast<double>();
-                        img.camRRad = data.JsonList[10].Cast<double>();
-                        img.camBRad = data.JsonList[11].Cast<double>();
-                        callback(img);
-                    }
-                });
-            }
-        }
-    }
 }
