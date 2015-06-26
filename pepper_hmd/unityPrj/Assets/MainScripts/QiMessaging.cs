@@ -149,7 +149,7 @@ namespace qiMessaging
 
         public QiMessaging()
         {
-            Service = createMetaCall_("ServiceDirectory", "service", null);
+            Service = createMetaCall_<QiServiceJsonData, JsonData>("ServiceDirectory", "service", null);
         }
 
         public bool IsConnected
@@ -183,7 +183,14 @@ namespace qiMessaging
                 if (data["idm"] != null)
                 {
                     var idm = data["idm"].Cast<long>();
-                    dfdTbl_[idm].Reject(data["result"]);
+                    if (dfdTbl_[idm].dfd is Deferred<QiServiceJsonData, JsonData>)
+                    {
+                        (dfdTbl_[idm].dfd as Deferred<QiServiceJsonData, JsonData>).Reject(data["result"]);
+                    }
+                    else
+                    {
+                        (dfdTbl_[idm].dfd as Deferred<JsonData, JsonData>).Reject(data["result"]);
+                    }
                     dfdTbl_.Remove(idm);
                 }
 
@@ -213,7 +220,7 @@ namespace qiMessaging
                     foreach (var method in methods)
                     {
                         var methodName = method["name"].As<string>();
-                        o.methods[methodName] = createMetaCall_(pyobj, methodName, null);
+                        o.methods[methodName] = createMetaCall_<JsonData,JsonData>(pyobj, methodName, null);
                         o[methodName] = new JsonData(o.methods[methodName]);
                     }
 
@@ -225,7 +232,7 @@ namespace qiMessaging
                         o[signalName] = new JsonData(o.signals[signalName]);
                     }
 
-                    dfdTbl_[idm].Resolve(o);
+                    (dfdTbl_[idm].dfd as Deferred<QiServiceJsonData,JsonData>).Resolve(o);
                 }
                 else
                 {
@@ -234,7 +241,7 @@ namespace qiMessaging
                         var cbi = dfdTbl_[idm].cbi;
                         sigTbl_[cbi.obj][cbi.signal][data["result"].As<string>()] = cbi.cb;
                     }
-                    dfdTbl_[idm].Resolve(data["result"]);
+                    (dfdTbl_[idm].dfd as Deferred<JsonData,JsonData>).Resolve(data["result"]);
                 }
                 dfdTbl_.Remove(idm);
             });
@@ -255,7 +262,7 @@ namespace qiMessaging
             client_ = null;
         }
 
-        public readonly FuncArgv<Deferred, object> Service;
+        public readonly FuncArgv<Deferred<QiServiceJsonData, JsonData>, object> Service;
 
         #region 実装です
 
@@ -267,21 +274,31 @@ namespace qiMessaging
             public string signal;
             public string cb;
         }
-        protected class DeferredWithCbi : Deferred
+        //protected class DeferredWithCbi : DeferredWithCbi<JsonData, JsonData>
+        //{
+        //}
+        protected class DeferredWithCbi<A,B> : Deferred<A, B>
         {
             public Cbi cbi;
         }
+        protected class DfdInfo
+        {
+            public object dfd;
+            public Cbi cbi;
+        }
+        
 
         int idm_ = 0;
-        Dictionary<long, DeferredWithCbi> dfdTbl_ = new Dictionary<long, DeferredWithCbi>();
+        Dictionary<long, DfdInfo> dfdTbl_ = new Dictionary<long, DfdInfo>();
         Dictionary<long, Dictionary<string, Dictionary<string, object>>> sigTbl_ = new Dictionary<long, Dictionary<string, Dictionary<string, object>>>();
 
-        protected FuncArgv<Deferred, object> createMetaCall_(object obj, string method, Cbi cbi)
+        protected FuncArgv<Deferred<DoneArgT, FailArgT>, object> createMetaCall_<DoneArgT, FailArgT>(object obj, string method, Cbi cbi)
         {
             return (argments) =>
             {
                 var idm = ++idm_;
-                dfdTbl_[idm] = new DeferredWithCbi();
+                dfdTbl_[idm] = new DfdInfo();
+                dfdTbl_[idm].dfd = new Deferred<DoneArgT, FailArgT>();
 
                 if (method == "registerEvent")
                 {
@@ -299,7 +316,7 @@ namespace qiMessaging
                 }
                 client_.Emit("call", jsonData.JsonDataRaw);
 
-                return dfdTbl_[idm];
+                return dfdTbl_[idm].dfd as Deferred<DoneArgT, FailArgT>;
             };
         }
         protected QiSignal createMetaSignal_(long obj, string signal)
@@ -315,13 +332,13 @@ namespace qiMessaging
                 cbi.obj = obj;
                 cbi.signal = signal;
                 cbi.cb = cb;
-                return createMetaCall_(obj, "registerEvent", cbi)(signal);
+                return createMetaCall_<JsonData,JsonData>(obj, "registerEvent", cbi)(signal);
             };
             s.Disconnect = (args) =>
             {
                 var l = (string)args[0];
                 sigTbl_[obj][signal][l] = null;
-                return createMetaCall_(obj, "unregisterEvent", null)(signal, l);
+                return createMetaCall_<JsonData, JsonData>(obj, "unregisterEvent", null)(signal, l);
             };
             return s;
         }
@@ -330,25 +347,39 @@ namespace qiMessaging
 
     public class QiSignal
     {
-        public FuncArgv<Deferred, object> Connect;
-        public FuncArgv<Deferred, object> Disconnect;
+        public FuncArgv<Deferred<JsonData, JsonData>, object> Connect;
+        public FuncArgv<Deferred<JsonData, JsonData>, object> Disconnect;
     };
 
     public class QiServiceJsonData : JsonData
     {
-        public Dictionary<string, FuncArgv<Deferred, object>> methods = new Dictionary<string, FuncArgv<Deferred, object>>();
+        public Dictionary<string, FuncArgv<Deferred<JsonData, JsonData>, object>> methods = new Dictionary<string, FuncArgv<Deferred<JsonData, JsonData>, object>>();
         public Dictionary<string, QiSignal> signals = new Dictionary<string, QiSignal>();
     }
 
     public delegate R FuncArgv<R, A>(params A[] args);
 
     /// <summary>
+    /// Deferredのバリエーション。Resolve、Rejectの引数型指定無しのタイプ
+    /// </summary>
+    public class Deferred : Deferred<object> {}
+
+    /// <summary>
+    /// Deferredのバリエーション。Resolve関数の引数型指定のあるタイプ
+    /// </summary>
+    /// <typeparam name="ResolveArgT"></typeparam>
+    public class Deferred<ResolveArgT> : Deferred<ResolveArgT, object> { }
+
+    /// <summary>
     /// 最低限のDeferred
     /// </summary>
+    /// <typeparam name="DoneArgT">Resolveの引数型</typeparam>
+    /// <typeparam name="FailArgT">Rejectの引数型</typeparam>
     /// <remarks>
     /// 大規模なのか古いのしか無かったので車輪の再発明…
+    /// ソース単品で動いてジェネリックでいい感じのあったら置き換えるかも…
     /// </remarks>
-    public class Deferred
+    public class Deferred<DoneArgT, FailArgT>
     {
         enum State
         {
@@ -358,90 +389,334 @@ namespace qiMessaging
         };
         object arg_;
         State state_ = State.Pending;
-        Func<object, Deferred> done_;
-        Func<object, Deferred> fail_;
+        Action<DoneArgT> done_;
+        Action<FailArgT> fail_;
 
-        public Deferred Resolve()
+        /// <summary>
+        /// Resolve 引数×
+        /// </summary>
+        /// <returns>自分をそのまま返します</returns>
+        public Deferred<DoneArgT,FailArgT> Resolve()
         {
             state_ = State.Resolve;
             if (done_ != null)
             {
-                done_(arg_);
+                done_((DoneArgT)arg_);
             }
             return this;
         }
-        public Deferred Resolve(object arg)
+        /// <summary>
+        /// Resolve 引数○
+        /// </summary>
+        /// <returns>自分をそのまま返します</returns>
+        public Deferred<DoneArgT, FailArgT> Resolve(DoneArgT arg)
         {
             state_ = State.Resolve;
             arg_ = arg;
             if (done_ != null)
             {
-                done_(arg_);
+                done_((DoneArgT)arg_);
             }
             return this;
         }
-        public Deferred Reject()
+        /// <summary>
+        /// Reject 引数×
+        /// </summary>
+        /// <returns>自分をそのまま返します</returns>
+        public Deferred<DoneArgT, FailArgT> Reject()
         {
             state_ = State.Reject;
             if (fail_ != null)
             {
-                fail_(arg_);
+                fail_((FailArgT)arg_);
             }
             return this;
         }
-        public Deferred Reject(object arg)
+        /// <summary>
+        /// Reject 引数○
+        /// </summary>
+        /// <returns>自分をそのまま返します</returns>
+        public Deferred<DoneArgT, FailArgT> Reject(FailArgT arg)
         {
             state_ = State.Reject;
             arg_ = arg;
             if (fail_ != null)
             {
-                fail_(arg_);
+                fail_((FailArgT)arg_);
             }
             return this;
         }
 
-        public Deferred Then<T1, T2>(Func<T1, Deferred> done, Func<T2, Deferred> fail)
+        #region ThenとFail
+
+        /// <summary>
+        /// Then Done引数○ 戻り値○ Fail引数○ 戻り値○
+        /// </summary>
+        /// <typeparam name="NextDoneArgT">戻り値のDfdのDoneの引数型</typeparam>
+        /// <typeparam name="NextFailArgT">戻り値のDfdのFailの引数型</typeparam>
+        /// <param name="done">Deffered{NextDoneArgT, NextDoneArgT} Func(DoneArgT arg)という形の成功時のコールバック</param>
+        /// <param name="fail">Deffered{NextDoneArgT, NextDoneArgT} Func(FailArgT arg)という形の失敗時のコールバック</param>
+        /// <returns> Deffered{NextDoneArgT, NextDoneArgT} </returns>
+        /// <remarks>
+        /// C#に落とし込んだThenのコールバックとその戻り値のルールはそこそこ厳格になっています。
+        /// 引数有りコールバックの引数型は、Deferredに型指定がある場合型チェックがかかります(無い場合objectになのでチェック無しです)
+        /// 引数無しコールバックも可能です(Resolve,Rejectの引数は無視されます)
+        /// 戻り値有りのコールバックの戻り値は、Deffered型またはその派生型限定です(Cast出来ればOK)
+        /// 戻り値有りのコールバックの戻り値から、Then関数の戻り値のDeffered型が推論されて決定されるのでDoneとFailの戻り値型は合わせる必要があります
+        /// Failのコールバックを省略した場合は、Deferred型のFailArgTの型が、戻り値のDeferredにも使われます。
+        /// この制約は、コールバックを省略した場合、渡される予定の引数が次のThenに引き渡される仕様によるものです。(再現したらこうなりました)
+        /// 空のコールバック等でもいいので指定すれば、引き渡されないので、Doneのコールバックの戻り値型が使われます。
+        /// なお、これらの制約は明示的な型指定した場合のみなので、object型を指定すれば javascript の様にユルい感じになります。
+        /// (変換不要でインテリセンスもそのままかかるのでC#なら型指定した方が便利ですけども(C#だとキャストかリフレクション使わないと何もアクセスできないですし))
+        /// 
+        /// なお、適切な引数を使えば基本的に型推論されるのでThen関数の型パラメタの指定は不要(なはず)です。
+        /// 必要になっていたら使い方間違いの可能性ありです。
+        /// 
+        /// 注意点。http://stackoverflow.com/questions/29706054/wrong-overload-giving-compiler-error こちらで議論されてるような制約（バグ？仕様？）により、
+        /// ★Then(()=>{return new Deferred{A,B}} OK
+        /// ★Deferred{A,B} somefunc(){return return new Deferred{A,B};} 
+        /// 　Then(somefunc) error CS0121
+        /// になります。
+        /// 渡すモノを明示的にキャストすれば回避できるみたいですが、不便きわまるので、
+        /// ThenAとThenFを別途用意してるのでラムダ式やデリゲートでなく、関数を渡したいときは、こちらを使ってください。
+        /// </remarks>
+        public Deferred<NextDoneArgT, NextFailArgT> Then<NextDoneArgT, NextFailArgT>(
+            Func<DoneArgT, Deferred<NextDoneArgT, NextFailArgT>> done, 
+            Func<FailArgT, Deferred<NextDoneArgT, NextFailArgT>> fail
+            )
         {
-            done_ = (arg) => { if (done != null) { return done((T1)arg); } return new Deferred().Resolve(arg); };
-            fail_ = (arg) => { if (fail != null) { return fail((T2)arg); } return new Deferred().Reject(arg); };
+            if (state_ == State.Resolve)
+            {
+                //結果が決まってる
+                return done((DoneArgT)arg_);
+            }
+            else if (state_ == State.Reject)
+            {
+                //結果が決まってる
+                return fail((FailArgT)arg_);
+            }
+            if (state_ == State.Pending)
+            {
+            }
+            //遅延させる
+            //非同期実行の為に自分のResolveやRejectが呼ばれたときの次の処理を登録する為のdfdを作ります
+            var callbackDfd = new Deferred<NextDoneArgT, NextFailArgT>();
+            done_ = (arg) =>
+            {
+                done(arg).Then((arg2) => { callbackDfd.Resolve(arg2); },
+                               (arg2) => { callbackDfd.Reject(arg2); });
+            };
+            fail_ = (arg) =>
+            {
+                fail(arg).Then((arg2) => { callbackDfd.Resolve(arg2); },
+                               (arg2) => { callbackDfd.Reject(arg2); });
+            };
+            return callbackDfd;
+        }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenF<NextDoneArgT, NextFailArgT>(Func<DoneArgT, Deferred<NextDoneArgT, NextFailArgT>> done, Func<FailArgT, Deferred<NextDoneArgT, NextFailArgT>> fail) { return Then(done, fail); }
+        /// <summary>
+        /// Then Done引数○ 戻り値× Fail引数○ 戻り値×
+        /// </summary>
+        public Deferred<object, object> Then(Action<DoneArgT> done_noRet, Action<FailArgT> fail_noRet)
+        {
+            var done = make_done_noRet_<object, object>(done_noRet);
+            var fail = make_fail_noRet_<object, object>(fail_noRet);
+            return Then(done, fail);
+        }
+        public Deferred<object, object> ThenA(Action<DoneArgT> done_noRet, Action<FailArgT> fail_noRet) { return Then(done_noRet, fail_noRet); }
+        /// <summary>
+        /// Then Done引数○ 戻り値○ Fail引数○ 戻り値○
+        /// </summary>
+        public Deferred<NextDoneArgT, NextFailArgT> Then<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Func<Deferred<NextDoneArgT, NextFailArgT>> fail_noArg)
+        {
+            var done = make_done_noArg_<NextDoneArgT, NextFailArgT>(done_noArg);
+            var fail = make_fail_noArg_<NextDoneArgT, NextFailArgT>(fail_noArg);
+            return Then(done, fail);
+        }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenF<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Func<Deferred<NextDoneArgT, NextFailArgT>> fail_noArg) { return Then(done_noArg, fail_noArg); }
+        /// <summary>
+        /// Then Done引数○ 戻り値○ Fail引数× 戻り値×
+        /// </summary>
+        public Deferred<NextDoneArgT, NextFailArgT> Then<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Action fail_noArgRet)
+        {
+            var done = make_done_noArg_<NextDoneArgT, NextFailArgT>(done_noArg);
+            var fail = make_fail_noArgRet_<NextDoneArgT, NextFailArgT>(fail_noArgRet);
+            return Then(done, fail);
+        }
+        public Deferred<NextDoneArgT, NextFailArgT> ThenFA<NextDoneArgT, NextFailArgT>(Func<Deferred<NextDoneArgT, NextFailArgT>> done_noArg, Action fail_noArgRet) { return Then(done_noArg, fail_noArgRet); }
+        /// <summary>
+        /// Then Done引数× 戻り値× Fail引数× 戻り値×
+        /// </summary>
+        public Deferred<object, object> Then(Action done_noArgRet, Action fail_noArgRet)
+        {
+            var done = make_done_noArgRet_<object, object>(done_noArgRet);
+            var fail = make_fail_noArgRet_<object, object>(fail_noArgRet);
+            return Then(done, fail);
+        }
+        public Deferred<object, object> ThenA(Action done_noArgRet, Action fail_noArgRet) { return Then(done_noArgRet, fail_noArgRet); }
+        /// <summary>
+        /// Then Done引数○ 戻り値○ Fail無し
+        /// </summary>
+        public Deferred<NextDoneArgT, FailArgT> Then<NextDoneArgT>(Func<DoneArgT, Deferred<NextDoneArgT, FailArgT>> done)
+        {
+            var fail = make_fail_Pass_<NextDoneArgT>();
+            return Then(done, fail);
+        }
+        public Deferred<NextDoneArgT, FailArgT> ThenF<NextDoneArgT>(Func<DoneArgT, Deferred<NextDoneArgT, FailArgT>> done) { return Then<NextDoneArgT>(done); }
+        /// <summary>
+        /// Then Done引数× 戻り値○ Fail無し
+        /// </summary>
+        public Deferred<NextDoneArgT, FailArgT> Then<NextDoneArgT>(Func<Deferred<NextDoneArgT, FailArgT>> done_noArg)
+        {
+            var done = make_done_noArg_<NextDoneArgT, FailArgT>(done_noArg);
+            var fail = make_fail_Pass_<NextDoneArgT>();
+            return Then(done, fail);
+        }
+        public Deferred<NextDoneArgT, FailArgT> ThenF<NextDoneArgT>(Func<Deferred<NextDoneArgT, FailArgT>> done_noArg) { return Then<NextDoneArgT>(done_noArg); }
+        /// <summary>
+        /// Then Done引数○ 戻り値× Fail無し
+        /// </summary>
+        public Deferred<object, FailArgT> Then(Action<DoneArgT> done_noRet)
+        {
+            var done = make_done_noRet_<object, FailArgT>(done_noRet);
+            var fail = make_fail_Pass_<object>();
+            return Then(done, fail);
+        }
+        public Deferred<object, FailArgT> ThenA(Action<DoneArgT> done_noRet) { return Then(done_noRet); }
+        /// <summary>
+        /// Then Done引数× 戻り値× Fail無し
+        /// </summary>
+        public Deferred<object, FailArgT> Then(Action done_noArgRet)
+        {
+            var done = make_done_noArgRet_<object, FailArgT>(done_noArgRet);
+            var fail = make_fail_Pass_<object>();
+            return Then(done, fail);
+        }
+        public Deferred<object, FailArgT> ThenA(Action done_noArgRet) { return Then(done_noArgRet); }
+
+
+
+
+        /// <summary>
+        /// Fail Done引数○ 戻り値○ Fail無し
+        /// </summary>
+        public Deferred<DoneArgT, NextFailArgT> Fail<NextFailArgT>(Func<FailArgT, Deferred<DoneArgT, NextFailArgT>> fail)
+        {
+            var done = make_done_Pass_<NextFailArgT>();
+            return Then(done, fail);
+        }
+        public Deferred<DoneArgT, NextFailArgT> FailF<NextFailArgT>(Func<FailArgT, Deferred<DoneArgT, NextFailArgT>> fail) { return Fail(fail); }
+        /// <summary>
+        /// Fail Done引数× 戻り値○ Fail無し
+        /// </summary>
+        public Deferred<DoneArgT, NextFailArgT> Fail<NextFailArgT>(Func<Deferred<DoneArgT, NextFailArgT>> fail_noArg)
+        {
+            var done = make_done_Pass_<NextFailArgT>();
+            var fail = make_fail_noArg_<DoneArgT, NextFailArgT>(fail_noArg);
+            return Then(done, fail);
+        }
+        public Deferred<DoneArgT, NextFailArgT> FailF<NextFailArgT>(Func<Deferred<DoneArgT, NextFailArgT>> fail_noArg) { return Fail(fail_noArg); }
+        /// <summary>
+        /// Fail Done引数○ 戻り値× Fail無し
+        /// </summary>
+        public Deferred<DoneArgT, object> Fail(Action<FailArgT> fail_noRet)
+        {
+            var done = make_done_Pass_<object>();
+            var fail = make_fail_noRet_<DoneArgT, object>(fail_noRet);
+            return Then(done, fail);
+        }
+        public Deferred<DoneArgT, object> FailA(Action<FailArgT> fail_noRet) { return Fail(fail_noRet); }
+        /// <summary>
+        /// Fail Done引数× 戻り値× Fail無し
+        /// </summary>
+        public Deferred<DoneArgT, object> Fail(Action fail_noArgRet)
+        {
+            var done = make_done_Pass_<object>();
+            var fail = make_fail_noArgRet_<DoneArgT, object>(fail_noArgRet);
+            return Then(done, fail);
+        }
+        public Deferred<DoneArgT, object> FailA(Action fail_noArgRet) { return Fail(fail_noArgRet); }
+
+
+        #region Then implements
+        Func<DoneArgT, Deferred<D, F>> make_done_noRet_<D, F>(Action<DoneArgT> done_noRet)
+        {
+            return (arg) => { done_noRet(arg); var dfd = new Deferred<D, F>(); dfd.Resolve(); return dfd; }; 
+        }
+        Func<FailArgT, Deferred<D, F>> make_fail_noRet_<D, F>(Action<FailArgT> fail_noRet)
+        {
+            return (arg) => { fail_noRet(arg); var dfd = new Deferred<D, F>(); dfd.Reject(); return dfd; }; 
+        }
+        Func<DoneArgT, Deferred<D, F>> make_done_noArg_<D, F>(Func<Deferred<D, F>> done_noArg)
+        {
+            return (arg) => { return done_noArg(); };
+        }
+        Func<FailArgT, Deferred<D, F>> make_fail_noArg_<D, F>(Func<Deferred<D, F>> fail_noArg)
+        {
+            //MEMO:Passと違って関数指定があるので引数の受け渡しは途切れていいはず
+            return (arg) => { return fail_noArg(); };
+        }
+        Func<DoneArgT, Deferred<D, F>> make_done_noArgRet_<D, F>(Action done_noArgRet)
+        {
+            //MEMO:Passと違って関数指定があるので引数の受け渡しは途切れていいはず
+            return (arg) => { done_noArgRet(); var dfd = new Deferred<D, F>(); dfd.Resolve(); return dfd; };
+        }
+        Func<FailArgT, Deferred<D, F>> make_fail_noArgRet_<D, F>(Action fail_noArgRet)
+        {
+            //MEMO:Passと違って関数指定があるので引数の受け渡しは途切れていいはず
+            return (arg) => { fail_noArgRet(); var dfd = new Deferred<D, F>(); dfd.Reject(); return dfd; };
+        }
+        Func<DoneArgT, Deferred<DoneArgT, F>> make_done_Pass_<F>()
+        {
+            //MEMO:そのまま引数をスルーです
+            return (arg) => { var dfd = new Deferred<DoneArgT,F>(); dfd.Resolve(arg); return dfd; };
+        }
+        Func<FailArgT, Deferred<D, FailArgT>> make_fail_Pass_<D>()
+        {
+            //MEMO:そのまま引数をスルーです
+            return (arg) => { var dfd = new Deferred<D, FailArgT>(); dfd.Reject(arg); return dfd; };
+        }
+        #endregion
+
+        #endregion
+
+#if false
+        public Deferred<DoneArgT, FailArgT> Then(Func<Deferred<DoneArgT, FailArgT>> done, Func<Deferred<DoneArgT, FailArgT>> fail)
+        {
+            done_ = (arg) => { if (done != null) { return done(); } return new Deferred<DoneArgT, FailArgT>().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null) { return fail(); } return new Deferred<DoneArgT, FailArgT>().Reject(arg); };
             return thenExec_();
         }
-        public Deferred Then(Func<Deferred> done, Func<Deferred> fail)
+        public Deferred<DoneArgT, FailArgT> Then(Action done, Action fail)
         {
-            done_ = (arg) => { if (done != null) { return done(); } return new Deferred().Resolve(arg); };
-            fail_ = (arg) => { if (fail != null) { return fail(); } return new Deferred().Reject(arg); };
+            done_ = (arg) => { if (done != null)done(); return new Deferred<DoneArgT, FailArgT>().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null)fail(); return new Deferred<DoneArgT, FailArgT>().Reject(arg); };
             return thenExec_();
         }
-        public Deferred Then(Action done, Action fail)
+        public Deferred<DoneArgT, FailArgT> Then<T1, T2>(Action<T1> done, Action<T2> fail)
         {
-            done_ = (arg) => { if (done != null)done(); return new Deferred().Resolve(arg); };
-            fail_ = (arg) => { if (fail != null)fail(); return new Deferred().Reject(arg); };
+            done_ = (arg) => { if (done != null)done((T1)arg); return new Deferred<DoneArgT, FailArgT>().Resolve(arg); };
+            fail_ = (arg) => { if (fail != null)fail((T2)arg); return new Deferred<DoneArgT, FailArgT>().Reject(arg); };
             return thenExec_();
         }
-        public Deferred Then<T1, T2>(Action<T1> done, Action<T2> fail)
+
+        public Deferred<DoneArgT, FailArgT> Then<T>(Func<T, Deferred<DoneArgT, FailArgT>> done)
         {
-            done_ = (arg) => { if (done != null)done((T1)arg); return new Deferred().Resolve(arg); };
-            fail_ = (arg) => { if (fail != null)fail((T2)arg); return new Deferred().Reject(arg); };
-            return thenExec_();
+            return Then(done, (Func<T, Deferred<DoneArgT, FailArgT>>)null);
         }
-        
-        public Deferred Then<T>(Func<T, Deferred> done)
+        public Deferred<DoneArgT, FailArgT> Then(Func<Deferred<DoneArgT, FailArgT>> done)
         {
-            return Then(done, (Func<T, Deferred>)null);
+            return Then(done, (Func<Deferred<DoneArgT, FailArgT>>)null);
         }
-        public Deferred Then(Func<Deferred> done)
-        {
-            return Then(done, (Func<Deferred>)null);
-        }
-        public Deferred Then(Action done)
+        public Deferred<DoneArgT, FailArgT> Then(Action done)
         {
             return Then(done, (Action)null);
         }
-        public Deferred Then<T>(Action<T> done)
+        public Deferred<DoneArgT, FailArgT> Then<T>(Action<T> done)
         {
             return Then<T, object>(done, (Action<object>)null);
         }
-        protected Deferred thenExec_()
+        protected Deferred<DoneArgT, FailArgT> thenExec_()
         {
             if (state_ == State.Pending)
             {
@@ -455,7 +730,7 @@ namespace qiMessaging
                 return fail_(arg_);
             }
             //非同期実行の為に自分のResolveやRejectが呼ばれたときの次の処理を登録する為のdfdを作ります
-            var callbackDfd = new Deferred();
+            var callbackDfd = new Deferred<DoneArgT, FailArgT>();
 
             var doneOrg = done_;
             var failOrg = fail_;
@@ -467,6 +742,7 @@ namespace qiMessaging
             };
             return callbackDfd;
         }
+#endif
 
         #region テストコード
         /// <summary>
@@ -485,14 +761,14 @@ namespace qiMessaging
                 dfd2.Resolve();
 
                 return dfd2
-                .Then<object>((obj2) =>
+                .Then((obj2) =>
                 {
                     System.Diagnostics.Debug.WriteLine("3:arg");
                 })
                 .Then(() => { 
                     System.Diagnostics.Debug.WriteLine("4:");
                 })
-                .Then<object>((a) => { 
+                .Then((a) => { 
                     System.Diagnostics.Debug.WriteLine("5:");
                 })
                 .Then(() => {
@@ -517,7 +793,7 @@ namespace qiMessaging
                 })
                 ;
             })
-            .Then<object>((obj)=>{
+            .Then((obj)=>{
                 System.Diagnostics.Debug.WriteLine("100:");
             });
 
