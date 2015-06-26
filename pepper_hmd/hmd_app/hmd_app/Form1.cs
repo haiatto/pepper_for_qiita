@@ -74,17 +74,34 @@ namespace hmd_app
         {
             if (!qim_.IsConnected) return;
 
+            qiUt_.GetJointAngleTable()
+            .Then((angleTable) =>
+            {
+                var angleYaw = angleTable["HeadYaw"];
+                var anglePitch = angleTable["HeadPitch"];
+
+                qim_.Service("ALMotion").Then((almotion) =>
+                {
+                    almotion.methods["setAngles"](
+                        new string[] { "HeadYaw", "HeadPitch" },
+                        new float[] { angleYaw - 0.1f, anglePitch + 0.1f },
+                        0.1f);
+                });
+            });
+
+            return;
 
             qiUt_.GetJointAngleTable()
             .Then((angleTable) =>
             {
+                var angleYaw   = angleTable["HeadYaw"];
+                var anglePitch = angleTable["HeadPitch"];
+
                 qim_.Service("ALMotion").Then((almotion)=>{
-                    //almotion.methods[""]()
-                    //.Then(almotion.methods[""]())
-                    //;
-                    
-                    //angleTable["HeadYaw"];
-                    //angleTable["HeadPitch"];
+                    almotion.methods["setAngles"](
+                        new string[] { "HeadYaw", "HeadPitch" },
+                        new float[] { angleYaw + 0.1f, anglePitch + 0.1f },
+                        0.1f);
                 });
             })
             .Then(qiUt_.MakeFunc_GetService("ALMotion"), () => { })

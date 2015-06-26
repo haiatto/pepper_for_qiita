@@ -183,7 +183,14 @@ namespace qiMessaging
                 if (data["idm"] != null)
                 {
                     var idm = data["idm"].Cast<long>();
-                    dfdTbl_[idm].Reject(data["result"]);
+                    if (dfdTbl_[idm].dfd is Deferred<QiServiceJsonData, JsonData>)
+                    {
+                        (dfdTbl_[idm].dfd as Deferred<QiServiceJsonData, JsonData>).Reject(data["result"]);
+                    }
+                    else
+                    {
+                        (dfdTbl_[idm].dfd as Deferred<JsonData, JsonData>).Reject(data["result"]);
+                    }
                     dfdTbl_.Remove(idm);
                 }
 
@@ -225,7 +232,7 @@ namespace qiMessaging
                         o[signalName] = new JsonData(o.signals[signalName]);
                     }
 
-                    dfdTbl_[idm].Resolve(o);
+                    (dfdTbl_[idm].dfd as Deferred<QiServiceJsonData,JsonData>).Resolve(o);
                 }
                 else
                 {
@@ -234,7 +241,7 @@ namespace qiMessaging
                         var cbi = dfdTbl_[idm].cbi;
                         sigTbl_[cbi.obj][cbi.signal][data["result"].As<string>()] = cbi.cb;
                     }
-                    dfdTbl_[idm].Resolve(data["result"]);
+                    (dfdTbl_[idm].dfd as Deferred<JsonData,JsonData>).Resolve(data["result"]);
                 }
                 dfdTbl_.Remove(idm);
             });
@@ -267,13 +274,22 @@ namespace qiMessaging
             public string signal;
             public string cb;
         }
-        protected class DeferredWithCbi : Deferred<JsonData, JsonData>
+        //protected class DeferredWithCbi : DeferredWithCbi<JsonData, JsonData>
+        //{
+        //}
+        protected class DeferredWithCbi<A,B> : Deferred<A, B>
         {
             public Cbi cbi;
         }
+        protected class DfdInfo
+        {
+            public object dfd;
+            public Cbi cbi;
+        }
+        
 
         int idm_ = 0;
-        Dictionary<long, DeferredWithCbi> dfdTbl_ = new Dictionary<long, DeferredWithCbi>();
+        Dictionary<long, DfdInfo> dfdTbl_ = new Dictionary<long, DfdInfo>();
         Dictionary<long, Dictionary<string, Dictionary<string, object>>> sigTbl_ = new Dictionary<long, Dictionary<string, Dictionary<string, object>>>();
 
         protected FuncArgv<Deferred<DoneArgT, FailArgT>, object> createMetaCall_<DoneArgT, FailArgT>(object obj, string method, Cbi cbi)
@@ -281,7 +297,8 @@ namespace qiMessaging
             return (argments) =>
             {
                 var idm = ++idm_;
-                dfdTbl_[idm] = new DeferredWithCbi();
+                dfdTbl_[idm] = new DfdInfo();
+                dfdTbl_[idm].dfd = new Deferred<DoneArgT, FailArgT>();
 
                 if (method == "registerEvent")
                 {
@@ -299,7 +316,7 @@ namespace qiMessaging
                 }
                 client_.Emit("call", jsonData.JsonDataRaw);
 
-                return dfdTbl_[idm] as Deferred<DoneArgT, FailArgT>;
+                return dfdTbl_[idm].dfd as Deferred<DoneArgT, FailArgT>;
             };
         }
         protected QiSignal createMetaSignal_(long obj, string signal)
