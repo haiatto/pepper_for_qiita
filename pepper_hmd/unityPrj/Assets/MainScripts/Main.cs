@@ -1,21 +1,25 @@
 ﻿using UnityEngine;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading;
 using qiMessaging;
+using NaoQiUtils;
 
-public class Main : MonoBehaviour {
-
+public class Main : SingletonMonoBehaviour<Main>
+{
     public string Url = "http://192.168.11.20/libs/qimessaging/1.0";
 
     Thread thread_;
 
     QiMessaging qim_;
+    QiUt        qiUt_;
     PepperCamera pcamTop_;
     PepperCamera pcamBottom_;
 
     Texture2D cameraTextureTop_;
     Texture2D cameraTextureBottom_;
+
     public Texture2D CameraTextureTop
     {
         get { return cameraTextureTop_; }
@@ -25,11 +29,23 @@ public class Main : MonoBehaviour {
         get { return cameraTextureBottom_; }
     }
 
+    bool isUpdateImageDataTop_;
+    bool isUpdateImageDataBottom_;
     PepperCamera.ImageData imageDataTop_;
     PepperCamera.ImageData imageDataBottom_;
 
+    Dictionary<string, float> jointAngleTbl_;
+
+    public Dictionary<string, float> JointAngleTbl
+    {
+        get { return jointAngleTbl_; }
+    }
+
+    #region 基礎部分
+
     void Awake()
     {
+        SetInstance(this);
     }
     void OnApplicationQuit()
     {
@@ -39,6 +55,8 @@ public class Main : MonoBehaviour {
         pcamTop_ = null;
         pcamBottom_ = null;
         print("Thread quit...");
+
+        ClearInstance();
     }    
 	void Start () {
         print("start...");
@@ -47,23 +65,39 @@ public class Main : MonoBehaviour {
         thread_.Start();
         print("Thread done...");
     }
-    void Update()
-    {
-        if (imageDataTop_!=null)
-        {
-            cameraTextureTop_ = createTexImage_(imageDataTop_);
-            GetComponent<Renderer>().material.mainTexture = cameraTextureTop_;
-        }
-        if (imageDataBottom_ != null)
-        {
-            cameraTextureBottom_ = createTexImage_(imageDataBottom_);
-        }
-    }
+    #endregion
+
+
+    [Range(-1.5f, 1.5f)]
+    public float TargetHeadYaw;
+    [Range(-1.5f, 1.5f)]
+    public float TargetHeadPitch;
 
     void OnGUI()
     {
     }
 
+    void Update()
+    {
+        if (imageDataTop_ != null && isUpdateImageDataTop_)
+        {
+            cameraTextureTop_ = createTexImage_(imageDataTop_);
+            isUpdateImageDataTop_ = false;
+        }
+        if (imageDataBottom_ != null && isUpdateImageDataBottom_)
+        {
+            cameraTextureBottom_ = createTexImage_(imageDataBottom_);
+            isUpdateImageDataBottom_ = false;
+        }
+        if (jointAngleTbl_ != null)
+        {
+            var yaw = jointAngleTbl_["HeadYaw"] * Mathf.Rad2Deg;
+            var pitch = jointAngleTbl_["HeadPitch"] * Mathf.Rad2Deg;
+            this.transform.eulerAngles = new Vector3(pitch,yaw,0);
+        }
+    }
+
+    #region createTexImage_
     Texture2D createTexImage_(PepperCamera.ImageData imageData)
     {
         if (imageData == null) return null;
@@ -90,31 +124,18 @@ public class Main : MonoBehaviour {
         }
         return texture;
     }
+    #endregion
 
-    void MainLoop()
+    #region Connect()
+    void Connect()
     {
-        print("MainLoop...");
+        var dfd = new Deferred<QiMessaging, string>();
 
-        qim_ = new QiMessaging();
-        pcamTop_ = new PepperCamera(qim_);
-        pcamBottom_ = new PepperCamera(qim_);
-        pcamTop_.Option = new PepperCamera.OptionT {name="uniA", cam=0, };
-        pcamBottom_.Option = new PepperCamera.OptionT { name = "uniB", cam = 1, };
-
-        var dfd = new Deferred();
-
-        dfd.Then<QiMessaging>((qim) =>
+        dfd.Then((qim) =>
         {
-            qim.Service("ALTextToSpeech").Then<QiServiceJsonData>((alTTS) =>
+            qim.Service("ALTextToSpeech").Then((alTTS) =>
             {
-                var dfd2 = new Deferred();
-
                 alTTS.methods["say"]("ぺっぷオー");
-
-                pcamTop_.Subscribe();
-                pcamBottom_.Subscribe();
-
-                return dfd2;
             });
         });
 
@@ -139,207 +160,114 @@ public class Main : MonoBehaviour {
             Thread.Sleep(10);
         }
         print("connected...");
+    }
+    #endregion
+
+    void MainLoop()
+    {
+        print("MainLoop...");
+
+        qim_ = new QiMessaging();
+        qiUt_ = new QiUt(qim_);
+        pcamTop_ = new PepperCamera(qim_);
+        pcamBottom_ = new PepperCamera(qim_);
+        pcamTop_.Option = new PepperCamera.OptionT { name = "uniA", cam = 0, };
+        pcamBottom_.Option = new PepperCamera.OptionT { name = "uniB", cam = 1, };
+
+        //接続
+        Connect();
+
+        pcamTop_.Subscribe();
+        pcamBottom_.Subscribe();
 
         //ループ
         while (true)
         {
             if (!qim_.IsConnected) continue;
-#if false
-            //ここらへんに色々角度などの取得を
-            # Example showing how to get the position of the top camera
-    name            = "CameraTop"
-    frame           = motion.FRAME_WORLD
-    useSensorValues = True
-    result          = motionProxy.getPosition(name, frame, useSensorValues)
-    print "Position of", name, " in World is:"
-    print result
 
-        getSensorNames
+            Debug.Log("loop");
 
-        
-    # Example showing how to get the end of the right arm as a transform
-    # represented in torso space. The result is a 4 by 4 matrix composed
-    # of a 3*3 rotation matrix and a column vector of positions.
-    name  = 'RArm'
-    frame  = motion.FRAME_TORSO
-    useSensorValues  = True
-    result = motionProxy.getTransform(name, frame, useSensorValues)
-    for i in range(0, 4):
-        for j in range(0, 4):
-            print result[4*i + j],
-        print ''
-#endif
-
-            qim_.Service("ALMotion").Then<QiServiceJsonData>((alMotion) =>
+            if(jointAngleTbl_!=null)
             {
-                var dfd2 = new Deferred();
+                if( (TargetHeadYaw != jointAngleTbl_["HeadYaw"])||
+                    (TargetHeadPitch != jointAngleTbl_["HeadPitch"]))
+                {
+                    qim_.Service("ALMotion").Then((alMotion) =>
+                    {
+                        Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
+                        alMotion.methods["setAngles"](
+                            new string[] { "HeadYaw", "HeadPitch" },
+                            new float[] { TargetHeadYaw, TargetHeadPitch },
+                            0.2f);
+                    });
+                }
+            }
 
-                alMotion.methods["getPosition"](name,WaitForEndOfFrame,);
-
-                return dfd2;
+            //ここらへんに色々角度などの取得を
+            qiUt_.GetJointAngleTable().Then((angles)=>{
+                jointAngleTbl_ = angles;
             });
 
 
             // カメラ画像を取り出します
             var syncA = false;
             var syncB = false;
-            var bOkA = pcamTop_.CaptureImage((imageData) =>
+            var errorA = false;
+            var errorB = false;
+            pcamTop_.CaptureImage().Then((imageData) =>
             {
                 if (imageDataTop_ == null)
                 {
                     imageDataTop_ = imageData;
+                    isUpdateImageDataTop_ = true;
                 }
                 else
                 {
                     lock (imageDataTop_)
                     {
                         imageDataTop_ = imageData;
+                        isUpdateImageDataTop_ = true;
                     }
                 }
                 syncA = true;
-            });
-            var bOkB = pcamBottom_.CaptureImage((imageData) =>
+            },
+            (error)=>{
+                errorA=true;
+            }
+            );
+            pcamBottom_.CaptureImage().Then((imageData) =>
             {
                 if (imageDataBottom_ == null)
                 {
                     imageDataBottom_  = imageData;
+                    isUpdateImageDataBottom_ = true;
                 }
                 else
                 {
                     lock (imageDataBottom_)
                     {
                         imageDataBottom_ = imageData;
+                        isUpdateImageDataBottom_ = true;
                     }
                 }
                 syncB = true;
-            });
-            if (!bOkA || !bOkB)
+            },
+            (error) =>
             {
-                Thread.Sleep(1000);
+                errorB = true;
             }
-            else
+            );
+
+            while (!syncA && !syncB)
             {
-                while (!syncA && !syncB)
+                if (errorA || errorB)
                 {
-                    Thread.Sleep(10);
+                    Thread.Sleep(1000);
+                    break;
                 }
+                Thread.Sleep(10);
             }
+            Thread.Sleep(100);
         }
-    }
-}
-
-
-public class PepperCamera
-{
-    QiMessaging qim_;
-    QiServiceJsonData alVideoDevice_;
-    string nameId_;
-
-    public class OptionT
-    {
-        public string name = "pepper_cs_cam";
-        public int cam = 0;  // nao_top
-        public int reso = 1;  // 320x240
-        public int color = 11; // Rgb
-        public int frame_rate = 5; // frame_rate
-    }
-
-    public class ImageData
-    {
-        public int w;
-        public int h;
-        public int camId;
-        public double camLRad;
-        public double camTRad;
-        public double camRRad;
-        public double camBRad;
-        public byte[] pixels;
-    }
-
-    public OptionT Option = new OptionT();
-
-    public PepperCamera(QiMessaging qim)
-    {
-        qim_ = qim;
-    }
-
-    public Deferred Subscribe()
-    {
-        return qim_.Service("ALVideoDevice")
-        .Then<QiServiceJsonData>((ins) =>
-        {
-            alVideoDevice_ = ins;
-        })
-        .Then(() =>
-        {
-            return alVideoDevice_.methods["getSubscribers"]().Then<JsonData>((list) =>
-            {
-                // 6個まで制限があるそうなのでゴミ掃除
-                foreach (var v in list.JsonList)
-                {
-                    if (v.As<string>().IndexOf(Option.name) == 0)//とりあえず前方一致で同じと判断してみる
-                    {
-                        alVideoDevice_.methods["unsubscribe"](v.JsonDataRaw);
-                    }
-                }
-            })
-            .Then(() =>
-            {
-                return alVideoDevice_.methods["subscribeCamera"](
-                    Option.name,
-                    Option.cam,
-                    Option.reso,
-                    Option.color,
-                    Option.frame_rate
-                );
-            })
-            .Then<JsonData>((nameId) =>
-            {
-                nameId_ = nameId.As<string>();
-            });
-        });
-    }
-    public void Unsubscribe()
-    {
-        alVideoDevice_.methods["Unsubscribe"](nameId_);
-        nameId_ = null;
-    }
-    public bool CaptureImage(Action<ImageData> callback)
-    {
-        if (nameId_ != null && nameId_.Length > 0)
-        {
-            alVideoDevice_.methods["getImageRemote"](nameId_).Then<JsonData>((data) =>
-            {
-                if (data != null)
-                {
-                    /*
-                    [0]: width.
-                    [1]: height.
-                    [2]: number of layers.
-                    [3]: ColorSpace.
-                    [4]: time stamp (seconds).
-                    [5]: time stamp (micro-seconds).
-                    [6]: binary array of size height * width * nblayers containing image data.
-                    [7]: camera ID (kTop=0, kBottom=1).
-                    [8]: left angle (radian).
-                    [9]: topAngle (radian).
-                    [10]: rightAngle (radian).
-                    [11]: bottomAngle (radian).
-                    */
-                    var img = new ImageData();
-                    img.w = (int)data.JsonList[0].Cast<long>();
-                    img.h = (int)data.JsonList[1].Cast<long>();
-                    img.pixels = System.Convert.FromBase64String(data.JsonList[6].As<string>());
-                    img.camId = (int)data.JsonList[7].Cast<long>();
-                    img.camLRad = data.JsonList[8].Cast<double>();
-                    img.camTRad = data.JsonList[9].Cast<double>();
-                    img.camRRad = data.JsonList[10].Cast<double>();
-                    img.camBRad = data.JsonList[11].Cast<double>();
-                    callback(img);
-                }
-            });
-            return true;
-        }
-        return false;
     }
 }
