@@ -6,7 +6,7 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
 {
     public CamPlane SrcCamPlanePrefab;
 
-    public float UpdateTime = 1.0f;
+    public float UpdateTime;
     
     protected float timer_;
     
@@ -22,6 +22,7 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
     void Update()
     {
         timer_ -= Time.deltaTime;
+        Debug.Log(timer_);
         if (timer_ < 0)
         {
             timer_ += UpdateTime;
@@ -30,9 +31,24 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
     }
     void PutCamPlane()
     {
-        if (Main.Instance.CameraTextureTop)
+        if (Main.Instance.CameraTextureTop != null)
         {
-            camPlaneLst_.Add(Instantiate(SrcCamPlanePrefab) as CamPlane);
+            var camPlane = Instantiate(SrcCamPlanePrefab) as CamPlane;
+            camPlaneLst_.Add(camPlane);
+
+            camPlane.CamTexture = Main.Instance.CameraTextureTop;
+
+            if (Main.Instance.JointAngleTbl != null)
+            {
+                var yaw = Main.Instance.JointAngleTbl["HeadYaw"] * Mathf.Rad2Deg;
+                var pitch = Main.Instance.JointAngleTbl["HeadPitch"] * Mathf.Rad2Deg;
+                camPlane.transform.Rotate(new Vector3(pitch, yaw, 0));
+            }
+        }
+        if (camPlaneLst_.Count > 30)
+        {
+            GameObject.Destroy(camPlaneLst_[0].gameObject);
+            camPlaneLst_.RemoveAt(0);
         }
     }
 }

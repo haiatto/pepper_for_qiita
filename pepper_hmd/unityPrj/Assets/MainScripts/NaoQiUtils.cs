@@ -86,7 +86,7 @@ namespace NaoQiUtils
             public int cam = 0;  // nao_top
             public int reso = 1;  // 320x240
             public int color = 11; // Rgb
-            public int frame_rate = 5; // frame_rate
+            public int frame_rate = 30; // frame_rate
         }
 
         public class ImageData

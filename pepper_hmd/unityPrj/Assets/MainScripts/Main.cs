@@ -187,28 +187,6 @@ public class Main : SingletonMonoBehaviour<Main>
 
             Debug.Log("loop");
 
-            if(jointAngleTbl_!=null)
-            {
-                if( (TargetHeadYaw != jointAngleTbl_["HeadYaw"])||
-                    (TargetHeadPitch != jointAngleTbl_["HeadPitch"]))
-                {
-                    qim_.Service("ALMotion").Then((alMotion) =>
-                    {
-                        Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
-                        alMotion.methods["setAngles"](
-                            new string[] { "HeadYaw", "HeadPitch" },
-                            new float[] { TargetHeadYaw, TargetHeadPitch },
-                            0.2f);
-                    });
-                }
-            }
-
-            //ここらへんに色々角度などの取得を
-            qiUt_.GetJointAngleTable().Then((angles)=>{
-                jointAngleTbl_ = angles;
-            });
-
-
             // カメラ画像を取り出します
             var syncA = false;
             var syncB = false;
@@ -240,14 +218,12 @@ public class Main : SingletonMonoBehaviour<Main>
                 if (imageDataBottom_ == null)
                 {
                     imageDataBottom_  = imageData;
-                    isUpdateImageDataBottom_ = true;
                 }
                 else
                 {
                     lock (imageDataBottom_)
                     {
                         imageDataBottom_ = imageData;
-                        isUpdateImageDataBottom_ = true;
                     }
                 }
                 syncB = true;
@@ -267,6 +243,63 @@ public class Main : SingletonMonoBehaviour<Main>
                 }
                 Thread.Sleep(10);
             }
+
+            //ここらへんに色々角度などの取得を
+            Func <Deferred<object,object>> moveTargetAngle = () =>
+            {
+                var dfd = new Deferred<object, object>();
+                if (jointAngleTbl_ != null)
+                {
+                    if ((TargetHeadYaw != jointAngleTbl_["HeadYaw"]) ||
+                        (TargetHeadPitch != jointAngleTbl_["HeadPitch"]))
+                    {
+                        qim_.Service("ALMotion").Then((alMotion) =>
+                        {
+                            Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
+                            alMotion.methods["setAngles"](
+                                new string[] { "HeadYaw", "HeadPitch" },
+                                new float[] { TargetHeadYaw, TargetHeadPitch },
+                                0.3f);
+                            dfd.Resolve();
+                        });
+                    }
+                }
+                return dfd;
+            };
+
+            // いろいろな情報の更新をします
+
+            var updateDfd = new Deferred();
+            updateDfd
+#if false
+                .Then(()=>
+                    {
+                        return qiUt_.GetJointAngleTable()
+                        .Then((angles) =>
+                        {
+                            jointAngleTbl_ = angles;
+                        });
+                    })
+#endif
+                .Then(() =>
+                {
+                    //カメラ画像を更新
+                    if (imageDataBottom_!=null)
+                    {
+                        isUpdateImageDataBottom_ = true;
+                    }
+                    if (imageDataTop_ != null)
+                    {
+                        isUpdateImageDataTop_ = true;
+                    }
+                })
+#if false
+                .Then(moveTargetAngle)
+#endif
+                ;
+            // 更新開始！
+            updateDfd.Resolve();
+
             Thread.Sleep(100);
         }
     }
