@@ -22,7 +22,7 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
     void Update()
     {
         timer_ -= Time.deltaTime;
-        Debug.Log(timer_);
+        //Debug.Log(timer_);
         if (timer_ < 0)
         {
             timer_ += UpdateTime;
@@ -37,15 +37,29 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
             camPlaneLst_.Add(camPlane);
 
             camPlane.CamTexture = Main.Instance.CameraTextureTop;
-
             if (Main.Instance.JointAngleTbl != null)
             {
                 var yaw = Main.Instance.JointAngleTbl["HeadYaw"] * Mathf.Rad2Deg;
                 var pitch = Main.Instance.JointAngleTbl["HeadPitch"] * Mathf.Rad2Deg;
-                camPlane.transform.Rotate(new Vector3(pitch, yaw, 0));
+                camPlane.transform.Rotate(new Vector3(pitch, -yaw, 0));
+                camPlane.transform.Translate(new Vector3(0,1.2f,0));
             }
         }
-        if (camPlaneLst_.Count > 30)
+        if (Main.Instance.CameraTextureBottom != null)
+        {
+            var camPlane = Instantiate(SrcCamPlanePrefab) as CamPlane;
+            camPlaneLst_.Add(camPlane);
+
+            camPlane.CamTexture = Main.Instance.CameraTextureBottom;
+            if (Main.Instance.JointAngleTbl != null)
+            {
+                var yaw = Main.Instance.JointAngleTbl["HeadYaw"] * Mathf.Rad2Deg;
+                var pitch = Main.Instance.JointAngleTbl["HeadPitch"] * Mathf.Rad2Deg + 40.0f;
+                camPlane.transform.Rotate(new Vector3(pitch, -yaw, 0));
+                camPlane.transform.Translate(new Vector3(0, 1.2f, 0));
+            }
+        }
+        while (camPlaneLst_.Count > 30)
         {
             GameObject.Destroy(camPlaneLst_[0].gameObject);
             camPlaneLst_.RemoveAt(0);

@@ -41,6 +41,40 @@ public class Main : SingletonMonoBehaviour<Main>
         get { return jointAngleTbl_; }
     }
 
+    #region LaserPointList 
+    List<Vector2> laserPointList_FrontShovel_;
+    List<Vector2> laserPointList_FrontVerticalLeft_;
+    List<Vector2> laserPointList_FrontVerticalRight_;
+    List<Vector2> laserPointList_FrontHorizontal_;
+    List<Vector2> laserPointList_LeftHorizontal_;
+    List<Vector2> laserPointList_RightHorizontal_;
+
+    public List<Vector2> LaserPointList_FrontShovel
+    {
+        get { return laserPointList_FrontShovel_; }
+    }
+    public List<Vector2> LaserPointList_FrontVerticalLeft
+    {
+        get { return laserPointList_FrontVerticalLeft_; }
+    }
+    public List<Vector2> LaserPointList_FrontVerticalRight
+    {
+        get { return laserPointList_FrontVerticalRight_; }
+    }
+    public List<Vector2> LaserPointList_FrontHorizontal
+    {
+        get { return laserPointList_FrontHorizontal_; }
+    }
+    public List<Vector2> LaserPointList_LeftHorizontal
+    {
+        get { return laserPointList_LeftHorizontal_; }
+    }
+    public List<Vector2> LaserPointList_RightHorizontal
+    {
+        get { return laserPointList_RightHorizontal_; }
+    }
+    #endregion
+
     #region 基礎部分
 
     void Awake()
@@ -70,7 +104,7 @@ public class Main : SingletonMonoBehaviour<Main>
 
     [Range(-1.5f, 1.5f)]
     public float TargetHeadYaw;
-    [Range(-1.5f, 1.5f)]
+    [Range(-0.9f, 0.7f)]
     public float TargetHeadPitch;
 
     void OnGUI()
@@ -185,7 +219,7 @@ public class Main : SingletonMonoBehaviour<Main>
         {
             if (!qim_.IsConnected) continue;
 
-            Debug.Log("loop");
+            //Debug.Log("loop");
 
             // カメラ画像を取り出します
             var syncA = false;
@@ -255,7 +289,7 @@ public class Main : SingletonMonoBehaviour<Main>
                     {
                         qim_.Service("ALMotion").Then((alMotion) =>
                         {
-                            Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
+                            //Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
                             alMotion.methods["setAngles"](
                                 new string[] { "HeadYaw", "HeadPitch" },
                                 new float[] { TargetHeadYaw, TargetHeadPitch },
@@ -271,16 +305,47 @@ public class Main : SingletonMonoBehaviour<Main>
 
             var updateDfd = new Deferred();
             updateDfd
-#if false
                 .Then(()=>
+                {
+                    return qiUt_.GetJointAngleTable()
+                    .Then((angles) =>
                     {
-                        return qiUt_.GetJointAngleTable()
-                        .Then((angles) =>
+                        jointAngleTbl_ = angles;
+                    });
+                })
+                .Then(()=>
+                {
+                    return qiUt_.GetLaserSensorValues()
+                    .Then((laserInfoTbl) =>
+                    {
+                        foreach (var info in laserInfoTbl.Values)
                         {
-                            jointAngleTbl_ = angles;
-                        });
-                    })
-#endif
+                            var laserPoints = new List<Vector2>();
+                            foreach (var value in info.valueList)
+                            {
+                                laserPoints.Add(new Vector2(value.rotatedX, value.rotatedY));
+                            }
+                            if (info.key == "Front/Shovel/"){
+                                laserPointList_FrontShovel_ = laserPoints;
+                            }
+                            if (info.key == "Front/VerticalLeft/"){
+                                laserPointList_FrontVerticalLeft_ = laserPoints;
+                            }
+                            if (info.key == "Front/VerticalRight/"){
+                                laserPointList_FrontVerticalRight_ = laserPoints;
+                            }
+                            if (info.key == "Front/Horizontal/"){
+                                laserPointList_FrontHorizontal_ = laserPoints;
+                            }
+                            if (info.key == "Left/Horizontal/"){
+                                laserPointList_LeftHorizontal_ = laserPoints;
+                            }
+                            if (info.key == "Right/Horizontal/"){
+                                laserPointList_RightHorizontal_ = laserPoints;
+                            }
+                        }
+                    });
+                })
                 .Then(() =>
                 {
                     //カメラ画像を更新
@@ -293,14 +358,12 @@ public class Main : SingletonMonoBehaviour<Main>
                         isUpdateImageDataTop_ = true;
                     }
                 })
-#if false
                 .Then(moveTargetAngle)
-#endif
                 ;
             // 更新開始！
             updateDfd.Resolve();
 
-            Thread.Sleep(100);
+            Thread.Sleep(200);
         }
     }
 }
