@@ -55,8 +55,8 @@ public class CamViewDisp : SingletonMonoBehaviour<MonoBehaviour>
             {
                 var yaw = Main.Instance.JointAngleTbl["HeadYaw"] * Mathf.Rad2Deg;
                 var pitch = Main.Instance.JointAngleTbl["HeadPitch"] * Mathf.Rad2Deg + 40.0f;
-                camPlane.transform.Rotate(new Vector3(pitch, -yaw, 0));
                 camPlane.transform.Translate(new Vector3(0, 1.2f, 0));
+                camPlane.transform.Rotate(new Vector3(pitch, -yaw, 0));
             }
         }
         while (camPlaneLst_.Count > 30)

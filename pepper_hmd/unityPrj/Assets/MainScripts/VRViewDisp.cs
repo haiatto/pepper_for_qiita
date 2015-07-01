@@ -7,7 +7,7 @@ public class VRViewDisp : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-        centerEyeAnchor_ = GameObject.Find("CenterEyeAnchor");
+        centerEyeAnchor_ = GameObject.Find("Main Camera");
 	}
 	
 	// Update is called once per frame
