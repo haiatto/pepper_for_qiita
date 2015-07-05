@@ -34,13 +34,6 @@ public class Main : SingletonMonoBehaviour<Main>
     PepperCamera.ImageData imageDataTop_;
     PepperCamera.ImageData imageDataBottom_;
 
-    Dictionary<string, float> jointAngleTbl_;
-
-    public Dictionary<string, float> JointAngleTbl
-    {
-        get { return jointAngleTbl_; }
-    }
-
     #region LaserPointList 
     List<Vector2> laserPointList_FrontShovel_;
     List<Vector2> laserPointList_FrontVerticalLeft_;
@@ -102,10 +95,71 @@ public class Main : SingletonMonoBehaviour<Main>
     #endregion
 
 
-    [Range(-1.5f, 1.5f)]
-    public float TargetHeadYaw;
-    [Range(-0.9f, 0.7f)]
-    public float TargetHeadPitch;
+    #region 関節部分
+
+    Dictionary<string, float> jointAngleTbl_;
+    Dictionary<string, float> targetJointAngleTbl_ = new Dictionary<string,float>();
+
+    public Dictionary<string, float> JointAngleTbl
+    {
+        get { return jointAngleTbl_; }
+    }
+    public Dictionary<string, float> TargetJointAngleTbl
+    {
+        get { return targetJointAngleTbl_; }
+    }
+
+    public float TargetHeadYaw{
+        get { return targetJointAngleTbl_["HeadYaw"]; }
+        set { targetJointAngleTbl_["HeadYaw"] = value; }
+    }
+    public float TargetHeadPitch{
+        get { return targetJointAngleTbl_["HeadPitch"]; }
+        set { targetJointAngleTbl_["HeadPitch"] = value; }
+    }
+    public float TargetLShoulderPitch{
+        get { return targetJointAngleTbl_["LShoulderPitch"]; }
+        set { targetJointAngleTbl_["LShoulderPitch"] = value; }
+    }
+    public float TargetLElbowYaw{
+        get { return targetJointAngleTbl_["LElbowYaw"]; }
+        set { targetJointAngleTbl_["LElbowYaw"] = value; }
+    }
+    public float TargetLElbowRoll{
+        get { return targetJointAngleTbl_["LElbowRoll"]; }
+        set { targetJointAngleTbl_["LElbowRoll"] = value; }
+    }
+    public float TargetLWristYaw{
+        get { return targetJointAngleTbl_["LWristYaw"]; }
+        set { targetJointAngleTbl_["LWristYaw"] = value; }
+    }
+    public float TargetLHand{
+        get { return targetJointAngleTbl_["LHand"]; }
+        set { targetJointAngleTbl_["LHand"] = value; }
+    }
+    public float TargetRShoulderPitch{
+        get { return targetJointAngleTbl_["RShoulderPitch"]; }
+        set { targetJointAngleTbl_["RShoulderPitch"] = value; }
+    }
+    public float TargetRElbowYaw{
+        get { return targetJointAngleTbl_["RElbowYaw"]; }
+        set { targetJointAngleTbl_["RElbowYaw"] = value; }
+    }
+    public float TargetRElbowRoll{
+        get { return targetJointAngleTbl_["RElbowRoll"]; }
+        set { targetJointAngleTbl_["RElbowRoll"] = value; }
+    }
+    public float TargetRWristYaw{
+        get { return targetJointAngleTbl_["RWristYaw"]; }
+        set { targetJointAngleTbl_["RWristYaw"] = value; }
+    }
+    public float TargetRHand{
+        get { return targetJointAngleTbl_["RHand"]; }
+        set { targetJointAngleTbl_["RHand"] = value; }
+    }
+
+    #endregion
+
 
     void OnGUI()
     {
@@ -211,6 +265,26 @@ public class Main : SingletonMonoBehaviour<Main>
         //接続
         Connect();
 
+        // 初期化
+        {
+            var bOk = false;
+            qiUt_.GetJointAngleTable()
+            .Then((angles) =>
+            {
+                jointAngleTbl_ = angles;
+                foreach(var kv in jointAngleTbl_)
+                {
+                    targetJointAngleTbl_[kv.Key] = kv.Value;
+                }
+            })
+            .Then(()=>
+            {
+                bOk = true;
+            });
+            while(!bOk){
+                Thread.Sleep(10);
+            }
+        }
         pcamTop_.Subscribe();
         pcamBottom_.Subscribe();
 
@@ -282,21 +356,31 @@ public class Main : SingletonMonoBehaviour<Main>
             Func <Deferred<object,object>> moveTargetAngle = () =>
             {
                 var dfd = new Deferred<object, object>();
-                if (jointAngleTbl_ != null)
+                var keyLst = new List<string>();
+                var valueLst = new List<float>();
+                foreach(var jointAngleKv in jointAngleTbl_)
                 {
-                    if ((TargetHeadYaw != jointAngleTbl_["HeadYaw"]) ||
-                        (TargetHeadPitch != jointAngleTbl_["HeadPitch"]))
+                    var tgtVal = targetJointAngleTbl_[jointAngleKv.Key];
+                    if(Mathf.Abs(tgtVal-jointAngleKv.Value)>0.01f)
                     {
-                        qim_.Service("ALMotion").Then((alMotion) =>
-                        {
-                            //Debug.Log(string.Format("yaw{0} {1}", jointAngleTbl_["HeadYaw"], TargetHeadYaw));
-                            alMotion.methods["setAngles"](
-                                new string[] { "HeadYaw", "HeadPitch" },
-                                new float[] { TargetHeadYaw, TargetHeadPitch },
-                                0.3f);
+                        Debug.Log(string.Format("{0} {1}=>{2}", jointAngleKv.Key, jointAngleKv.Value,tgtVal));
+                        keyLst.Add(jointAngleKv.Key);
+                        valueLst.Add(tgtVal);
+                    }
+                }
+                if (keyLst.Count > 0)
+                {
+                    qim_.Service("ALMotion").Then((alMotion) =>
+                    {
+                        alMotion.methods["setAngles"](keyLst.ToArray(), valueLst.ToArray(), 0.5f)
+                        .Then(()=>{
                             dfd.Resolve();
                         });
-                    }
+                    });
+                }
+                else
+                {
+                    dfd.Resolve();
                 }
                 return dfd;
             };
