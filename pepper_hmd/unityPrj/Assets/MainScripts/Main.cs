@@ -108,7 +108,7 @@ public class Main : SingletonMonoBehaviour<Main>
     {
         get { return targetJointAngleTbl_; }
     }
-
+ 
     public float TargetHeadYaw{
         get { return targetJointAngleTbl_["HeadYaw"]; }
         set { targetJointAngleTbl_["HeadYaw"] = value; }
@@ -120,6 +120,10 @@ public class Main : SingletonMonoBehaviour<Main>
     public float TargetLShoulderPitch{
         get { return targetJointAngleTbl_["LShoulderPitch"]; }
         set { targetJointAngleTbl_["LShoulderPitch"] = value; }
+    }
+    public float TargetLShoulderRoll{
+        get { return targetJointAngleTbl_["LShoulderRoll"]; }
+        set { targetJointAngleTbl_["LShoulderRoll"] = value; }
     }
     public float TargetLElbowYaw{
         get { return targetJointAngleTbl_["LElbowYaw"]; }
@@ -141,7 +145,13 @@ public class Main : SingletonMonoBehaviour<Main>
         get { return targetJointAngleTbl_["RShoulderPitch"]; }
         set { targetJointAngleTbl_["RShoulderPitch"] = value; }
     }
-    public float TargetRElbowYaw{
+    public float TargetRShoulderRoll
+    {
+        get { return targetJointAngleTbl_["RShoulderRoll"]; }
+        set { targetJointAngleTbl_["RShoulderRoll"] = value; }
+    }
+    public float TargetRElbowYaw
+    {
         get { return targetJointAngleTbl_["RElbowYaw"]; }
         set { targetJointAngleTbl_["RElbowYaw"] = value; }
     }
@@ -268,16 +278,17 @@ public class Main : SingletonMonoBehaviour<Main>
         // 初期化
         {
             var bOk = false;
-            qiUt_.GetJointAngleTable()
+            qiUt_.ResetAndWakeup()
+            .Then(() => { return qiUt_.GetJointAngleTable(); })
             .Then((angles) =>
             {
                 jointAngleTbl_ = angles;
-                foreach(var kv in jointAngleTbl_)
+                foreach (var kv in jointAngleTbl_)
                 {
                     targetJointAngleTbl_[kv.Key] = kv.Value;
                 }
             })
-            .Then(()=>
+            .Then(() =>
             {
                 bOk = true;
             });
@@ -361,7 +372,7 @@ public class Main : SingletonMonoBehaviour<Main>
                 foreach(var jointAngleKv in jointAngleTbl_)
                 {
                     var tgtVal = targetJointAngleTbl_[jointAngleKv.Key];
-                    if(Mathf.Abs(tgtVal-jointAngleKv.Value)>0.01f)
+                    if(Mathf.Abs(tgtVal-jointAngleKv.Value)>0.05f)
                     {
                         Debug.Log(string.Format("{0} {1}=>{2}", jointAngleKv.Key, jointAngleKv.Value,tgtVal));
                         keyLst.Add(jointAngleKv.Key);

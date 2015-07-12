@@ -29,6 +29,22 @@ namespace NaoQiUtils
             return () => { return qim_.Service(moduleName); };
         }
 
+        #region ResetAndWakeup
+
+        public Deferred<object,object> ResetAndWakeup()
+        {
+            var dfd = new Deferred<object,object>();
+            MakeFunc_GetService("ALMotion")().Then((alMotion) =>
+            {
+                alMotion.methods["rest"]()
+                .Then(() => { return alMotion.methods["wakeUp"](); })
+                .Then(() => { dfd.Resolve(); });
+            });
+            return dfd;
+        }
+
+        #endregion
+
         #region GetJointAngleTable
 
         /// <summary>
