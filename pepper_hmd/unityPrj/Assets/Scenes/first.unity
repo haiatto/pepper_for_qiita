@@ -473,6 +473,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0221fe73a2da2e45a0602b7e24328d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  UrdfXmlAsset: {fileID: 4900000, guid: 53b34e8157390ca4bb4b05434f3614e7, type: 3}
 --- !u!4 &1020809555
 Transform:
   m_ObjectHideFlags: 0
