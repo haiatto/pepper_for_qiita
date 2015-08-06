@@ -8,12 +8,16 @@ using System.Text.RegularExpressions;
 public class PepperModelDisp : MonoBehaviour {
 
     public TextAsset  UrdfXmlAsset;
-    
-    public GameObject RootObj;
-    public Dictionary<string,GameObject> JointObjs = new Dictionary<string,GameObject>();
-    public Dictionary<string,GameObject> LinkObjs = new Dictionary<string,GameObject>();
 
-    #region 
+    public GameObject avatorDebugPointPrefab;
+    public RuntimeAnimatorController animController;
+
+    #region JointObjs,LinkObjs
+    public Dictionary<string, GameObject> JointObjs = new Dictionary<string, GameObject>();
+    public Dictionary<string, GameObject> LinkObjs = new Dictionary<string, GameObject>();
+    #endregion
+
+    #region JointAngles
     public class JointAngle
     {
         internal float angleRad;
@@ -51,11 +55,8 @@ public class PepperModelDisp : MonoBehaviour {
     public Dictionary<string, JointAngle> JointAngles = new Dictionary<string, JointAngle>();
     #endregion
 
-
-	// Use this for initialization
-	void Start () 
+    void createLinkAndJoint_()
     {
-        LoadUrdf();
         foreach (var linkKv in links_)
         {
             var obj = new GameObject();
@@ -68,7 +69,7 @@ public class PepperModelDisp : MonoBehaviour {
 
                 var visibleObj = new GameObject();
                 visibleObj.name = "visibleRoot";
-                visibleObj.transform.SetParent(obj.transform,false);
+                visibleObj.transform.SetParent(obj.transform, false);
                 visibleObj.transform.localScale = changeScaleVector3_(info.Visual.geometry.scale);
 
                 var m = Regex.Match(info.Visual.geometry.filename, "package://(.+)\\.dae");
@@ -89,49 +90,227 @@ public class PepperModelDisp : MonoBehaviour {
             obj.name = "joint#" + info.Name;
             obj.transform.localPosition = changeCoordVector3_(info.origin.xyz);
             obj.transform.localRotation = changeAngleQuaternion_(info.origin.rpy);
-            
+
             var parentObj = LinkObjs[info.parentLink];
-            var childObj  = LinkObjs[info.childLink];
-            if (parentObj!=null)
+            var childObj = LinkObjs[info.childLink];
+            if (parentObj != null)
             {
                 obj.transform.SetParent(parentObj.transform, false);
             }
-            if (childObj!= null)
+            if (childObj != null)
             {
                 childObj.transform.SetParent(obj.transform, false);
             }
 
             JointObjs[jointKv.Key] = obj;
-            JointAngles[jointKv.Key] = new JointAngle(){
+            JointAngles[jointKv.Key] = new JointAngle()
+            {
                 jointObj = obj,
                 jointInfo = info,
                 angleRad = 0
             };
         }
     }
+
+
+    #region Avatar
+
+    GameObject avatarObj_;
+    Avatar     avatar_;
+    Animator   animator_;
+
+    class AvatorJointLink_
+    {
+        public string jointParent;
+        public string joint;
+    };
+
+    /// <summary>
+    /// ペッパーのモデルとUnityのMecanimeシステムを間接的に関連付ける為の中継用のモデルを作ります
+    /// </summary>
+    /// <remarks>
+    /// ロボは関節が回転方向毎に用意されていたりと実際のロボットとの違いがあるので間接的にしています
+    /// </remarks>
+    void createAvatar_()
+    {
+        var gameObjTbl = new Dictionary<string, GameObject>();
+        var humanLst = new List<HumanBone>();
+        var skeletonLst = new List<SkeletonBone>();
+
+        System.Func<string, GameObject, HumanBone> createHumanBone = (key, obj) =>
+        {
+            HumanBone human_bone = new HumanBone();
+            human_bone.humanName = key;
+            human_bone.boneName = obj.name;
+            human_bone.limit.useDefaultValues = true;
+            return human_bone;
+        };
+        System.Func<GameObject, SkeletonBone> createSkeletonBone = (obj) =>
+        {
+            SkeletonBone skeleton_bone = new SkeletonBone();
+            skeleton_bone.name = obj.name;
+            Transform transform = obj.transform;
+            skeleton_bone.position = transform.localPosition;
+            skeleton_bone.rotation = transform.localRotation;
+            skeleton_bone.scale = transform.localScale;
+            return skeleton_bone;
+        };
+
+        System.Action<string, string, AvatorJointLink_> addBone = (name, parentName, avatorJointLink) =>
+        {
+            GameObject gameObj = new GameObject();
+            gameObj.name = name;
+            gameObj.transform.name = gameObj.name;
+            gameObjTbl[gameObj.name] = gameObj;
+            if (avatorJointLink.joint != null)
+            {
+                var tr = JointObjs[avatorJointLink.joint].transform;
+                var trP = JointObjs[avatorJointLink.jointParent].transform;
+                gameObj.transform.localRotation = tr.rotation * Quaternion.Inverse(trP.rotation);
+                gameObj.transform.localPosition = tr.position - trP.position;
+                //tr.rotation;
+                //trP.rotation;
+                //  親子の関係回転のｑをもとに回転のねじれ文をだして、
+                //  その分逆回転させて、移動量だすかんじ？
+            }
+            else
+            {
+                //長さゼロにしたら色んな所にInfが混ざって死んだので…仕方なくオフセットしておきます
+                //(まあ実際に使われない部分なので問題なし)
+                gameObj.transform.localPosition = new Vector3(0, -0.01f, 0);
+            }
+            if (parentName != null)
+            {
+                gameObj.transform.SetParent(gameObjTbl[parentName].transform, false);
+            }
+            else
+            {
+                gameObj.transform.SetParent(avatarObj_.transform, false);
+            }
+            if (avatorDebugPointPrefab != null)
+            {
+                var debugPoint = Instantiate(avatorDebugPointPrefab);
+                debugPoint.transform.SetParent(gameObj.transform, false);
+            }
+            var humanBone = new HumanBone();
+            {
+                humanBone.humanName = name;
+                humanBone.boneName = gameObj.name;
+                humanBone.limit.useDefaultValues = false;
+                if (avatorJointLink.joint != null)
+                {
+                    humanBone.limit.min = new Vector3(-9, -9, -9);
+                    humanBone.limit.max = new Vector3(90, 90, 90);
+                    humanBone.limit.center = new Vector3(30, 30, 30);
+                    humanBone.limit.axisLength = 0;
+                }
+                else
+                {
+                    humanBone.limit.max = new Vector3(0, 0, 0);
+                    humanBone.limit.min = new Vector3(0, 0, 0);
+                    humanBone.limit.axisLength = 0;
+                }
+            }
+            var skeltonBone = new SkeletonBone();
+            {
+                skeltonBone.name = gameObj.name;
+                Transform transform = gameObj.transform;
+                skeltonBone.position = transform.localPosition;
+                skeltonBone.rotation = transform.localRotation;
+                skeltonBone.scale = transform.localScale;
+            }
+            humanLst.Add(humanBone);
+            skeletonLst.Add(skeltonBone);
+        };
+        avatarObj_ = new GameObject();
+        avatarObj_.name = "Root";
+        skeletonLst.Add(createSkeletonBone(avatarObj_));
+
+        //顔系
+        addBone("Hips", null, new AvatorJointLink_() { joint = "HipRoll", jointParent = "base_link_fixedjoint", });//ヒップ◆
+        addBone("Spine", "Hips", new AvatorJointLink_() { });//背骨◆
+        addBone("Head", "Spine", new AvatorJointLink_() { joint = "HeadYaw", jointParent = "HipRoll", });//頭◆
+
+        //足系
+        addBone("LeftUpperLeg", "Hips", new AvatorJointLink_() { joint = "KneePitch", jointParent = "HipRoll", });	//左脚上部◆
+        addBone("RightUpperLeg", "Hips", new AvatorJointLink_() { joint = "KneePitch", jointParent = "HipRoll", });	//右脚上部◆
+
+        addBone("LeftLowerLeg", "LeftUpperLeg",   new AvatorJointLink_() { });	//左脚◆
+        addBone("RightLowerLeg", "RightUpperLeg", new AvatorJointLink_() { });	//右脚◆
+
+        addBone("LeftFoot", "LeftLowerLeg",   new AvatorJointLink_() { });	//左足◆
+        addBone("RightFoot", "RightLowerLeg", new AvatorJointLink_() { });	//右足◆
+
+        //手系
+        addBone("LeftUpperArm", "Spine", new AvatorJointLink_() { joint = "LShoulderPitch", jointParent = "HipRoll", });	//左腕上部◆
+        addBone("RightUpperArm", "Spine", new AvatorJointLink_() { joint = "RShoulderPitch", jointParent = "HipRoll", });	//右腕上部◆
+        addBone("LeftLowerArm", "LeftUpperArm", new AvatorJointLink_() { joint = "LElbowYaw", jointParent = "LShoulderPitch", });	//左腕◆
+        addBone("RightLowerArm", "RightUpperArm", new AvatorJointLink_() { joint = "RElbowYaw", jointParent = "RShoulderPitch", });	//右腕◆
+        addBone("LeftHand", "LeftLowerArm", new AvatorJointLink_() { joint = "LWristYaw", jointParent = "LElbowYaw", });	//左手◆
+        addBone("RightHand", "RightLowerArm", new AvatorJointLink_() { joint = "RWristYaw", jointParent = "RElbowYaw", });	//右手◆
+
+        //アバターを作成します
+        var humanDesc = new HumanDescription();
+        humanDesc.human = humanLst.ToArray();
+        humanDesc.skeleton = skeletonLst.ToArray();
+        humanDesc.lowerArmTwist = 0.0f;
+        humanDesc.upperArmTwist = 0.0f;
+        humanDesc.upperLegTwist = 0.0f;
+        humanDesc.lowerLegTwist = 0.0f;
+        humanDesc.armStretch = 0.0f;
+        humanDesc.legStretch = 0.0f;
+        humanDesc.feetSpacing = 0.0f;
+        avatar_ = AvatarBuilder.BuildHumanAvatar(avatarObj_, humanDesc);
+
+        //TEST
+        //AssetDatabase.CreateAsset(avatar_, "Assets/test.avatar.asset");
+
+        //アバターをアニメーターに設定します
+        animator_ = avatarObj_.AddComponent<Animator>();
+        animator_.avatar = avatar_;
+        //        animator_.runtimeAnimatorController = animController;
+        animator_.runtimeAnimatorController = Instantiate<RuntimeAnimatorController>(animController);
+    }
+    #endregion 
+
+    // Use this for initialization
+	void Start () 
+    {
+        LoadUrdf();
+        createLinkAndJoint_();
+
+        JointAngles["LShoulderRoll"].AngleDeg = 90;
+        JointAngles["RShoulderRoll"].AngleDeg = -90;
+
+        createAvatar_();
+    }
+
+    void OnGUI()
+    {
+        GUI.Box(new Rect(Screen.width - 260, 10, 250, 150), "Info");
+        GUI.Label(new Rect(Screen.width - 245, 130, 250, 30), "XXX");
+
+    }
 	
 	// Update is called once per frame
 	void Update () {
-        JointAngles["HeadYaw"].AngleDeg = 0;
-        JointAngles["HeadPitch"].AngleDeg = 0;
-        JointAngles["HipRoll"].AngleDeg = 0;
-        JointAngles["HipPitch"].AngleDeg = 0;
-        JointAngles["KneePitch"].AngleDeg = 0;
 
-        JointAngles["LShoulderPitch"].AngleDeg = 0;
-        JointAngles["LShoulderRoll"].AngleDeg = 0;
-        JointAngles["LElbowYaw"].AngleDeg = 0;
-        JointAngles["LElbowRoll"].AngleDeg = -88;
-        JointAngles["LWristYaw"].AngleDeg = 0;
-        JointAngles["LHand"].AngleDeg = 0;
+        {
+
+        }
         
-        JointAngles["RShoulderPitch"].AngleDeg = 0;
-        JointAngles["RShoulderRoll"].AngleDeg = 0;
-        JointAngles["RElbowYaw"].AngleDeg = 0;
-        JointAngles["RElbowRoll"].AngleDeg = 0;
-        JointAngles["RWristYaw"].AngleDeg = 0;
-        JointAngles["RHand"].AngleDeg = 0;
-	}
+        
+        if (Input.GetButtonDown("Jump"))
+        {	// スペースキーを入力したら
+            {
+                //ステート遷移中でなかったらジャンプできる
+                if (!animator_.IsInTransition(0))
+                {
+                    animator_.SetBool("Rest", true);
+                }
+            }
+        }
+    }
 
     #region JointInfoとLinkInfo
 

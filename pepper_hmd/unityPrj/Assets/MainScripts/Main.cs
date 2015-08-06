@@ -100,10 +100,17 @@ public class Main : SingletonMonoBehaviour<Main>
     Dictionary<string, float> jointAngleTbl_;
     Dictionary<string, float> targetJointAngleTbl_ = new Dictionary<string,float>();
 
+    /// <summary>
+    /// 関節の角度のテーブル(ラジアン)
+    /// </summary>
     public Dictionary<string, float> JointAngleTbl
     {
         get { return jointAngleTbl_; }
     }
+
+    /// <summary>
+    /// 関節の角度の目標値のテーブル(ラジアン)
+    /// </summary>
     public Dictionary<string, float> TargetJointAngleTbl
     {
         get { return targetJointAngleTbl_; }
@@ -279,6 +286,7 @@ public class Main : SingletonMonoBehaviour<Main>
         {
             var bOk = false;
             qiUt_.ResetAndWakeup()
+            .Then(() => { return qiUt_.DisalbeArmExternalCollisionProtection();})
             .Then(() => { return qiUt_.GetJointAngleTable(); })
             .Then((angles) =>
             {

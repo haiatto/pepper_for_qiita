@@ -45,6 +45,21 @@ namespace NaoQiUtils
 
         #endregion
 
+        #region DisalbeArmExternalCollisionProtection
+
+        public Deferred<object, object> DisalbeArmExternalCollisionProtection()
+        {
+            var dfd = new Deferred<object, object>();
+            MakeFunc_GetService("ALMotion")().Then((alMotion) =>
+            {
+                alMotion.methods["setExternalCollisionProtectionEnabled"]("Arms",false)
+                .Then(() => { dfd.Resolve(); });
+            });
+            return dfd;
+        }
+
+        #endregion
+
         #region GetJointAngleTable
 
         /// <summary>
