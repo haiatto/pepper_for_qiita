@@ -461,7 +461,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1020809554
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -474,6 +474,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   UrdfXmlAsset: {fileID: 4900000, guid: 53b34e8157390ca4bb4b05434f3614e7, type: 3}
+  avatorDebugPointPrefab: {fileID: 0}
+  animController: {fileID: 0}
+  BaseFootprintOffsetPos: {x: 0, y: 0, z: 0}
+  BaseFootprintOffsetRotate: {x: 0, y: 0, z: 0, w: 0}
+  AngleModEnable: 0
+  AngleRUA_X: 0
+  AngleRUA_Y: 0
+  AngleRUA_Z: 0
+  AngleRLA_X: 0
+  AngleRLA_Y: 0
+  AngleRLA_Z: 0
+  AngleLUA_X: 0
+  AngleLUA_Y: 0
+  AngleLUA_Z: 0
+  AngleLLA_X: 0
+  AngleLLA_Y: 0
+  AngleLLA_Z: 0
 --- !u!4 &1020809555
 Transform:
   m_ObjectHideFlags: 0
@@ -661,7 +678,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1626319404
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -719,7 +736,7 @@ MonoBehaviour:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 1795869328}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ad2e4dd63d1e7f9468630710a3e3a0f6, type: 3}
   m_Name: 
@@ -753,7 +770,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32a6752dc7a7c0e41a7b747e6ae47e68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Url: http://192.168.11.20/libs/qimessaging/1.0
+  Url: http://192.168.11.14/libs/qimessaging/1.0
 --- !u!4 &1860414575
 Transform:
   m_ObjectHideFlags: 0

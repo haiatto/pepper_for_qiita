@@ -268,6 +268,8 @@ public class Main : SingletonMonoBehaviour<Main>
     }
     #endregion
 
+
+    
     void MainLoop()
     {
         print("MainLoop...");
@@ -304,17 +306,14 @@ public class Main : SingletonMonoBehaviour<Main>
                 Thread.Sleep(10);
             }
         }
-        pcamTop_.Subscribe();
         pcamBottom_.Subscribe();
+        pcamTop_.Subscribe();
 
-        //ループ
-        while (true)
+        // カメラ画像を取り出します
+        Func<Deferred> cameraUpdateDfdFunc = () =>
         {
-            if (!qim_.IsConnected) continue;
+            var dfd = new Deferred();
 
-            //Debug.Log("loop");
-
-            // カメラ画像を取り出します
             var syncA = false;
             var syncB = false;
             var errorA = false;
@@ -335,16 +334,27 @@ public class Main : SingletonMonoBehaviour<Main>
                     }
                 }
                 syncA = true;
+                if (syncB || errorB)
+                {
+                    dfd.Resolve();
+                }
             },
-            (error)=>{
-                errorA=true;
+            (error) =>
+            {
+                errorA = true;
+                if (syncB || errorB)
+                {
+                    var timer = new System.Threading.Timer(
+                        (a) => { dfd.Resolve(); }, null, 300, Timeout.Infinite
+                        );
+                }
             }
             );
             pcamBottom_.CaptureImage().Then((imageData) =>
             {
                 if (imageDataBottom_ == null)
                 {
-                    imageDataBottom_  = imageData;
+                    imageDataBottom_ = imageData;
                 }
                 else
                 {
@@ -354,22 +364,47 @@ public class Main : SingletonMonoBehaviour<Main>
                     }
                 }
                 syncB = true;
+                if(syncA||errorA)
+                {
+                    var timer = new System.Threading.Timer(
+                        (a)=>{dfd.Resolve();}, null, 300, Timeout.Infinite
+                        );
+                }
             },
             (error) =>
             {
+                dfd.Resolve();
                 errorB = true;
+                if (syncA || errorA)
+                {
+                    dfd.Resolve();
+                }
             }
             );
+            return dfd;
+        };
 
-            while (!syncA && !syncB)
+        //ループ
+        Deferred cameraUpdateDfd = null;
+
+        while (true)
+        {
+            if (!qim_.IsConnected) continue;
+
+            //Debug.Log("loop");
+
+            if(cameraUpdateDfd!=null)
             {
-                if (errorA || errorB)
+                if (cameraUpdateDfd.NowState != Deferred.State.Pending)
                 {
-                    Thread.Sleep(1000);
-                    break;
+                    cameraUpdateDfd = cameraUpdateDfdFunc();
                 }
-                Thread.Sleep(10);
             }
+            else
+            {
+                cameraUpdateDfd = cameraUpdateDfdFunc();
+            }
+            
 
             //ここらへんに色々角度などの取得を
             Func <Deferred<object,object>> moveTargetAngle = () =>
@@ -382,7 +417,7 @@ public class Main : SingletonMonoBehaviour<Main>
                     var tgtVal = targetJointAngleTbl_[jointAngleKv.Key];
                     if(Mathf.Abs(tgtVal-jointAngleKv.Value)>0.05f)
                     {
-                        Debug.Log(string.Format("{0} {1}=>{2}", jointAngleKv.Key, jointAngleKv.Value,tgtVal));
+                        //Debug.Log(string.Format("{0} {1}=>{2}", jointAngleKv.Key, jointAngleKv.Value,tgtVal));
                         keyLst.Add(jointAngleKv.Key);
                         valueLst.Add(tgtVal);
                     }
@@ -391,7 +426,7 @@ public class Main : SingletonMonoBehaviour<Main>
                 {
                     qim_.Service("ALMotion").Then((alMotion) =>
                     {
-                        alMotion.methods["setAngles"](keyLst.ToArray(), valueLst.ToArray(), 0.5f)
+                        alMotion.methods["setAngles"](keyLst.ToArray(), valueLst.ToArray(), 0.3f)
                         .Then(()=>{
                             dfd.Resolve();
                         });
@@ -405,10 +440,11 @@ public class Main : SingletonMonoBehaviour<Main>
             };
 
             // いろいろな情報の更新をします
+            bool bUpdateEnd = false;
 
             var updateDfd = new Deferred();
             updateDfd
-                .Then(()=>
+                .Then(() =>
                 {
                     return qiUt_.GetJointAngleTable()
                     .Then((angles) =>
@@ -416,7 +452,7 @@ public class Main : SingletonMonoBehaviour<Main>
                         jointAngleTbl_ = angles;
                     });
                 })
-                .Then(()=>
+                .Then(() =>
                 {
                     return qiUt_.GetLaserSensorValues()
                     .Then((laserInfoTbl) =>
@@ -428,22 +464,28 @@ public class Main : SingletonMonoBehaviour<Main>
                             {
                                 laserPoints.Add(new Vector2(value.rotatedX, value.rotatedY));
                             }
-                            if (info.key == "Front/Shovel/"){
+                            if (info.key == "Front/Shovel/")
+                            {
                                 laserPointList_FrontShovel_ = laserPoints;
                             }
-                            if (info.key == "Front/VerticalLeft/"){
+                            if (info.key == "Front/VerticalLeft/")
+                            {
                                 laserPointList_FrontVerticalLeft_ = laserPoints;
                             }
-                            if (info.key == "Front/VerticalRight/"){
+                            if (info.key == "Front/VerticalRight/")
+                            {
                                 laserPointList_FrontVerticalRight_ = laserPoints;
                             }
-                            if (info.key == "Front/Horizontal/"){
+                            if (info.key == "Front/Horizontal/")
+                            {
                                 laserPointList_FrontHorizontal_ = laserPoints;
                             }
-                            if (info.key == "Left/Horizontal/"){
+                            if (info.key == "Left/Horizontal/")
+                            {
                                 laserPointList_LeftHorizontal_ = laserPoints;
                             }
-                            if (info.key == "Right/Horizontal/"){
+                            if (info.key == "Right/Horizontal/")
+                            {
                                 laserPointList_RightHorizontal_ = laserPoints;
                             }
                         }
@@ -452,7 +494,7 @@ public class Main : SingletonMonoBehaviour<Main>
                 .Then(() =>
                 {
                     //カメラ画像を更新
-                    if (imageDataBottom_!=null)
+                    if (imageDataBottom_ != null)
                     {
                         isUpdateImageDataBottom_ = true;
                     }
@@ -462,11 +504,18 @@ public class Main : SingletonMonoBehaviour<Main>
                     }
                 })
                 .Then(moveTargetAngle)
+                .Then(() =>
+                {
+                    bUpdateEnd = true;
+                })
                 ;
             // 更新開始！
             updateDfd.Resolve();
 
-            Thread.Sleep(200);
+            while (!bUpdateEnd)
+            {
+                Thread.Sleep(10);
+            }
         }
     }
 }

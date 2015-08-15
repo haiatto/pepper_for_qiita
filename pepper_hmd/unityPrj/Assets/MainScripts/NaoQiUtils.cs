@@ -213,6 +213,8 @@ namespace NaoQiUtils
             public double camRRad;
             public double camBRad;
             public byte[] pixels;
+            public int timeStamp_Seconds;
+            public int timestamp_Microseconds;
         }
 
         public OptionT Option = new OptionT();
@@ -293,6 +295,8 @@ namespace NaoQiUtils
                         img.camTRad = data.JsonList[9].Cast<double>();
                         img.camRRad = data.JsonList[10].Cast<double>();
                         img.camBRad = data.JsonList[11].Cast<double>();
+                        img.timeStamp_Seconds = (int)data.JsonList[4].Cast<long>();
+                        img.timestamp_Microseconds = (int)data.JsonList[5].Cast<long>();
                         dfd.Resolve(img);
                     }
                 },

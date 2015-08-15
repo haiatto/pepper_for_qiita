@@ -15,18 +15,21 @@ public class SyncModelJoint : MonoBehaviour {
         {
             return;
         }
-        if (PepperModelDispRef == null || PepperModelDispRef.JointAngles["HeadYaw"]==null)
+        if (PepperModelDispRef == null || PepperModelDispRef.Joints["HeadYaw"] == null)
         {
             return;
         }
-        foreach(var srcJointKv in Main.Instance.JointAngleTbl)
+        var keys = Main.Instance.JointAngleTbl.Keys;
+        foreach (var pepprJointKey in keys)
         {
-            var modelJointAngle = PepperModelDispRef.JointAngles[srcJointKv.Key];
+            var modelJointAngle = PepperModelDispRef.Joints[pepprJointKey];
             if(modelJointAngle!=null)
             {
-                modelJointAngle.AngleDeg = srcJointKv.Value * Mathf.Rad2Deg;
+                //modelJointAngle.AngleDeg =
+                //    pepprJointKv.Value * Mathf.Rad2Deg;
+                Main.Instance.TargetJointAngleTbl[pepprJointKey]
+                    = modelJointAngle.AngleDeg * Mathf.Deg2Rad;
             }
-
         }
 	}
 }

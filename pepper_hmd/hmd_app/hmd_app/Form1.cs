@@ -32,7 +32,7 @@ namespace hmd_app
 
         private void button1_Click(object sender, EventArgs e)
         {
-            var url = "http://192.168.11.20/libs/qimessaging/1.0";
+            var url = "http://192.168.11.14/libs/qimessaging/1.0";
             //var url = "http://192.168.11.23:8002";
             //var url = "http://192.168.3.51/libs/qimessaging/1.0";//192,168.3.51
 
@@ -227,6 +227,49 @@ namespace hmd_app
             {
                 qim_.Disconnect();
             }
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            if (!qim_.IsConnected) return;
+
+            var t = new Timer();
+            t.Interval = 100;
+            t.Tick += (a,b) =>
+            {
+                qiUt_.GetJointAngleTable()
+                .Then((angleTable) =>
+                {
+#if false
+                    var angleYaw = angleTable["HeadYaw"];
+                    var anglePitch = angleTable["HeadPitch"];
+
+                    var rnd = new Random();
+
+                    qim_.Service("ALMotion").Then((almotion) =>
+                    {
+                        //almotion.methods["setAngles"](
+                        //    new string[] { "HeadYaw", "HeadPitch" },
+                        //    new float[] { rnd.Next(100) / 100.0f * 3.0f, rnd.Next(100) / 100.0f * 3.0f },
+                        //    0.5f);
+                    });
+#endif
+                });
+            };
+            t.Start();
+        }
+
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            var rnd = new Random();
+            qim_.Service("ALMotion").Then((almotion) =>
+            {
+                almotion.methods["setAngles"](
+                    new string[] { "HeadYaw", "HeadPitch" },
+                    new float[] { rnd.Next(100) / 100.0f * 3.0f, rnd.Next(100) / 100.0f * 3.0f },
+                    0.5f);
+            });
         }
     }
 

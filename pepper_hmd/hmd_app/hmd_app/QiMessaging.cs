@@ -149,7 +149,7 @@ namespace qiMessaging
 
         public QiMessaging()
         {
-            Service = createMetaCall_<QiServiceJsonData, JsonData>("ServiceDirectory", "service", null);
+            ServiceRaw = createMetaCall_<QiServiceJsonData, JsonData>("ServiceDirectory", "service", null);
         }
 
         public bool IsConnected
@@ -159,6 +159,7 @@ namespace qiMessaging
             }
         }
 
+        #region Connect, Disconnect
         public void Connect(string url)
         {
             if(IsConnected)
@@ -261,8 +262,40 @@ namespace qiMessaging
             client_.Close();
             client_ = null;
         }
+        #endregion
 
-        public readonly FuncArgv<Deferred<QiServiceJsonData, JsonData>, object> Service;
+        #region Service
+
+        Dictionary<string,Deferred<QiServiceJsonData, JsonData>> serviceCacheTbl_  = new Dictionary<string,Deferred<QiServiceJsonData,JsonData>>();
+        
+        /// <summary>
+        /// サービス。AL○○系を取得する為のものです。
+        /// </summary>
+        /// <param name="name">サービス名</param>
+        /// <returns></returns>
+        /// <remarks>
+        /// この関数は2度目の取得の際に、キャッシュから返します。
+        /// 通信量が膨大(1回につき10万文字とか帰ってきた)なのでその為の対策です。
+        /// </remarks>
+        public Deferred<QiServiceJsonData, JsonData> Service(string name)
+        {
+            if(serviceCacheTbl_.ContainsKey(name)){
+                return serviceCacheTbl_[name];
+            }
+            serviceCacheTbl_[name] = ServiceRaw(name);
+            return serviceCacheTbl_[name];
+        }
+        
+        /// <summary>
+        /// キャッシュ無しのService。
+        /// </summary>
+        /// <remarks>
+        /// 通信量が膨大なので使う必要はありません。
+        /// 
+        /// </remarks>
+        public readonly FuncArgv<Deferred<QiServiceJsonData, JsonData>, object> ServiceRaw;
+        
+        #endregion
 
         #region 実装です
 

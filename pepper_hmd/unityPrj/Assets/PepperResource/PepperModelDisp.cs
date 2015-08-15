@@ -13,7 +13,7 @@ public class PepperModelDisp : MonoBehaviour {
     public GameObject avatorDebugPointPrefab;
     public RuntimeAnimatorController animController;
 
-    #region LoadUrdf => JointInfo, LinkInfo
+    #region LoadUrdf => JointInfo, LinkInfo (情報としてロードします)
 
     public class OriginInfo
     {
@@ -78,8 +78,8 @@ public class PepperModelDisp : MonoBehaviour {
         public CollisionInfo Collision;
     }
 
-    Dictionary<string, JointInfo> joints_ = new Dictionary<string, JointInfo>();
-    Dictionary<string, LinkInfo> links_ = new Dictionary<string, LinkInfo>();
+    Dictionary<string, JointInfo> jointInfos_ = new Dictionary<string, JointInfo>();
+    Dictionary<string, LinkInfo> linkInfos_ = new Dictionary<string, LinkInfo>();
 
     Vector3 parseAttrVector3_(string value)
     {
@@ -139,7 +139,7 @@ public class PepperModelDisp : MonoBehaviour {
                         break;
                 }
             }
-            joints_[info.Name] = info;
+            jointInfos_[info.Name] = info;
         }
         foreach (XmlNode link in links)
         {
@@ -230,20 +230,24 @@ public class PepperModelDisp : MonoBehaviour {
                         break;
                 }
             }
-            links_[info.Name] = info;
+            linkInfos_[info.Name] = info;
         }
     }
 
     #endregion
 
-    #region JointInfo, LinkInfo => JointAngles, JointObjs, LinkObjs
+    #region JointInfo, LinkInfo => Joint, Links (モデルを生成します)
 
-    public class JointAngle
+    public class Joint
     {
         internal float angleRad;
         internal JointInfo jointInfo;
         internal GameObject jointObj;
 
+        public GameObject JointGameObject
+        {
+            get { return jointObj; }
+        }
         public float AngleDeg
         {
             set
@@ -272,16 +276,25 @@ public class PepperModelDisp : MonoBehaviour {
             }
         }
     }
-    public Dictionary<string, JointAngle> JointAngles = new Dictionary<string, JointAngle>();
-    public Dictionary<string, GameObject> JointObjs = new Dictionary<string, GameObject>();
-    public Dictionary<string, GameObject> LinkObjs = new Dictionary<string, GameObject>();
+    public class Link
+    {
+        internal LinkInfo linkInfo;
+        internal GameObject linkObj;
+
+        public GameObject LinkGameObject
+        {
+            get { return linkObj; }
+        }
+    }
+    public Dictionary<string, Joint> Joints = new Dictionary<string, Joint>();
+    public Dictionary<string, Link> Links = new Dictionary<string, Link>();
     public Vector3    BaseFootprintOffsetPos = new Vector3();
     public Quaternion BaseFootprintOffsetRotate = new Quaternion();
 
-    void createLinkAndJointObject_()
+    void createLinkAndJoint_()
     {
         // Link(剛体的なモデル)を生成
-        foreach (var linkKv in links_)
+        foreach (var linkKv in linkInfos_)
         {
             var obj = new GameObject();
             var info = linkKv.Value;
@@ -305,10 +318,13 @@ public class PepperModelDisp : MonoBehaviour {
                 }
             }
 
-            LinkObjs[linkKv.Key] = obj;
+            Links[linkKv.Key] = new Link(){
+                linkObj = obj,
+                linkInfo = info,
+            };
         }
         // Joint(ヒンジやボールなどの可動する関節)を生成＆Link(剛体的なもの)との接続
-        foreach (var jointKv in joints_)
+        foreach (var jointKv in jointInfos_)
         {
             var obj = new GameObject();
             var info = jointKv.Value;
@@ -317,8 +333,8 @@ public class PepperModelDisp : MonoBehaviour {
             obj.transform.localPosition = changeCoordVector3_(info.origin.xyz);
             obj.transform.localRotation = changeAngleQuaternion_(info.origin.rpy);
 
-            var parentObj = LinkObjs[info.parentLink];
-            var childObj = LinkObjs[info.childLink];
+            var parentObj = Links[info.parentLink].LinkGameObject;
+            var childObj = Links[info.childLink].LinkGameObject;
             if (parentObj != null)
             {
                 obj.transform.SetParent(parentObj.transform, false);
@@ -328,8 +344,7 @@ public class PepperModelDisp : MonoBehaviour {
                 childObj.transform.SetParent(obj.transform, false);
             }
 
-            JointObjs[jointKv.Key] = obj;
-            JointAngles[jointKv.Key] = new JointAngle()
+            Joints[jointKv.Key] = new Joint()
             {
                 jointObj = obj,
                 jointInfo = info,
@@ -338,8 +353,8 @@ public class PepperModelDisp : MonoBehaviour {
         }
         // 基準となる値を初期状態のうちに覚えておきます
         {
-            var baseLink = LinkObjs["base_link"];
-            var baseFootprint = LinkObjs["base_footprint"];
+            var baseLink = Links["base_link"].LinkGameObject;
+            var baseFootprint = Links["base_footprint"].LinkGameObject;
 
             var baseLinkTr = baseLink.transform;
             var baseFootprintTr = baseFootprint.transform;
@@ -376,7 +391,14 @@ public class PepperModelDisp : MonoBehaviour {
 
     #endregion
 
-    #region JointAngles => Avatar
+    #region Joints <= add IK
+    void createIk_()
+    {
+
+    }
+    #endregion
+
+    #region JointObjs => Avatar
 
     GameObject avatarObj_;
     Avatar     avatar_;
@@ -399,8 +421,8 @@ public class PepperModelDisp : MonoBehaviour {
     void createAvatar_()
     {
         // Pepperモデルを推奨されているバインドポーズにします(この形にすると勝手に割り当てるらしい)
-        JointAngles["LShoulderRoll"].AngleDeg =  90;
-        JointAngles["RShoulderRoll"].AngleDeg = -90;
+        Joints["LShoulderRoll"].AngleDeg = 90;
+        Joints["RShoulderRoll"].AngleDeg = -90;
 
         var humanLst = new List<HumanBone>();
         var skeletonLst = new List<SkeletonBone>();
@@ -432,8 +454,8 @@ public class PepperModelDisp : MonoBehaviour {
             avatarObjTbl_[gameObj.name] = gameObj;
             if (avatorJointLink.joint != null)
             {
-                var tr  = JointObjs[avatorJointLink.joint      ].transform;
-                var trP = JointObjs[avatorJointLink.jointParent].transform;
+                var tr  = Joints[avatorJointLink.joint      ].JointGameObject.transform;
+                var trP = Joints[avatorJointLink.jointParent].JointGameObject.transform;
                 gameObj.transform.localPosition = tr.position - trP.position;
             }
             else
@@ -541,17 +563,17 @@ public class PepperModelDisp : MonoBehaviour {
         animator_.runtimeAnimatorController = animController;
         //        animator_.runtimeAnimatorController = Instantiate<RuntimeAnimatorController>(animController);
 
-/*
+#if true
         ikControl_ = avatarObj_.AddComponent<IKControl>();
         ikControl_.ikActive = true;
         ikControl_.rightHandObj = GameObject.Find("IKRHand").transform;
- */
+#endif
     }
     #endregion 
 
-    #region Apply to Pepper
+    #region Apply Avator to Pepper
 
-    void applyToPepper_()
+    void applyAvatorToPepper_()
     {
         //TODO:多分アバターからの関節位置目標、みたいな変数を別途用意してみた方が良いかも？
         //TODO:実際の空間上でモノにぶつかる等は一時的なコリジョンを更新する形にして、
@@ -658,8 +680,8 @@ public class PepperModelDisp : MonoBehaviour {
                     }
 
                     // ジョイントに反映します(TPoseでの左手座標系の回転角をPepperの角度に合わせて変換します)
-                    JointAngles["RShoulderPitch"].AngleDeg = rotAngleX;//体から肩をに対するサーボ
-                    JointAngles["RShoulderRoll"].AngleDeg = -90 - rotAngleY;//肩の球内のサーボ
+                    Joints["RShoulderPitch"].AngleDeg = rotAngleX;//体から肩をに対するサーボ
+                    Joints["RShoulderRoll"].AngleDeg = -90 - rotAngleY;//肩の球内のサーボ
 
                     uArmRotAngleX = rotAngleFX;
                 }
@@ -708,8 +730,8 @@ public class PepperModelDisp : MonoBehaviour {
                         }
                     }
 
-                    JointAngles["RElbowYaw"].AngleDeg = -rotAngleX/* - uArmRotAngleZ*/;
-                    JointAngles["RElbowRoll"].AngleDeg = -rotAngleY;
+                    Joints["RElbowYaw"].AngleDeg = -rotAngleX/* - uArmRotAngleZ*/;
+                    Joints["RElbowRoll"].AngleDeg = -rotAngleY;
 
                     uArmRotAngleX = rotAngleZ;
                 }
@@ -781,8 +803,8 @@ public class PepperModelDisp : MonoBehaviour {
                     var rotRoll = rotAngleY+90;//-rotAngleY - 90;
                     if (rotRoll > 180) { rotRoll -= 360; }
                     if (rotRoll < -180) { rotRoll += 360; }
-                    JointAngles["LShoulderPitch"].AngleDeg = rotAngleX;//体から肩をに対するサーボ
-                    JointAngles["LShoulderRoll"].AngleDeg = rotRoll;//肩の球内のサーボ
+                    Joints["LShoulderPitch"].AngleDeg = rotAngleX;//体から肩をに対するサーボ
+                    Joints["LShoulderRoll"].AngleDeg = rotRoll;//肩の球内のサーボ
                         
                     uArmRotAngleX = rotAngleFX;
                 }
@@ -831,8 +853,8 @@ public class PepperModelDisp : MonoBehaviour {
                         }
                     }
 
-                    JointAngles["LElbowYaw"].AngleDeg = +rotAngleX/* - uArmRotAngleZ*/;
-                    JointAngles["LElbowRoll"].AngleDeg = +rotAngleY;
+                    Joints["LElbowYaw"].AngleDeg = +rotAngleX/* - uArmRotAngleZ*/;
+                    Joints["LElbowRoll"].AngleDeg = +rotAngleY;
 
                     uArmRotAngleX = rotAngleZ;
                 }
@@ -854,8 +876,8 @@ public class PepperModelDisp : MonoBehaviour {
                 {
                     bDeg = Mathf.Atan2(-vTpose.z, vTpose.y) * Mathf.Rad2Deg;
                 }
-                JointAngles["HipRoll"].AngleDeg = aDeg;//
-                JointAngles["HipPitch"].AngleDeg = bDeg;//
+                Joints["HipRoll"].AngleDeg = aDeg;//
+                Joints["HipPitch"].AngleDeg = bDeg;//
             }
         }
     }
@@ -866,7 +888,8 @@ public class PepperModelDisp : MonoBehaviour {
 	void Start () 
     {
         LoadUrdf();
-        createLinkAndJointObject_();
+        createLinkAndJoint_();
+        createIk_();
         createAvatar_();
     }
 
@@ -941,12 +964,12 @@ public class PepperModelDisp : MonoBehaviour {
             }
         }
 
-        applyToPepper_();
+        applyAvatorToPepper_();
 
         // 
         {
-            var baseLink = LinkObjs["base_link"];
-            var baseFootprint = LinkObjs["base_footprint"];
+            var baseLink = Links["base_link"].LinkGameObject;
+            var baseFootprint = Links["base_footprint"].LinkGameObject;
 
             var baseLinkTr = baseLink.transform;
             var baseFootprintTr = baseFootprint.transform;

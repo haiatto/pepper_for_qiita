@@ -29,6 +29,39 @@ namespace NaoQiUtils
             return () => { return qim_.Service(moduleName); };
         }
 
+        #region ResetAndWakeup
+
+        public Deferred<object,object> ResetAndWakeup()
+        {
+            var dfd = new Deferred<object,object>();
+            MakeFunc_GetService("ALMotion")().Then((alMotion) =>
+            {
+                alMotion.methods["rest"]()
+                .Then(() => { return alMotion.methods["wakeUp"](); })
+                .Then(() => { dfd.Resolve(); });
+            });
+            return dfd;
+        }
+
+        #endregion
+
+        #region DisalbeArmExternalCollisionProtection
+
+        public Deferred<object, object> DisalbeArmExternalCollisionProtection()
+        {
+            var dfd = new Deferred<object, object>();
+            MakeFunc_GetService("ALMotion")().Then((alMotion) =>
+            {
+                alMotion.methods["setExternalCollisionProtectionEnabled"]("Arms",false)
+                .Then(() => { dfd.Resolve(); });
+            });
+            return dfd;
+        }
+
+        #endregion
+
+        #region GetJointAngleTable
+
         /// <summary>
         /// 関節の角度のテーブルを取得します
         /// HeadYaw, HeadPitch, HipRoll, HipPitch, KneePitch , 
@@ -72,6 +105,87 @@ namespace NaoQiUtils
             });
             return dfd;
         }
+
+        #endregion
+
+        #region GetLaserSensorValues
+
+        public class LaserKeyInfo{
+            public string key;
+            public int    segNum;
+            public int    deg;
+            public class Value{
+                public float sensorX;
+                public float sensorY;
+                public float rotatedX;
+                public float rotatedY;
+            };
+            public List<Value> valueList = new List<Value>();
+        }
+        public Deferred<Dictionary<string, LaserKeyInfo>> GetLaserSensorValues()
+        {
+            var dfd = new Deferred<Dictionary<string, LaserKeyInfo>>();
+            Action<JsonData> onFail = (error)=>{
+                dfd.Reject(error);
+            };
+
+            var keys = new List<string>();
+            var keyBase = "Device/SubDeviceList/Platform/LaserSensor/";
+            var infoTbl = new LaserKeyInfo[]
+            {new LaserKeyInfo(){key="Front/Shovel/",        segNum=3, deg=0,  },
+             new LaserKeyInfo(){key="Front/Vertical/Left/", segNum=1, deg=0,  },
+             new LaserKeyInfo(){key="Front/Vertical/Right/",segNum=1, deg=0,  },
+             new LaserKeyInfo(){key="Front/Horizontal/",    segNum=15,deg=0,  },
+             new LaserKeyInfo(){key="Left/Horizontal/",     segNum=15,deg= 90,},
+             new LaserKeyInfo(){key="Right/Horizontal/",    segNum=15,deg=-90,},
+            };
+            foreach(var info in infoTbl){
+              for(var ii=1; ii <= info.segNum; ii++){
+                  var segNumber = string.Format("Seg{0:d02}",ii);
+                  keys.Add(keyBase + info.key + segNumber + "/X/Sensor/Value");
+                  keys.Add(keyBase + info.key + segNumber + "/Y/Sensor/Value");
+              }
+            }
+            if(qim_!=null){
+              qim_.Service("ALMemory").Then((alMemory)=>{
+                  alMemory.methods["getListData"](keys).Then((values)=>{
+                      var valIdx = 0;
+                      foreach(var info in infoTbl){
+                          for(var ii=0; ii < info.segNum; ii++){
+                              info.valueList.Add(
+                                  new LaserKeyInfo.Value(){
+                                      sensorX=(float)values.JsonList[valIdx+0].Cast<double>(),
+                                      sensorY=(float)values.JsonList[valIdx+1].Cast<double>()
+                                  });
+                              valIdx+=2;
+                          }
+                      }
+                      foreach(var info in infoTbl){
+                          var r = info.deg / 180.0f * Math.PI;
+                          var rOffs = Math.PI/2;
+                          foreach(var value in info.valueList){
+                              var x = value.sensorX;
+                              var y = value.sensorY;
+                              var rx = x * Math.Cos(r+rOffs) + -y * Math.Sin(r+rOffs);
+                              var ry = x * Math.Sin(r+rOffs) +  y * Math.Cos(r+rOffs);
+                              value.rotatedX = (float)rx;
+                              value.rotatedY = (float)ry;
+                          }
+                      }
+                      var ret = new Dictionary<string, LaserKeyInfo>();
+                      foreach(var info in infoTbl){
+                          ret[info.key] = info;
+                      }
+                      dfd.Resolve(ret);
+                  }, onFail);
+              }, onFail);
+          } 
+            else {
+              dfd.Reject();
+          }
+          return dfd;
+        }
+        #endregion
     }
 
     public class PepperCamera
@@ -86,7 +200,7 @@ namespace NaoQiUtils
             public int cam = 0;  // nao_top
             public int reso = 1;  // 320x240
             public int color = 11; // Rgb
-            public int frame_rate = 5; // frame_rate
+            public int frame_rate = 30; // frame_rate
         }
 
         public class ImageData
