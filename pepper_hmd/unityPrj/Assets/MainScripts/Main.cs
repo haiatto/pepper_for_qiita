@@ -393,6 +393,7 @@ public class Main : SingletonMonoBehaviour<Main>
 
             //Debug.Log("loop");
 
+#if false
             if(cameraUpdateDfd!=null)
             {
                 if (cameraUpdateDfd.NowState != Deferred.State.Pending)
@@ -404,7 +405,7 @@ public class Main : SingletonMonoBehaviour<Main>
             {
                 cameraUpdateDfd = cameraUpdateDfdFunc();
             }
-            
+#endif            
 
             //ここらへんに色々角度などの取得を
             Func <Deferred<object,object>> moveTargetAngle = () =>

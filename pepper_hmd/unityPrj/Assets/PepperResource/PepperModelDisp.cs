@@ -244,10 +244,56 @@ public class PepperModelDisp : MonoBehaviour {
         internal JointInfo jointInfo;
         internal GameObject jointObj;
 
+        internal void createIkLimit_()
+        {
+            if (JointInfo.Type == "revolute")
+            {
+                var limitHinge = jointObj.AddComponent<RootMotion.FinalIK.RotationLimitHinge>();
+                var axis = changeCoordVector3_(jointInfo.axis);
+                axis = -axis;//左手座標系の回転なので逆になるので軸を逆にしておきます
+                limitHinge.axis = axis;
+                limitHinge.min = AngleLimitLower;
+                limitHinge.max = AngleLimitUpper;
+            }
+        }
+
         public GameObject JointGameObject
         {
             get { return jointObj; }
         }
+        public JointInfo JointInfo
+        {
+            get { return jointInfo; }
+        }
+
+        public void ApplyFromTransform()
+        {
+            if (JointInfo.Type == "revolute")
+            {
+                var tr = JointGameObject.transform;
+
+                var axis = changeCoordVector3_(jointInfo.axis);
+                axis = -axis;
+
+                Vector3 crossV;
+                if (Mathf.Abs(Vector3.Dot(axis, Vector3.up)) != 1.0f)
+                {
+                    crossV = Vector3.Cross(axis, Vector3.up);
+                }
+                else
+                {
+                    crossV = Vector3.Cross(axis, Vector3.left);
+                }
+                var otherV = Vector3.Cross(axis, crossV);
+                var tmpV = tr.localRotation * crossV;
+                var a = Vector3.Dot(crossV, tmpV);
+                var b = Vector3.Dot(otherV, tmpV);
+                float value = Mathf.Atan2(b, a) * Mathf.Rad2Deg;
+                var angleDeg = Mathf.Clamp(value, AngleLimitLower, AngleLimitUpper);
+                angleRad = angleDeg * Mathf.Deg2Rad;
+            }
+        }
+
         public float AngleDeg
         {
             set
@@ -255,7 +301,8 @@ public class PepperModelDisp : MonoBehaviour {
                 var angleDeg = Mathf.Clamp(value, AngleLimitLower, AngleLimitUpper);
                 angleRad = angleDeg * Mathf.Deg2Rad;
                 var axis = changeCoordVector3_(jointInfo.axis);
-                var q = Quaternion.AngleAxis(angleDeg, -axis);
+                axis = -axis;
+                var q = Quaternion.AngleAxis(angleDeg, axis);
                 jointObj.transform.localRotation = q;
             }
             get
@@ -392,13 +439,50 @@ public class PepperModelDisp : MonoBehaviour {
     #endregion
 
     #region Joints <= add IK
+    public Transform RHandTarget;
+    public Transform LHandTarget;
+    RootMotion.FinalIK.CCDIK ikRHand_;
+    RootMotion.FinalIK.CCDIK ikLHand_;
+
     void createIk_()
     {
-
+        // IKの回転の制限を設定します
+        foreach(var joint in Joints.Values)
+        {
+            joint.createIkLimit_();
+        }
+        // IKを設定します
+        {
+            ikRHand_ = Joints["RShoulderPitch"].JointGameObject.AddComponent<RootMotion.FinalIK.CCDIK>();
+            ikRHand_.solver.SetChain(
+                new Transform[]{
+                    Joints["RShoulderPitch"].JointGameObject.transform,
+                    Joints["RShoulderRoll"].JointGameObject.transform,
+                    Joints["RElbowYaw"].JointGameObject.transform,
+                    Joints["RElbowRoll"].JointGameObject.transform,
+                    Joints["RWristYaw"].JointGameObject.transform,
+                },
+                Joints["RShoulderPitch"].JointGameObject.transform
+                );
+            ikLHand_ = Joints["LShoulderPitch"].JointGameObject.AddComponent<RootMotion.FinalIK.CCDIK>();
+            ikLHand_.solver.SetChain(
+                new Transform[]{
+                    Joints["LShoulderPitch"].JointGameObject.transform,
+                    Joints["LShoulderRoll"].JointGameObject.transform,
+                    Joints["LElbowYaw"].JointGameObject.transform,
+                    Joints["LElbowRoll"].JointGameObject.transform,
+                    Joints["LWristYaw"].JointGameObject.transform,
+                },
+                Joints["LShoulderPitch"].JointGameObject.transform
+                );
+        }
     }
     #endregion
 
     #region JointObjs => Avatar
+
+#if false
+    封印。アバター便利じゃない。
 
     GameObject avatarObj_;
     Avatar     avatar_;
@@ -569,9 +653,13 @@ public class PepperModelDisp : MonoBehaviour {
         ikControl_.rightHandObj = GameObject.Find("IKRHand").transform;
 #endif
     }
+#endif
     #endregion 
 
     #region Apply Avator to Pepper
+
+#if false
+    封印。Avatorにしても、あんまり便利じゃなかったので…。むしろMMDにネイティブ対応したりした方が便利そう。
 
     void applyAvatorToPepper_()
     {
@@ -881,6 +969,7 @@ public class PepperModelDisp : MonoBehaviour {
             }
         }
     }
+#endif
 
     #endregion
 
@@ -890,13 +979,13 @@ public class PepperModelDisp : MonoBehaviour {
         LoadUrdf();
         createLinkAndJoint_();
         createIk_();
-        createAvatar_();
+        //createAvatar_();
     }
 
     void OnGUI()
     {
         GUI.Box(new Rect(Screen.width - 260, 10, 250, 150), "Info");
-
+#if false
         var leftUpperArmTr = avatarObjTbl_["LeftUpperArm"].transform;
         var leftLowerArmTr = avatarObjTbl_["LeftLowerArm"].transform;
         var leftHandTr = avatarObjTbl_["LeftHand"].transform;
@@ -910,7 +999,7 @@ public class PepperModelDisp : MonoBehaviour {
             GUI.Label(new Rect(Screen.width - 245, 210, 250, 30), m.GetColumn(1).ToString());
             GUI.Label(new Rect(Screen.width - 245, 230, 250, 30), m.GetColumn(2).ToString());
         }
-
+#endif
     }
 
     public bool AngleModEnable = false;
@@ -930,6 +1019,7 @@ public class PepperModelDisp : MonoBehaviour {
     // Update is called once per frame
     void Update()
     {
+#if false
         if(AngleModEnable)
         {
             animator_.runtimeAnimatorController = null;
@@ -964,7 +1054,17 @@ public class PepperModelDisp : MonoBehaviour {
             }
         }
 
-        applyAvatorToPepper_();
+        {
+            ikRHand_.solver.target = RHandTarget;
+            ikLHand_.solver.target = LHandTarget;
+
+            foreach (var joint in Joints.Values)
+            {
+                joint.ApplyFromTransform();
+            }
+        }
+
+        //@@applyAvatorToPepper_();
 
         // 
         {
@@ -993,5 +1093,6 @@ public class PepperModelDisp : MonoBehaviour {
                 }
             }
         }
+#endif
     }
 }

@@ -18,7 +18,7 @@ public class TestController : MonoBehaviour {
     public float TargetLElbowYaw;
     [Range(-1.5f, 1.5f)]
     public float TargetLElbowRoll;
-    [Range(-1.5f, 1.5f)]
+    [Range(-3.5f, 3.5f)]
     public float TargetLWristYaw;
     [Range(-1.5f, 1.5f)]
     public float TargetLHand;
@@ -30,7 +30,7 @@ public class TestController : MonoBehaviour {
     public float TargetRElbowYaw;
     [Range(-1.5f, 1.5f)]
     public float TargetRElbowRoll;
-    [Range(-1.5f, 1.5f)]
+    [Range(-3.5f, 3.5f)]
     public float TargetRWristYaw;
     [Range(-1.5f, 1.5f)]
     public float TargetRHand;
