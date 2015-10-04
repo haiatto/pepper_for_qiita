@@ -6,6 +6,39 @@ using System.Collections.Generic;
 using System.Xml;
 using System.Text.RegularExpressions;
 
+/// <summary>
+/// 色々メモ
+/// 
+/// http://doc.aldebaran.com/2-1/glossary.html 用語集。便利。
+/// 
+/// http://doc.aldebaran.com/2-1/naoqi/motion/reflexes-smart-stiffness.html#reflexes-smart-stiffness
+/// http://doc.aldebaran.com/2-1/naoqi/motion/control-stiffness.html#control-stiffness
+/// http://doc.aldebaran.com/2-1/naoqi/motion/control-stiffness.html#control-stiffness
+/// 
+/// http://mukai-lab.org/wp-content/uploads/2014/04/JacobianInverseKinematics.pdf
+/// http://www.4gamer.net/games/000/G000000/20110912065/
+/// http://www.sinopt.com/learning1/optsoft/optimization/optimization.htm
+/// 
+/// ちなみにワザワザ自力でIKしようと思った理由↓
+/// Limitations and performances
+///
+/// juju Pepper
+/// Most of the methods are unusable for Pepper.
+///
+/// Still available methods:
+///
+/// ALMotionProxy::getPosition()
+/// ALMotionProxy::getTransform()
+/// Do not use:
+/// …
+/// 
+/// まぢペッパー君鬼畜。
+/// (Pepper君用ロボ＆物理シミュ付IKリグ的なモノ作るの間に合ってないだけかもしれないけど2年も開発してるんでしょ？的な…）
+/// まあUnityで扱えると途端にアプリは作れない実験用ではあっても人形遣いが増えるに違いない、
+/// ネットわこうだいだわ…的な予感がする気もするので頑張る
+/// </summary>
+
+
 public class PepperModelDisp : MonoBehaviour {
 
     public TextAsset  UrdfXmlAsset;
@@ -13,18 +46,21 @@ public class PepperModelDisp : MonoBehaviour {
     public GameObject avatorDebugPointPrefab;
     public RuntimeAnimatorController animController;
 
-    #region LoadUrdf => JointInfo, LinkInfo (情報としてロードします)
+    #region LoadUrdf => JointInfo, LinkInfo (urdfから情報としてロードします。これを直で参照することは無いはず。)
 
+    [Serializable]
     public class OriginInfo
     {
         public Vector3 rpy;
         public Vector3 xyz;
     }
+    [Serializable]
     public class GeometryInfo
     {
         public string filename;
         public Vector3 scale;
     }
+    [Serializable]
     public class JointInfo
     {
         public string Name;
@@ -35,6 +71,7 @@ public class PepperModelDisp : MonoBehaviour {
         public Vector3 axis;
         public LimitInfo limit;
         public MimicInfo mimic;
+        [Serializable]
         public class LimitInfo
         {
             public float effort;
@@ -42,6 +79,7 @@ public class PepperModelDisp : MonoBehaviour {
             public float upper;
             public float velocity;
         };
+        [Serializable]
         public class MimicInfo
         {
             public string joint;
@@ -49,9 +87,11 @@ public class PepperModelDisp : MonoBehaviour {
             public float offset;
         };
     }
+    [Serializable]
     public class LinkInfo
     {
         public string Name;
+        [Serializable]
         public class InertialInfo
         {
             public float mass;
@@ -63,11 +103,13 @@ public class PepperModelDisp : MonoBehaviour {
             public float Inertia_iyz;
             public float Inertia_izz;
         }
+        [Serializable]
         public class VisualInfo
         {
             public GeometryInfo geometry;
             public OriginInfo origin;
         }
+        [Serializable]
         public class CollisionInfo
         {
             public GeometryInfo geometry;
@@ -78,8 +120,8 @@ public class PepperModelDisp : MonoBehaviour {
         public CollisionInfo Collision;
     }
 
-    Dictionary<string, JointInfo> jointInfos_ = new Dictionary<string, JointInfo>();
-    Dictionary<string, LinkInfo> linkInfos_ = new Dictionary<string, LinkInfo>();
+    public Dictionary<string, JointInfo> jointInfos_ = new Dictionary<string, JointInfo>();
+    public Dictionary<string, LinkInfo> linkInfos_ = new Dictionary<string, LinkInfo>();
 
     Vector3 parseAttrVector3_(string value)
     {
@@ -236,102 +278,140 @@ public class PepperModelDisp : MonoBehaviour {
 
     #endregion
 
-    #region JointInfo, LinkInfo => Joint, Links (モデルを生成します)
+    #region JointInfo, LinkInfo => Joint, Links ((urdfからロードした)情報からモデルを生成します)
 
-    public class Joint
+    public class Joint : MonoBehaviour
     {
-        internal float angleRad;
-        internal JointInfo jointInfo;
-        internal GameObject jointObj;
+        [SerializeField]
+        JointInfo jointInfo_;
+        [SerializeField]
+        float angleRad_;
 
+        internal void setup(JointInfo jointInfo, float angleRad)
+        {
+            jointInfo_ = jointInfo;
+            angleRad_ = angleRad;
+        }
+        /*
         internal void createIkLimit_()
         {
-            if (JointInfo.Type == "revolute")
+            if (jointInfo_.Type == "revolute")
             {
-                var limitHinge = jointObj.AddComponent<RootMotion.FinalIK.RotationLimitHinge>();
-                var axis = changeCoordVector3_(jointInfo.axis);
-                axis = -axis;//左手座標系の回転なので逆になるので軸を逆にしておきます
-                limitHinge.axis = axis;
-                limitHinge.min = AngleLimitLower;
-                limitHinge.max = AngleLimitUpper;
+                var limitHinge = gameObject.AddComponent<RootMotion.FinalIK.RotationLimitHinge>();
+                limitHinge.axis = Axis;
+                limitHinge.min  = AngleLimitLower;
+                limitHinge.max  = AngleLimitUpper;
             }
         }
-
-        public GameObject JointGameObject
-        {
-            get { return jointObj; }
-        }
-        public JointInfo JointInfo
-        {
-            get { return jointInfo; }
-        }
-
+        */
         public void ApplyFromTransform()
         {
-            if (JointInfo.Type == "revolute")
+            if (jointInfo_.Type == "revolute")
             {
-                var tr = JointGameObject.transform;
-
-                var axis = changeCoordVector3_(jointInfo.axis);
-                axis = -axis;
-
+                var tr = this.transform;
+#if false
                 Vector3 crossV;
-                if (Mathf.Abs(Vector3.Dot(axis, Vector3.up)) != 1.0f)
+                if (Mathf.Abs(Vector3.Dot(Axis, Vector3.up)) != 1.0f)
                 {
-                    crossV = Vector3.Cross(axis, Vector3.up);
+                    crossV = Vector3.Cross(Axis, Vector3.up);
                 }
                 else
                 {
-                    crossV = Vector3.Cross(axis, Vector3.left);
+                    crossV = Vector3.Cross(Axis, Vector3.left);
                 }
-                var otherV = Vector3.Cross(axis, crossV);
+                var otherV = Vector3.Cross(Axis, crossV);
                 var tmpV = tr.localRotation * crossV;
                 var a = Vector3.Dot(crossV, tmpV);
                 var b = Vector3.Dot(otherV, tmpV);
                 float value = Mathf.Atan2(b, a) * Mathf.Rad2Deg;
                 var angleDeg = Mathf.Clamp(value, AngleLimitLower, AngleLimitUpper);
-                angleRad = angleDeg * Mathf.Deg2Rad;
+                angleRad_ = angleDeg * Mathf.Deg2Rad;
+#else
+                // 軸をずらす様な回転が入ってる場合はその成分をキャンセルしておきます
+                var trQ = tr.localRotation;
+                var limitedQ = Quaternion.FromToRotation(trQ * Axis, Axis) * trQ;
+                // 角度を得ます(軸周りの回転角)
+                var w = Mathf.Clamp(limitedQ.w, -1, 1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                var angleRad = Mathf.Acos(w) * 2.0f;
+                if (angleRad != 0)
+                {
+                    var r = Mathf.Sin(angleRad / 2.0f);
+                    var axisQ = new Vector3(limitedQ.x / r, limitedQ.y / r, limitedQ.z / r);
+                    if (Vector3.Dot(axisQ, Axis) < 0)
+                    {
+                        //軸が反転してるので回転値を反転(Quaternionの軸回転表現的な理由)
+                        angleRad = -angleRad;
+                    }
+                }
+                angleRad_ = Mathf.Clamp(angleRad, AngleLimitLower * Mathf.Deg2Rad, AngleLimitUpper * Mathf.Deg2Rad);
+#endif
             }
         }
-
+        /// <summary>
+        /// 回転軸の回転の値(Degree)
+        /// </summary>
+        /// <remarks>
+        /// ジョイントの種類により使われるかが変わります
+        /// </remarks>
         public float AngleDeg
         {
             set
             {
                 var angleDeg = Mathf.Clamp(value, AngleLimitLower, AngleLimitUpper);
-                angleRad = angleDeg * Mathf.Deg2Rad;
-                var axis = changeCoordVector3_(jointInfo.axis);
-                axis = -axis;
-                var q = Quaternion.AngleAxis(angleDeg, axis);
-                jointObj.transform.localRotation = q;
+                angleRad_ = angleDeg * Mathf.Deg2Rad;
+                
+                var q = Quaternion.AngleAxis(angleDeg, Axis);
+                this.transform.localRotation = q;
             }
             get
             {
-                return angleRad * Mathf.Rad2Deg;
+                return angleRad_ * Mathf.Rad2Deg;
             }
         }
+        /// <summary>
+        /// 回転軸の回転の上限(Degree)
+        /// </summary>
+        /// <remarks>
+        /// ジョイントの種類により使われるかが変わります
+        /// </remarks>
         public float AngleLimitUpper
         {
-            get { if (jointInfo.limit == null)return 0; 
-                return jointInfo.limit.upper * Mathf.Rad2Deg; 
+            get { if (jointInfo_.limit == null)return 0; 
+                return jointInfo_.limit.upper * Mathf.Rad2Deg; 
             }
         }
+        /// <summary>
+        /// 回転軸の回転の下限(Degree)
+        /// </summary>
+        /// <remarks>
+        /// ジョイントの種類により使われるかが変わります
+        /// </remarks>
         public float AngleLimitLower
         {
-            get { if (jointInfo.limit == null)return 0; 
-                return jointInfo.limit.lower * Mathf.Rad2Deg; 
+            get { if (jointInfo_.limit == null)return 0; 
+                return jointInfo_.limit.lower * Mathf.Rad2Deg; 
+            }
+        }
+        /// <summary>
+        /// 回転軸
+        /// </summary>
+        /// <remarks>
+        /// ジョイントの種類により使われるかが変わります
+        /// </remarks>
+        public Vector3 Axis
+        {
+            get
+            {
+                var unityAxis = changeCoordVector3_(jointInfo_.axis);//CAD的座標系からUnity的な座標にします(ルートで回転とかマイナススケールだと後で混乱しまくるので変換)
+                unityAxis = -unityAxis;//左手座標系の回転なので逆になるので軸を逆にしておきます
+                return unityAxis;
             }
         }
     }
-    public class Link
+    public class Link : MonoBehaviour
     {
-        internal LinkInfo linkInfo;
-        internal GameObject linkObj;
-
-        public GameObject LinkGameObject
-        {
-            get { return linkObj; }
-        }
+        [SerializeField]
+        internal LinkInfo linkInfo;        
     }
     public Dictionary<string, Joint> Joints = new Dictionary<string, Joint>();
     public Dictionary<string, Link> Links = new Dictionary<string, Link>();
@@ -364,11 +444,11 @@ public class PepperModelDisp : MonoBehaviour {
                     meshObj.transform.localRotation = changeCoordModelRotate_();
                 }
             }
-
-            Links[linkKv.Key] = new Link(){
-                linkObj = obj,
-                linkInfo = info,
-            };
+            var link = obj.AddComponent<Link>();
+            {
+                link.linkInfo = info;
+            }
+            Links[linkKv.Key] = link;
         }
         // Joint(ヒンジやボールなどの可動する関節)を生成＆Link(剛体的なもの)との接続
         foreach (var jointKv in jointInfos_)
@@ -380,8 +460,8 @@ public class PepperModelDisp : MonoBehaviour {
             obj.transform.localPosition = changeCoordVector3_(info.origin.xyz);
             obj.transform.localRotation = changeAngleQuaternion_(info.origin.rpy);
 
-            var parentObj = Links[info.parentLink].LinkGameObject;
-            var childObj = Links[info.childLink].LinkGameObject;
+            var parentObj = Links[info.parentLink].gameObject;
+            var childObj = Links[info.childLink].gameObject;
             if (parentObj != null)
             {
                 obj.transform.SetParent(parentObj.transform, false);
@@ -390,18 +470,16 @@ public class PepperModelDisp : MonoBehaviour {
             {
                 childObj.transform.SetParent(obj.transform, false);
             }
-
-            Joints[jointKv.Key] = new Joint()
-            {
-                jointObj = obj,
-                jointInfo = info,
-                angleRad = 0
-            };
+            var joint = obj.AddComponent<Joint>();
+             {
+                 joint.setup(info, 0);
+             }
+            Joints[jointKv.Key] = joint;
         }
         // 基準となる値を初期状態のうちに覚えておきます
         {
-            var baseLink = Links["base_link"].LinkGameObject;
-            var baseFootprint = Links["base_footprint"].LinkGameObject;
+            var baseLink = Links["base_link"].gameObject;
+            var baseFootprint = Links["base_footprint"].gameObject;
 
             var baseLinkTr = baseLink.transform;
             var baseFootprintTr = baseFootprint.transform;
@@ -438,44 +516,513 @@ public class PepperModelDisp : MonoBehaviour {
 
     #endregion
 
-    #region Joints <= add IK
+    #region Joint => VirtualJoint(Jointそのままだと不便なので仮想のジョイントを作ります)
+
+    /// <summary>
+    /// 仮想のジョイント
+    /// </summary>
+    /// <remarks>
+    /// Pepperの物理なモデルをそのまま使うと、剛体と関節などがサーボ等の構造そのままの形で階層になるのでイマイチ便利じゃないのと
+    /// IK計算などで長さゼロのジョイントがあると例外的扱いになるのでそこら辺を考慮した階層にしたジョイントです。
+    /// この仮想のジョイントの計算結果を物理なモデルのジョイントにプロットします。
+    /// 概念的にはスケルトン的なモノだと思うと解りやすいかと思います。
+    /// ※イワユル、リグ＆コントローラとは違います（多分）。より直接的な感じです。（そういう意味でスケルトン的）
+    /// </remarks>
+    public class VirtualJoint : MonoBehaviour
+    {
+        public VirtualJoint()
+        {
+        }
+        public enum JointType
+        {
+            None,
+            IkTargetFixPoint,
+            Limit1Axis,
+            Limit2Axis,
+        }
+        public JointType jointType = JointType.None;
+        public Quaternion orginalRot; 
+        public Vector3 limitAxis;
+        public float   minAngle;
+        public float   maxAngle;
+        public Quaternion orginalRot2nd;
+        public Vector3 limitAxis2nd;
+        public float   minAngle2nd;
+        public float   maxAngle2nd;
+
+        public Joint dstJoint;
+        public Joint dstJoint2nd;
+        public bool isDstJointRotInverse;
+        public bool isDstJointRotInverse2nd;
+
+        #region デバッグ用
+        public float disp_NowAxisAngle1stDeg;
+        public float disp_NowAxisAngle2ndDeg;
+        #endregion
+
+        public void applyToRealJoint()
+        {
+            switch (jointType)
+            {
+                case VirtualJoint.JointType.IkTargetFixPoint:
+                    {
+                    }
+                    break;
+                case VirtualJoint.JointType.Limit1Axis:
+                    {
+                        var orgQ = this.orginalRot;
+                        var nowQ = this.transform.localRotation;
+                        var axis = this.limitAxis;
+
+                        //var diffQ = nowQ * Quaternion.Inverse(orgQ);
+
+                        // 念のため軸をずらす様な回転が入ってる場合はその成分をキャンセルしておきます
+                        var limitedNowQ = Quaternion.FromToRotation(nowQ * axis, axis) * nowQ;
+
+                        // 角度を得ます(軸周りの回転角)
+                        var w = Mathf.Clamp(limitedNowQ.w, -1, 1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                        var nowRotRad = Mathf.Acos(w) * 2.0f;
+                        if (nowRotRad != 0)
+                        {
+                            var r = Mathf.Sin(nowRotRad / 2.0f);
+                            var axisQ = new Vector3(limitedNowQ.x / r, limitedNowQ.y / r, limitedNowQ.z / r);
+                            if (Vector3.Dot(axisQ, axis) < 0)
+                            {
+                                nowRotRad = -nowRotRad;
+                            }
+                        }
+                        // 物理の方のジョイントに反映します
+                        float mul = isDstJointRotInverse ? -1 : 1;
+                        dstJoint.AngleDeg = mul * nowRotRad * Mathf.Rad2Deg;
+                        disp_NowAxisAngle1stDeg = dstJoint.AngleDeg;
+                    }
+                    break;
+                case VirtualJoint.JointType.Limit2Axis:
+                    {
+                        var orgQ = this.orginalRot;
+                        var nowQ = this.transform.localRotation;
+                        var axis1st = this.limitAxis;
+                        var axis2nd = this.limitAxis2nd;
+                        var axis2Q = Quaternion.FromToRotation(axis1st, nowQ * axis1st);
+                        var axis1Q = Quaternion.Inverse(axis2Q) * nowQ;
+                        axis2nd = axis1Q * axis2nd;//1軸目の回転を掛けておきます
+                        float nowRotDeg2nd = 0;
+                        {
+                            // 角度を得ます(軸周りの回転角)
+                            var w = Mathf.Clamp(axis2Q.w, -1, 1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                            var nowRotRad = Mathf.Acos(w) * 2.0f;
+                            if (nowRotRad != 0)
+                            {
+                                var r = Mathf.Sin(nowRotRad / 2.0f);
+                                var axisQ = new Vector3(axis2Q.x / r, axis2Q.y / r, axis2Q.z / r);
+                                if (Vector3.Dot(axisQ, axis2nd) < 0)
+                                {
+                                    nowRotRad = -nowRotRad;
+                                }
+                            }
+                            nowRotDeg2nd = nowRotRad * Mathf.Rad2Deg;
+                        }
+                        float nowRotDeg1st = 0;
+                        {
+                            // 角度を得ます(軸周りの回転角)
+                            var w = Mathf.Clamp(axis1Q.w,-1,1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                            var nowRotRad = Mathf.Acos(w) * 2.0f;
+                            if (nowRotRad != 0)
+                            {
+                                var r = Mathf.Sin(nowRotRad / 2.0f);
+                                var axisQ = new Vector3(axis1Q.x / r, axis1Q.y / r, axis1Q.z / r);
+                                if (Vector3.Dot(axisQ, axis1st) < 0)
+                                {
+                                    nowRotRad = -nowRotRad;
+                                }
+                            }
+                            nowRotDeg1st = nowRotRad * Mathf.Rad2Deg;
+                        }
+                        // 物理の方のジョイントに反映します
+                        float mul = isDstJointRotInverse ? -1 : 1;
+                        float mul2nd = isDstJointRotInverse2nd ? -1 : 1;
+                        dstJoint.AngleDeg = mul * nowRotDeg1st;
+                        dstJoint2nd.AngleDeg = mul2nd * nowRotDeg2nd;
+                        disp_NowAxisAngle1stDeg = dstJoint.AngleDeg;
+                        disp_NowAxisAngle2ndDeg = dstJoint2nd.AngleDeg;
+                    }
+                    break;
+            }
+        }
+    }
+    GameObject createVirtualJointObj_(string name, GameObject parent)
+    {
+        var gameObject = new GameObject();
+        gameObject.name = name;
+        if (parent != null)
+        {
+            gameObject.transform.SetParent(parent.transform, false);
+        }
+        var virtualJoint = gameObject.AddComponent<VirtualJoint>();
+        return gameObject;
+    }
+    public Dictionary<string, GameObject> VirtualJoints = new Dictionary<string, GameObject>();
+
+    void createVirtualJoint_()
+    {
+#if false
+      ★物理な階層★
+      "base_link_fixedjoint"
+      - "HeadYaw"
+       - "HeadPitch"
+         - 各種固定ポイント群(カメラやらセンサ等)
+           "CameraTop_sensor_fixedjoint"
+           ...
+      - "HipRoll"
+        - "HipPitch"
+          - "KneePitch"
+            - "base_footprint_joint"
+      - "LShoulderPitch",
+        - "LShoulderRoll",
+         - "LElbowYaw"
+           - "LElbowRoll"
+            - "LWristYaw"
+             - "LHand"
+               各種センサーや指など
+      各種センサー(加速度センサ、ジャイロセンサ)やタブレット等,
+
+      ★仮想な階層★
+      Pepperに限った場合、足元をルートにした方が絶対扱いやすいはずなのでそうしてみる。
+      汎用とか人型を考えると、おなかとか腰だけど、この形は正直めんどかったので。
+      そちらを考えるなら別途人型とPepperのジオング足スタイルのマッチングを考えた版を用意するのが良い予感がする。
+
+      - "Root"("base_footprint_point")
+        - "Knee"
+          - "Hip"
+           - "Torso"("base_link_fixedjoint") ※ヘソ naoqiでは頻繁に使われるルートの名前。ヘソ座標系等の用語が良く出る。。
+              - "Head"
+                ...
+              - "LShoulder",
+                - "LElbow"
+                  - "LWrist"
+                    - "LHand_point"
+                    ...
+              - "RShoulder",
+            ...
+       */
+#endif
+        // ジョイントを生成します
+        VirtualJoints["Root"] = createVirtualJointObj_("Root", null);
+        VirtualJoints["FootPrint_point"] = createVirtualJointObj_("FootPrint_point", VirtualJoints["Root"]);
+        VirtualJoints["Knee"] = createVirtualJointObj_("Knee", VirtualJoints["Root"]);
+        VirtualJoints["Hip"] = createVirtualJointObj_("Hip", VirtualJoints["Knee"]);
+
+        VirtualJoints["Torso"] = createVirtualJointObj_("Torso", VirtualJoints["Hip"]);
+
+        VirtualJoints["Head"] = createVirtualJointObj_("Head", VirtualJoints["Torso"]);
+
+        VirtualJoints["LShoulder"] = createVirtualJointObj_("LShoulder", VirtualJoints["Torso"]);
+        VirtualJoints["LElbow"] = createVirtualJointObj_("LElbow", VirtualJoints["LShoulder"]);
+        VirtualJoints["LWrist"] = createVirtualJointObj_("LWrist", VirtualJoints["LElbow"]);
+        VirtualJoints["LHand_point"] = createVirtualJointObj_("LHand_point", VirtualJoints["LWrist"]);
+
+        VirtualJoints["RShoulder"] = createVirtualJointObj_("RShoulder", VirtualJoints["Torso"]);
+        VirtualJoints["RElbow"] = createVirtualJointObj_("RElbow", VirtualJoints["RShoulder"]);
+        VirtualJoints["RWrist"] = createVirtualJointObj_("RWrist", VirtualJoints["RElbow"]);
+        VirtualJoints["RHand_point"] = createVirtualJointObj_("RHand_point", VirtualJoints["RWrist"]);
+
+        // 軸と位置をセットします
+        {
+            var pairLst = new List<KeyValuePair<string, string>>{
+                new KeyValuePair<string,string>("Root","base_footprint_joint"),
+                new KeyValuePair<string,string>("FootPrint_point","base_footprint_joint"),
+                new KeyValuePair<string,string>("Knee","KneePitch"),
+                new KeyValuePair<string,string>("Hip","HipRoll"),
+                new KeyValuePair<string,string>("Head","HeadYaw"),
+                new KeyValuePair<string,string>("Torso","base_link_fixedjoint"),
+                new KeyValuePair<string,string>("LShoulder","LShoulderPitch"),
+                new KeyValuePair<string,string>("LElbow","LElbowYaw"),
+                new KeyValuePair<string,string>("LWrist","LWristYaw"),
+                new KeyValuePair<string,string>("LHand_point","LHand"),
+                new KeyValuePair<string,string>("RShoulder","RShoulderPitch"),
+                new KeyValuePair<string,string>("RElbow","RElbowYaw"),
+                new KeyValuePair<string,string>("RWrist","RWristYaw"),
+                new KeyValuePair<string,string>("RHand_point","RHand"),
+            };
+            foreach (var pair in pairLst)
+            {
+                if (VirtualJoints.ContainsKey(pair.Key) && Joints.ContainsKey(pair.Value))
+                {
+                    VirtualJoints[pair.Key].transform.rotation =
+                        Joints[pair.Value].transform.rotation;
+                }
+            }
+            foreach (var pair in pairLst)
+            {
+                if (VirtualJoints.ContainsKey(pair.Key) && Joints.ContainsKey(pair.Value))
+                {
+                    VirtualJoints[pair.Key].transform.position =
+                        Joints[pair.Value].transform.position;
+                }
+            }
+            //腰以下は階層順が逆になるので、ジョイントに反映するときに回転角を反転する必要があります。
+            VirtualJoints["Knee"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
+            VirtualJoints["Hip"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
+        }
+
+        //制限を設定します
+        //単純な制限
+        {
+            var pairLst = new List<KeyValuePair<string, string>>{
+                new KeyValuePair<string,string>("Knee","KneePitch"),
+                new KeyValuePair<string,string>("Hip","HipRoll"),
+                new KeyValuePair<string,string>("RWrist","RWristYaw"),
+                new KeyValuePair<string,string>("LWrist","LWristYaw"),
+            };
+            foreach (var pair in pairLst)
+            {
+                var vj = VirtualJoints[pair.Key].GetComponent<VirtualJoint>();
+                var joint = Joints[pair.Value];
+                vj.jointType = VirtualJoint.JointType.Limit1Axis;
+                vj.orginalRot = Joints[pair.Value].transform.localRotation;
+                vj.limitAxis = joint.Axis;
+                vj.minAngle = joint.AngleLimitLower;
+                vj.maxAngle = joint.AngleLimitUpper;
+                vj.dstJoint = Joints[pair.Value];
+            }
+        }
+        //２軸な制限
+        {
+            var pairLst = new List<KeyValuePair<string, string[]>>{
+                new KeyValuePair<string,string[]>("Head",     new string[]{"HeadYaw","HeadPitch"}),
+                new KeyValuePair<string,string[]>("LShoulder",new string[]{"LShoulderPitch","LShoulderRoll"}),
+                new KeyValuePair<string,string[]>("RShoulder",new string[]{"RShoulderPitch","RShoulderRoll"}),
+                new KeyValuePair<string,string[]>("LElbow",   new string[]{"LElbowYaw","LElbowRoll"}),
+                new KeyValuePair<string,string[]>("RElbow",   new string[]{"RElbowYaw","RElbowRoll"}),
+            };
+            foreach (var pair in pairLst)
+            {
+                var vj = VirtualJoints[pair.Key].GetComponent<VirtualJoint>();
+                var joint0 = Joints[pair.Value[0]];
+                var joint1 = Joints[pair.Value[1]];
+                vj.jointType = VirtualJoint.JointType.Limit2Axis;
+                vj.orginalRot = Joints[pair.Value[0]].transform.localRotation;
+                vj.limitAxis = joint0.Axis;
+                vj.minAngle  = joint0.AngleLimitLower;
+                vj.maxAngle  = joint0.AngleLimitUpper;
+                vj.orginalRot2nd = Joints[pair.Value[1]].transform.localRotation;
+                vj.limitAxis2nd = joint1.Axis;
+                vj.minAngle2nd  = joint1.AngleLimitLower;
+                vj.maxAngle2nd  = joint1.AngleLimitUpper;
+                vj.dstJoint    = Joints[pair.Value[0]];
+                vj.dstJoint2nd = Joints[pair.Value[1]];
+            }
+        }
+        //固定点(IKのターゲット)
+        {
+            var lst = new List<KeyValuePair<string,string>>{
+                new KeyValuePair<string,string>("Root", "base_footprint_joint"),
+                new KeyValuePair<string,string>("Torso","base_link_fixedjoint"),
+                new KeyValuePair<string,string>("LHand_point","LHand"),
+                new KeyValuePair<string,string>("RHand_point","RHand"),
+            };
+            foreach (var value in lst)
+            {
+                var vj = VirtualJoints[value.Key].GetComponent<VirtualJoint>();
+                vj.jointType = VirtualJoint.JointType.IkTargetFixPoint;
+                vj.dstJoint = Joints[value.Value];
+            }
+        }
+    }
+
+    #endregion
+
+    #region VirtualJoints <= add IK
     public Transform RHandTarget;
     public Transform LHandTarget;
-    RootMotion.FinalIK.CCDIK ikRHand_;
-    RootMotion.FinalIK.CCDIK ikLHand_;
+    public RootMotion.FinalIK.FABRIKRoot ikRoot_;
+    public RootMotion.FinalIK.FABRIK ikRHand_;
+    public RootMotion.FinalIK.FABRIK ikLHand_;
+    public RootMotion.FinalIK.FABRIK ikBody_;
 
+	public class RotationLimitZero : RootMotion.FinalIK.RotationLimit {
+		#region Main Interface
+		#endregion Main Interface
+		/*
+		 * Limits the rotation in the local space of this instance's Transform.
+		 * */
+		protected override Quaternion LimitRotation(Quaternion rotation) {		
+			return Quaternion.identity;
+		}
+	}
+
+    public class RotationLimit2Axis : RootMotion.FinalIK.RotationLimit
+    {
+        #region Main Interface
+        #endregion Main Interface
+
+        public float min;
+        public float max;
+        public Vector3 axis2nd;
+        public float min2nd;
+        public float max2nd;                   
+
+        /*
+		 * Limits the rotation in the local space of this instance's Transform.
+		 * */
+        protected override Quaternion LimitRotation(Quaternion rotation)
+        {
+            //2軸は直行する前提でやります(Pepperのは全部直行してるのでこれでOK)
+
+            // 根本の1軸目の回転は当然ではあるけど軸は変化しないので軸の変化分は全部2軸目相当になります
+            var axis2Q = Quaternion.FromToRotation(axis, rotation * axis);
+           // 2軸目をキャンセルした結果が1軸目の回転です
+            var axis1Q = Quaternion.Inverse(axis2Q) * rotation;
+         
+            // 回転を制限します
+            {
+                var tmpAxis2nd = axis1Q * axis2nd;
+
+                // 角度を得ます(軸周りの回転角)
+                var w = Mathf.Clamp(axis2Q.w, -1, 1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                var nowRotRad = Mathf.Acos(w) * 2.0f;
+                if (nowRotRad != 0)
+                {
+                    var r = Mathf.Sin(nowRotRad / 2.0f);
+                    var axisQ = new Vector3(axis2Q.x / r, axis2Q.y / r, axis2Q.z / r);
+                    if (Vector3.Dot(axisQ, tmpAxis2nd) < 0)
+                    {
+                        nowRotRad = -nowRotRad;
+                    }
+                }
+                var nowRotDeg = nowRotRad * Mathf.Rad2Deg;
+                {
+                    nowRotDeg = Mathf.Clamp(nowRotDeg, min2nd, max2nd);
+                }
+                axis2Q = Quaternion.AngleAxis(nowRotDeg, tmpAxis2nd);
+            }
+            {
+                // 角度を得ます(軸周りの回転角)
+                var w = Mathf.Clamp(axis1Q.w, -1, 1);//誤差程度でも少しでも1.0を超えるとnan返しやがったの対策…
+                var nowRotRad = Mathf.Acos(w) * 2.0f;
+                if (nowRotRad != 0)
+                {
+                    var r = Mathf.Sin(nowRotRad / 2.0f);
+                    var axisQ = new Vector3(axis1Q.x / r, axis1Q.y / r, axis1Q.z / r);
+                    if (Vector3.Dot(axisQ, axis) < 0)
+                    {
+                        nowRotRad = -nowRotRad;
+                    }
+                }
+                var nowRotDeg = nowRotRad * Mathf.Rad2Deg;
+                {
+                    nowRotDeg = Mathf.Clamp(nowRotDeg, min, max);
+                }
+                axis1Q = Quaternion.AngleAxis(nowRotDeg, axis);
+            }
+            return axis2Q * axis1Q;
+        }
+    }
+
+    void createIkLimit_(GameObject virtualJointObj)
+    {
+        var virtualJoint = virtualJointObj.GetComponent<VirtualJoint>();
+        switch (virtualJoint.jointType)
+        {
+            case VirtualJoint.JointType.IkTargetFixPoint:
+                {
+                    var limit = virtualJointObj.AddComponent<RotationLimitZero>();
+                }
+                break;
+            case VirtualJoint.JointType.Limit1Axis:
+                {
+                    var limit = virtualJointObj.AddComponent<RootMotion.FinalIK.RotationLimitHinge>();
+                    limit.axis = virtualJoint.limitAxis;
+                    limit.min = virtualJoint.minAngle;
+                    limit.max = virtualJoint.maxAngle;
+                }
+                break;
+            case VirtualJoint.JointType.Limit2Axis:
+                {
+                    var limit = virtualJointObj.AddComponent<RotationLimit2Axis>();
+                    limit.axis = virtualJoint.limitAxis;
+                    limit.min = virtualJoint.minAngle;
+                    limit.max = virtualJoint.maxAngle;
+                    limit.axis2nd = virtualJoint.limitAxis2nd;
+                    limit.min2nd = virtualJoint.minAngle2nd;
+                    limit.max2nd = virtualJoint.maxAngle2nd;
+                }
+                break;
+        }
+    }
     void createIk_()
     {
         // IKの回転の制限を設定します
-        foreach(var joint in Joints.Values)
+        foreach (var vrJointObj in VirtualJoints.Values)
         {
-            joint.createIkLimit_();
+            createIkLimit_(vrJointObj);
         }
         // IKを設定します
         {
-            ikRHand_ = Joints["RShoulderPitch"].JointGameObject.AddComponent<RootMotion.FinalIK.CCDIK>();
+            ikBody_ = VirtualJoints["Root"].AddComponent<RootMotion.FinalIK.FABRIK>();
+            ikBody_.solver.SetChain(
+                new Transform[]{
+                    VirtualJoints["Root"].transform,
+                    VirtualJoints["Knee"].transform,
+                    VirtualJoints["Hip"].transform,
+                    VirtualJoints["Torso"].transform,
+                },
+                VirtualJoints["Root"].transform
+                );
+            ikRHand_ = VirtualJoints["RShoulder"].AddComponent<RootMotion.FinalIK.FABRIK>();
             ikRHand_.solver.SetChain(
                 new Transform[]{
-                    Joints["RShoulderPitch"].JointGameObject.transform,
-                    Joints["RShoulderRoll"].JointGameObject.transform,
-                    Joints["RElbowYaw"].JointGameObject.transform,
-                    Joints["RElbowRoll"].JointGameObject.transform,
-                    Joints["RWristYaw"].JointGameObject.transform,
+                    VirtualJoints["Torso"].transform,
+                    VirtualJoints["RShoulder"].transform,
+                    VirtualJoints["RElbow"].transform,
+                    VirtualJoints["RWrist"].transform,
+                    VirtualJoints["RHand_point"].transform,
                 },
-                Joints["RShoulderPitch"].JointGameObject.transform
+                VirtualJoints["Torso"].transform
                 );
-            ikLHand_ = Joints["LShoulderPitch"].JointGameObject.AddComponent<RootMotion.FinalIK.CCDIK>();
+            ikLHand_ = VirtualJoints["LShoulder"].AddComponent<RootMotion.FinalIK.FABRIK>();
             ikLHand_.solver.SetChain(
                 new Transform[]{
-                    Joints["LShoulderPitch"].JointGameObject.transform,
-                    Joints["LShoulderRoll"].JointGameObject.transform,
-                    Joints["LElbowYaw"].JointGameObject.transform,
-                    Joints["LElbowRoll"].JointGameObject.transform,
-                    Joints["LWristYaw"].JointGameObject.transform,
+                    VirtualJoints["Torso"].transform,
+                    VirtualJoints["LShoulder"].transform,
+                    VirtualJoints["LElbow"].transform,
+                    VirtualJoints["LWrist"].transform,
+                    VirtualJoints["LHand_point"].transform,
                 },
-                Joints["LShoulderPitch"].JointGameObject.transform
+                VirtualJoints["Torso"].transform
                 );
+
+            var ikBodyChain = new RootMotion.FinalIK.FABRIKChain();
+            ikBodyChain.ik = ikBody_;
+            var ikRHandChain = new RootMotion.FinalIK.FABRIKChain();
+            ikRHandChain.ik = ikRHand_;
+            var ikLHandChain = new RootMotion.FinalIK.FABRIKChain();
+            ikLHandChain.ik = ikLHand_;
+#if true
+            ikRoot_ = VirtualJoints["Root"].AddComponent<RootMotion.FinalIK.FABRIKRoot>();
+            ikRoot_.solver.chains = new RootMotion.FinalIK.FABRIKChain[]{
+                ikBodyChain,
+                ikRHandChain,
+                ikLHandChain,
+            };
+            ikBodyChain.children = new int[]{
+                1,2,
+            };
+#endif
         }
+    }
+
+    #endregion
+
+    #region Apply VirtualJoint => Model
+    void applyVirtualJointToModel_()
+    {
+        foreach (var virtualJointObj in VirtualJoints.Values)
+        {
+            var virtualJoint = virtualJointObj.GetComponent<VirtualJoint>();
+            virtualJoint.applyToRealJoint();
+        }
+
     }
     #endregion
 
@@ -654,7 +1201,7 @@ public class PepperModelDisp : MonoBehaviour {
 #endif
     }
 #endif
-    #endregion 
+    #endregion
 
     #region Apply Avator to Pepper
 
@@ -973,11 +1520,27 @@ public class PepperModelDisp : MonoBehaviour {
 
     #endregion
 
+    #region Debug
+    List<GameObject> m_debugGameObjLst = new List<GameObject>();
+    void PutLine(Vector3 p0, Vector3 p1, Color col,float width)
+    {
+        var obj = new GameObject();
+        m_debugGameObjLst.Add(obj);
+        var lr = obj.AddComponent<LineRenderer>();
+        lr.SetWidth(width, width);
+        lr.SetVertexCount(2);
+        lr.SetPosition(0, p0);
+        lr.SetPosition(1, p1);
+        lr.SetColors(col,col);
+    }
+    #endregion
+
     // Use this for initialization
 	void Start () 
     {
         LoadUrdf();
         createLinkAndJoint_();
+        createVirtualJoint_();
         createIk_();
         //createAvatar_();
     }
@@ -1019,6 +1582,49 @@ public class PepperModelDisp : MonoBehaviour {
     // Update is called once per frame
     void Update()
     {
+        #region デバッグ
+        foreach (var obj in m_debugGameObjLst)
+        {
+            GameObject.Destroy(obj);
+        }
+        m_debugGameObjLst.Clear();
+        {
+            Action<GameObject> recv = null;
+            recv = new Action<GameObject>((parent) =>
+            {
+                if (parent != null)
+                {
+                    for (int ii = 0; ii < parent.transform.childCount; ii++)
+			        {
+                        var child = parent.transform.GetChild(ii);
+                        PutLine(parent.transform.position, 
+                                child.transform.position, new Color(1, 1, 1, 1), 0.05f);
+                        recv(child.gameObject);
+                    }
+                }
+            });
+            recv(VirtualJoints["Root"]);
+        }
+        #endregion
+
+
+        applyVirtualJointToModel_();
+
+        // 
+        {
+            var baseLink = Links["base_link"].gameObject;
+            var baseFootprint = Links["base_footprint"].gameObject;
+
+            var baseLinkTr = baseLink.transform;
+            var baseFootprintTr = baseFootprint.transform;
+
+            var p = baseLinkTr.position - baseFootprintTr.position;
+            var r = baseLinkTr.rotation * Quaternion.Inverse(baseFootprintTr.rotation);
+
+            baseLink.transform.position = p - BaseFootprintOffsetPos;
+            baseLink.transform.rotation = r * Quaternion.Inverse(BaseFootprintOffsetRotate);
+        }
+
 #if false
         if(AngleModEnable)
         {
