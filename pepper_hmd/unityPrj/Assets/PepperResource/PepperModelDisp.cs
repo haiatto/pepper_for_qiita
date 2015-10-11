@@ -693,16 +693,17 @@ public class PepperModelDisp : MonoBehaviour {
 
       - "Root"("base_footprint_point")
         - "Knee"
-          - "Hip"
-           - "Torso"("base_link_fixedjoint") ※ヘソ naoqiでは頻繁に使われるルートの名前。ヘソ座標系等の用語が良く出る。。
-              - "Head"
-                ...
-              - "LShoulder",
-                - "LElbow"
-                  - "LWrist"
-                    - "LHand_point"
-                    ...
-              - "RShoulder",
+          - "HipUnder"
+           - "HipUpper"
+            - "Torso"("base_link_fixedjoint") ※ヘソ naoqiでは頻繁に使われるルートの名前。ヘソ座標系等の用語が良く出る。。
+               - "Head"
+                 ...
+               - "LShoulder",
+                 - "LElbow"
+                   - "LWrist"
+                     - "LHand_point"
+                     ...
+               - "RShoulder",
             ...
        */
 #endif
@@ -710,9 +711,10 @@ public class PepperModelDisp : MonoBehaviour {
         VirtualJoints["Root"] = createVirtualJointObj_("Root", null);
         VirtualJoints["FootPrint_point"] = createVirtualJointObj_("FootPrint_point", VirtualJoints["Root"]);
         VirtualJoints["Knee"] = createVirtualJointObj_("Knee", VirtualJoints["Root"]);
-        VirtualJoints["Hip"] = createVirtualJointObj_("Hip", VirtualJoints["Knee"]);
+        VirtualJoints["HipUnder"] = createVirtualJointObj_("HipUnder", VirtualJoints["Knee"]);
+        VirtualJoints["HipUpper"] = createVirtualJointObj_("HipUpper", VirtualJoints["HipUnder"]);
 
-        VirtualJoints["Torso"] = createVirtualJointObj_("Torso", VirtualJoints["Hip"]);
+        VirtualJoints["Torso"] = createVirtualJointObj_("Torso", VirtualJoints["HipUpper"]);
 
         VirtualJoints["Head"] = createVirtualJointObj_("Head", VirtualJoints["Torso"]);
 
@@ -732,7 +734,8 @@ public class PepperModelDisp : MonoBehaviour {
                 new KeyValuePair<string,string>("Root","base_footprint_joint"),
                 new KeyValuePair<string,string>("FootPrint_point","base_footprint_joint"),
                 new KeyValuePair<string,string>("Knee","KneePitch"),
-                new KeyValuePair<string,string>("Hip","HipRoll"),
+                new KeyValuePair<string,string>("HipUnder","HipPitch"),
+                new KeyValuePair<string,string>("HipUpper","HipRoll"),
                 new KeyValuePair<string,string>("Head","HeadYaw"),
                 new KeyValuePair<string,string>("Torso","base_link_fixedjoint"),
                 new KeyValuePair<string,string>("LShoulder","LShoulderPitch"),
@@ -762,7 +765,8 @@ public class PepperModelDisp : MonoBehaviour {
             }
             //腰以下は階層順が逆になるので、ジョイントに反映するときに回転角を反転する必要があります。
             VirtualJoints["Knee"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
-            VirtualJoints["Hip"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
+            VirtualJoints["HipUpper"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
+            VirtualJoints["HipUnder"].GetComponent<VirtualJoint>().isDstJointRotInverse = true;
         }
 
         //制限を設定します
@@ -770,7 +774,8 @@ public class PepperModelDisp : MonoBehaviour {
         {
             var pairLst = new List<KeyValuePair<string, string>>{
                 new KeyValuePair<string,string>("Knee","KneePitch"),
-                new KeyValuePair<string,string>("Hip","HipRoll"),
+                new KeyValuePair<string,string>("HipUnder","HipPitch"),
+                new KeyValuePair<string,string>("HipUpper","HipRoll"),
                 new KeyValuePair<string,string>("RWrist","RWristYaw"),
                 new KeyValuePair<string,string>("LWrist","LWristYaw"),
             };
@@ -964,7 +969,8 @@ public class PepperModelDisp : MonoBehaviour {
                 new Transform[]{
                     VirtualJoints["Root"].transform,
                     VirtualJoints["Knee"].transform,
-                    VirtualJoints["Hip"].transform,
+                    VirtualJoints["HipUnder"].transform,
+                    VirtualJoints["HipUpper"].transform,
                     VirtualJoints["Torso"].transform,
                 },
                 VirtualJoints["Root"].transform

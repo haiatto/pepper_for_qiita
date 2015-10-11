@@ -174,7 +174,18 @@ public class Main : SingletonMonoBehaviour<Main>
         get { return targetJointAngleTbl_["RHand"]; }
         set { targetJointAngleTbl_["RHand"] = value; }
     }
-
+    public float TargetHipRoll{
+        get { return targetJointAngleTbl_["HipRoll"]; }
+        set { targetJointAngleTbl_["HipRoll"] = value; }
+    }
+    public float TargetHipPitch{
+        get { return targetJointAngleTbl_["HipPitch"]; }
+        set { targetJointAngleTbl_["HipPitch"] = value; }
+    }
+    public float TargetKneePitch{
+        get { return targetJointAngleTbl_["KneePitch"]; }
+        set { targetJointAngleTbl_["KneePitch"] = value; }
+    }
     #endregion
 
 
@@ -306,6 +317,8 @@ public class Main : SingletonMonoBehaviour<Main>
                 Thread.Sleep(10);
             }
         }
+
+        // カメラ登録
         pcamBottom_.Subscribe();
         pcamTop_.Subscribe();
 

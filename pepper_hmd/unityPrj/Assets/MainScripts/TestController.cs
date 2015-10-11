@@ -34,8 +34,14 @@ public class TestController : MonoBehaviour {
     public float TargetRWristYaw;
     [Range(-1.5f, 1.5f)]
     public float TargetRHand;
-
-	// Use this for initialization
+    [Range(-1.5f, 1.5f)]
+    public float TargetHipRoll;
+    [Range(-1.5f, 1.5f)]
+    public float TargetHipPitch;
+    [Range(-1.5f, 1.5f)]
+    public float TargetKneePitch;
+    
+    // Use this for initialization
 	void Start () {
 	
 	}
@@ -57,5 +63,9 @@ public class TestController : MonoBehaviour {
         Main.Instance.TargetRElbowRoll     = TargetRElbowRoll;
         Main.Instance.TargetRWristYaw      = TargetRWristYaw;
         Main.Instance.TargetRHand          = TargetRHand;
+
+        Main.Instance.TargetHipRoll        = TargetHipRoll;
+        Main.Instance.TargetHipPitch       = TargetHipPitch;
+        Main.Instance.TargetKneePitch      = TargetKneePitch;
 	}
 }

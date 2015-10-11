@@ -145,7 +145,7 @@ namespace qiMessaging
     {
         public event Action<QiMessaging> Connected;
         public event Action<QiMessaging> Disconnected;
-        public event Action<QiMessaging> Error;
+        public event Action<QiMessaging,JsonData> Error;
 
         public QiMessaging()
         {
@@ -196,7 +196,7 @@ namespace qiMessaging
                 }
 
                 System.Diagnostics.Debug.WriteLine("error");
-                if (Error != null) Error(this);
+                if (Error != null) Error(this, data["result"]);
             });
             client_.On("message", (message) =>
             {

@@ -4,16 +4,16 @@ using qiMessaging;
 
 namespace NaoQiUtils
 {
+    /// <summary>
+    /// QiMessagingを使ったNaoQi関連の補助クラス
+    /// </summary>
+    /// <remarks>
+    /// 便利処理を追加してゆくところ
+    /// </remarks>
     public class QiUt
     {
         protected QiMessaging qim_;
 
-        /// <summary>
-        /// QiMessagingを使ったNaoQi関連の補助クラス
-        /// </summary>
-        /// <remarks>
-        /// 便利クラスを追加してゆくところ
-        /// </remarks>
         public QiUt(QiMessaging qim)
         {
             qim_ = qim;
@@ -188,6 +188,9 @@ namespace NaoQiUtils
         #endregion
     }
 
+    /// <summary>
+    /// ペッパー用のカメラ関連APIを扱いやすいようにしたクラス。
+    /// </summary>
     public class PepperCamera
     {
         QiMessaging qim_;
