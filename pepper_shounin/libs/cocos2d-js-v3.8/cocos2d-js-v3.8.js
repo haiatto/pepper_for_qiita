@@ -64979,6 +64979,7 @@ cc.loader.register(["json"], {
     load : function(realUrl, url, res, cb){
         cc.loader.loadJson(realUrl, function(error, data){
             var path = cc.path;
+            console.log(error);
             if(data && data["Content"] && data["Content"]["Content"]["UsedResources"]){
                 var UsedResources = data["Content"]["Content"]["UsedResources"],
                     dirname = path.dirname(url),
