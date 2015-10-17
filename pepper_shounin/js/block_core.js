@@ -63,7 +63,8 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //
 //■■■■■ ブロックテンプレフォーマット案 ■■■■■ 
 // -- root --
-// blockOpt
+// blockHeader
+//   ★ブロックの基本情報★
 //   sys_version
 //     'システムバージョン'
 //   blockWorldId
@@ -71,8 +72,6 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //      たとえば 'talkBlock' 'haiatto.talkBlock' '0x00AABBCCDDEEFF99' とか自由
 //   lang
 //     'jp' 'en'
-//   color
-//     'red' '#F88'
 //   head
 //     'start' 'in' ’value’
 //   tail
@@ -83,13 +82,21 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //      true/false trueの時は、ポーリング用入力枠に入っているときにコールバックにポーリング用の引数が渡される
 //
 // blockContents
+//   ★ブロックの内容★
 //   expressions
 //     ***下記参照***
 //   scope
 //     scopeName
 //   space
+//
+// blockVisual
+//   ★見た目の設定。表示するシステムが使うので実行するエンジン自体には不要な情報。なので内容は表示側の自由。★
+//   color
+//     'red' '#F88'
+//
+// 例:
 // {
-//     blockOpt:{version:'0.01',head:'start',tail:'out'},
+//     blockHeader:{version:'0.01',head:'start',tail:'out'},
 //     blockContents:[
 //         {expressions:[]},
 //         {scope:{scopeName:'scopeA',}},
@@ -97,6 +104,9 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //         {scope:{scopeName:'scopeB',}},
 //         {space:{spaceName:'spaceA',}},
 //     ],
+//     blockVisual:{
+//         color:'red'    
+//     }
 // },
 // -- expressions --
 // expressions
@@ -214,30 +224,30 @@ function Block(blockManager, blockTemplate, callback) {
     // ■ブロックテンプレからの準備
 
     // 入出力部分を準備します
-    if(self.blockTemplate.blockOpt.head == 'value') {
+    if(self.blockTemplate.blockHeader.head == 'value') {
         // 値用のブロックの連結(出力)部分
         // ※フローブロックと比べると、ある面でラムダ式っぽいかも。
         self.valueOut = {
             block:null, 
             tgtDataName:null, 
-            types: self.blockTemplate.blockOpt.types,
+            types: self.blockTemplate.blockHeader.types,
         };
     }
     else{
         // フロー用のブロックの連結(入出)部分
-        if(self.blockTemplate.blockOpt.head == 'in') {
+        if(self.blockTemplate.blockHeader.head == 'in') {
             self.in = {
                 block:null,
                 srcScopeName:null, 
             };
         }
-        if(self.blockTemplate.blockOpt.tail == 'out') {
+        if(self.blockTemplate.blockHeader.tail == 'out') {
             self.out = {
                 block:null, 
             };
         }
     }
-    if(self.blockTemplate.blockOpt.supportPolling){
+    if(self.blockTemplate.blockHeader.supportPolling){
         self.supportPolling = true;
     }
 
@@ -354,9 +364,10 @@ function Block(blockManager, blockTemplate, callback) {
                         expressionIns.value = expTmpl.input_dropOnly.default||{};
                     }
                     // データフォーマットの受け入れチェックをしておきます
-                    if(self.checkDataAccept(expTmpl.dataName,expressionIns.value))
+                    if(!self.checkDataAccept(expTmpl.dataName,expressionIns.value))
                     {
                         // 受け入れられないデフォルトが設定されていたので空にします(TODO:あとでアサートに)
+                        console.warn("default value error."+expTmpl.dataName);
                         expressionIns.value = {};
                     }
                 }
@@ -511,7 +522,7 @@ function Block(blockManager, blockTemplate, callback) {
     };
     // 複製します(内側のブロックは複製されません)
     self.cloneThisBlock = function(){
-        var ins = self.blockManager.createBlockIns(self.blockTemplate.blockOpt.blockWorldId);
+        var ins = self.blockManager.createBlockIns(self.blockTemplate.blockHeader.blockWorldId);
         $.each(self.valueInTbl,function(key,valueIn){
             ins.valueInTbl[key].value = valueIn.value;
         });
@@ -555,60 +566,6 @@ function Block(blockManager, blockTemplate, callback) {
     self.deferred = function(option)
     {
         option = option || {};
-        var makeFormatedValue_ = function(valueIn, valueData)
-        {
-            //HACK: 2015.5.29 コールバック実装的にも、煩雑になる割には、効果が薄いので、
-            //HACK: この省略系は廃止して、{string:でーた}みたいな形に統一する
-            //HACK: 多分そちらの方が遥かに解りやすく、ソースも読みやすく、手間も大した事なさそう
-            //HACK: なにより型情報が付加されるこ事ど同義なので、前提にできれば色々実装が捗る
-            //HACK: コールバック全部やコンテキスト内のデータを書き換えるのであとで一気にやる。
-
-            // 値のデータフォーマットの加工を行います
-            // ※値ブロックは主にコールバック実装者の利便性の為に、
-            // 対応するタイプが１種類の場合、
-            // データそのものを受け渡すルールにしてます。
-            // (具体的には値ブロックが返す・入力枠が受けとるの時に値自体がわたってゆく)
-            // 対応数タイプが２種類以上の場合は、
-            //   valueData.タイプ名 = データ
-            // といったタイプ名をキーにしたテーブルの形で受け渡します。
-            // ここでは、返すブロックと受ける枠が、違うフォーマ形式、
-            //   複数対応から１種対応、１種対応から複数
-            // の場合の
-            // データフォーマットの変換を行っています。
-            // なお、未対応の組み合わせはない前提です(接続時にチェック済み)
-            var formatedValue = {};
-            if(!valueIn.block)
-            {
-                // 入力が即値(値ブロックでは無い)場合
-                if(valueIn.acceptTypes.length>1){
-                    //UI =>多
-                    formatedValue[valueIn.acceptTypes[0]] = valueData;
-
-                }else{
-                    //UI =>１
-                    formatedValue[valueIn.acceptTypes[0]] = valueData;
-                }
-            }
-            else if(valueIn.acceptTypes.length>1 && 
-                    valueIn.block.valueOut.types.length == 1)
-            {
-                //１ => 多
-                var inType = valueIn.block.valueOut.types[0];
-                formatedValue[inType] = valueData;
-            }
-            else if(valueIn.block.valueOut.types.length > 1)
-            {
-                //多 => １
-                var inType = valueIn.acceptTypes[0];
-                formatedValue[inType] = valueData[inType];
-            }
-            else{
-                //１ => １ or 多 => 多
-                var inType = valueIn.acceptTypes[0];
-                formatedValue[inType] = valueData;
-            }
-            return formatedValue;
-        };
         var makeScopeBlockTbl_ = function(){
             var scopeBlkTbl = {};
             $.each(self.scopeOutTbl,function(k,scopeOut){
@@ -643,13 +600,20 @@ function Block(blockManager, blockTemplate, callback) {
             else if(valueIn.block){
                 // 値ブロックの結果をargValueDataTblにセットします(deferredで実行)
                 // HACK: この形が良いかは要検討。コールバック内に委ねる方がいいかも？
+                // HACK: 委ねない形で、要求するデータを記述しておけば最小限でいけていいかも？
+                //       たとえばマッチングした型の最初のモノを要求するみたいな形で…
                 valueEvalPromiseList.push(
                     $.Deferred(function(dfd) {
                         valueIn.block.deferred().then(function(valueData){
                             // 値入力枠に代入しておきます(値ブロックを枠から外した時に最後の評価結果が残る挙動になります)
                             valueIn.value = valueData;
                             // 受け渡し用のテーブルを構築します
-                            argValueDataTbl[k] = makeFormatedValue_(valueIn,valueData);
+                            argValueDataTbl[k] = {};
+                            $.each(valueIn.acceptTypes,function(k, acceptType){
+                                if(valueData[acceptType]){
+                                    argValueDataTbl[k][acceptType] = valueData[acceptType];
+                                }
+                            });
                             dfd.resolve();
                         },function(){
                             dfd.reject();
@@ -661,7 +625,12 @@ function Block(blockManager, blockTemplate, callback) {
                 // 値入力枠の値を使用します
                 var valueData = valueIn.value;
                 // 受け渡し用のテーブルにセットします
-                argValueDataTbl[k] = makeFormatedValue_(valueIn,valueData);
+                argValueDataTbl[k] = {};
+                $.each(valueIn.acceptTypes,function(idx, acceptType){
+                    if(valueData[acceptType]!=null){
+                        argValueDataTbl[k][acceptType] = valueData[acceptType];
+                    }
+                });
             }
         });
 
@@ -957,7 +926,7 @@ function BlockManager(execContext){
     self.toJSON_LumpBlocks = function(block){
         var recv = function(block){
             var json={
-                blkWId:block.blockTemplate.blockOpt.blockWorldId,
+                blkWId:block.blockTemplate.blockHeader.blockWorldId,
                 valTbl:{},
                 scpTbl:{},
             };
@@ -1024,16 +993,16 @@ function BlockManager(execContext){
 
     // ブロック定義の登録をしますテンプレートとコールバックの登録
     self.registBlockDef = function(blockTemplate, callback){
-        if(!blockTemplate.blockOpt.blockWorldId){
+        if(!blockTemplate.blockHeader.blockWorldId){
             alert("テンプレートにblockWorldIdがありません。"+JSON.stringify(blockTemplate));
             return;
         }
-        if(self.blockDefTbl[blockTemplate.blockOpt.blockWorldId]){
+        if(self.blockDefTbl[blockTemplate.blockHeader.blockWorldId]){
             //TODO:多言語対応時には重なる事あり
-            alert("定義登録でblockWorldIdが重なりました。id:"+blockTemplate.blockOpt.blockWorldId);
+            alert("定義登録でblockWorldIdが重なりました。id:"+blockTemplate.blockHeader.blockWorldId);
             return;
         }
-        self.blockDefTbl[blockTemplate.blockOpt.blockWorldId] = {
+        self.blockDefTbl[blockTemplate.blockHeader.blockWorldId] = {
             blockTemplate:blockTemplate, 
             callback:     callback,
         };

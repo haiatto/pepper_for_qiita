@@ -7,11 +7,197 @@
 var res = {
     HelloWorld_png : "cocos_res/HelloWorld.png",
     frame01_png : "cocos_res/frame01.png",
+    cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
 };
 var preload_res = [];
 for (var i in res) {
     preload_res.push(res[i]);
 }
+
+
+// ブロックの生成とかを管理します
+// (表示は一切扱いません。それはブロック単体の管理とそれを扱う側が管理してます)
+// (ブロック間のリンクも管理しません。それはBlockManagerがやってます。)
+var CommandBlockManager = function()
+{
+    var self = this;
+
+    // ブロックマネージャーの生成をします    
+    self.blockManager = new BlockManager({});
+    self.materialWsLst = [];
+    self.cmdBlockTbl = {};
+
+    // ブロック定義を登録します
+    pepperBlock.runRegisterBlock(
+        self.blockManager, 
+        self.materialWsLst
+    );
+
+    // ブロックを生成します(生成するだけ。表示等はどこかに登録された後、そこがやります)
+    self.createCommandBlock = function(blockWorldId)
+    {
+        var blkIns  = self.blockManager.createBlockIns(blockWorldId);
+        var cmdBlk  = new CommandBlock(blkIns);
+        self.cmdBlockTbl[blkIns] = cmdBlk;
+        return cmdBlk;
+    };
+    // 
+    self.createCommandBlockByBlockIns = function(blkIns)
+    {
+    };
+    //
+    self.lookupCommandBlock = function(blkIns)
+    {
+        return  self.cmdBlockTbl[blkIns];
+    };
+};
+
+// ブロック単体を管理します。扱うのは主に表示やUI操作などです。
+// (ブロック間のリンクやスコープの接続先などの管理は一切やりません。それは外の管理がやります)
+var CommandBlock = function(blkIns)
+{
+    var self = this;
+    var visualTempl = blkIns.blockTemplate.blockVisual;
+
+    self.blkIns = blkIns;
+
+    self.bg       = cc.Scale9Sprite.create(res.cmdblock_frame01_png);
+    self.label    = cc.LabelTTF.create("", "Arial", 20);
+    self.parentUI = null;
+
+    // イベントリスナー
+    var click = function()
+    {
+        //エディタ開くとかカレントにする
+        //self.blkIns.deferred();
+    }
+    cc.eventManager.addListener({
+        event: cc.EventListener.TOUCH_ONE_BY_ONE,
+        onTouchBegan: function(touch, event) {
+            if (cc.rectContainsPoint(self.bg.getBoundingBoxToWorld(), touch.getLocation())) {
+                click();
+                return true;
+            }
+            return false;
+        },
+        onTouchMoved: function(touch, event) {
+        }
+    }, self.bg);
+
+    //
+    self.setParentUI = function(parentUI)
+    {
+        if(self.parentUI == parentUI){
+            return;
+        }
+        if(self.parentUI){
+            self.parentUI.removeChild(self.bg);
+            self.parentUI.removeChild(self.label, 1);
+        }
+        self.parentUI = parentUI;
+        self.parentUI.addChild(self.bg);
+        self.parentUI.addChild(self.label, 1);
+    }
+
+
+    self.setPosition = function(x,y)
+    {
+        self.bg   .setPosition   (x,y);
+        self.label.setPosition   (x,y);
+    };
+
+    self.setSize = function(w,h)
+    {
+        self.bg.setContentSize(w,h);
+    };
+
+    self.getSize = function(){
+        return self.bg.getContentSize();
+    };
+
+    self.setLabel = function(text){
+        self.label.setString(text);
+        var lblSize = self.label.getContentSize();
+        self.setSize(Math.max(lblSize.width,64),
+                     Math.max(lblSize.height,32));
+    };
+
+    self.setLabel( visualTempl.disp_name );
+    self.setPosition(0,0);
+    self.setSize(64,32);
+};
+
+
+// 複数のブロックを管理します。
+// レイアウトを整えたりするお仕事をやります。
+// また、実行の起点を扱ったりもします。
+var CommandBlockWorkSpace = function(layer, commandBlockManager)
+{
+    var self = this;
+
+    self.cmdBlkMan = commandBlockManager;
+    self.cmdBlockLumpList = [];
+
+    var layout = ccui.Layout.create();
+    layout.setBackGroundImage(res.frame01_png);
+    layout.setBackGroundImageScale9Enabled(true);
+    layout.setClippingEnabled(true);
+    layer.addChild(layout);
+
+    self.setPosition = function(x,y)
+    {
+        layout.setPosition(x,y);
+    };
+    self.setSize = function(w,h)
+    {
+        layout.setContentSize(w,h);    
+    };
+
+    self.updateLayout = function()
+    {
+        var size = layout.getContentSize();
+        var x = 0;
+        var y = size.height;
+        $.each(self.cmdBlockLumpList,function(idx, cmdBlkLump)
+        {
+            var recv = function(cmdBlk)
+            {
+                cmdBlk.setParentUI(layout);
+                
+                var blkSize = cmdBlk.getSize();
+                cmdBlk.setPosition( 
+                    x + blkSize.width /2, 
+                    y - blkSize.height/2 
+                );
+                y -= blkSize.height;
+
+                $.each(cmdBlk.blkIns.scopeOutTbl,function(idx2,scopeOut)
+                {
+                    if(scopeOut.block)
+                    {
+                        recv( self.cmdBlkMan.lookupCommandBlock( scopeOut.block ) );
+                    }
+                });
+                if(cmdBlk.blkIns.out)
+                { 
+                    if(cmdBlk.blkIns.out.block)
+                    {
+                        recv( self.cmdBlkMan.lookupCommandBlock( cmdBlk.blkIns.out.block ) );
+                    }
+                }
+            };
+            recv(cmdBlkLump);
+            y -= 10;
+        });
+    };
+
+    self.addCommandLumpBlock = function(blkLumpTop)
+    {
+        self.cmdBlockLumpList.push(blkLumpTop);
+    };
+};
+
+// -- --
 
 //
 var MainLayer = cc.Layer.extend({
@@ -52,10 +238,30 @@ var MainLayer = cc.Layer.extend({
 //        editBox.setPosition(cc.p(size.width/2, 80/2));
 //        editBox.setDelegate(this);
 //        this.addChild(editBox);
-        bg.setPosition(size.width / 2, size.height / 2);
         //bg.setScale(2.8);
-        bg.setContentSize(size.width, size.height / 2);
+        bg.setAnchorPoint(0.0,0.0);
+        bg.setPosition(160, 0);
+        bg.setContentSize(size.width-320, 128);
         this.addChild(bg);
+
+
+        var widget = ccui.Widget.create();
+        var layout = ccui.Layout.create();
+        
+        //layout.setAnchorPoint(0.0,0.0);
+        layout.setPosition(160, 200);
+        layout.setContentSize(128, 150);
+        layout.setBackGroundImage(res.frame01_png);
+        layout.setBackGroundImageScale9Enabled(true);
+        layout.setClippingEnabled(true);
+        this.addChild(layout);
+
+        var sprite = cc.Sprite.create(res.HelloWorld_png);
+        sprite.setPosition(size.width / 2, size.height / 2);
+        sprite.setScale(0.8);
+        layout.addChild(sprite, 0);
+
+
 /*
         {name: "Panel", object: ccui.Layout, handle: parser.LayoutAttributes},
         {name: "Button", object: ccui.Button, handle: parser.ButtonAttributes},
@@ -74,30 +280,110 @@ var MainLayer = cc.Layer.extend({
         return true;
     },
 });
+
+var BlockLayer = cc.Layer.extend({
+    ctor:function () {
+        this._super();
+        var self = this;
+
+        var cmdBlkMan = new CommandBlockManager();
+
+        var workSpace = new CommandBlockWorkSpace(self,cmdBlkMan);
+        
+        var size = cc.director.getWinSize();
+
+        var frameX = 0;
+        var frameY = size.height/4;
+        var frameW = 160;
+        var frameH = size.height/2;
+        
+        workSpace.setPosition(frameX,frameY);
+        workSpace.setSize    (frameW,frameH);
+
+        /*
+        var layout = ccui.Layout.create();
+        layout.setPosition   (frameX,frameY);
+        layout.setContentSize(frameW,frameH);
+        //layout.setAnchorPoint(0.0,0.0);
+        layout.setBackGroundImage(res.frame01_png);
+        layout.setBackGroundImageScale9Enabled(true);
+        layout.setClippingEnabled(true);
+        this.addChild(layout);
+        */
+
+        var makeAddCommandBlockBtn = function(x,y,text,cb)
+        {
+            var btn = ccui.Button.create();
+            btn.setTouchEnabled(true);
+            btn.setScale9Enabled(true);
+            btn.loadTextures(res.cmdblock_frame01_png, null, null);
+            btn.setTitleText(text);
+            btn.setPosition(cc.p(x,y));
+            btn.setSize(cc.size(64, 32));
+            btn.addTouchEventListener(cb);        
+            self.addChild(btn);
+        };
+
+        makeAddCommandBlockBtn(128,size.height-32,"会話",function(button,type){
+            if(type==0)
+            {
+                var cmdBlk = cmdBlkMan.createCommandBlock("talk@shonin");
+                workSpace.addCommandLumpBlock( cmdBlk );
+                workSpace.updateLayout();
+            }
+        });
+        makeAddCommandBlockBtn(128,size.height-64,"ポーズ",function(button,type){
+            if(type==0)
+            {
+                var cmdBlk = cmdBlkMan.createCommandBlock("pose@shonin");
+
+                var cmdBlk2 = cmdBlkMan.createCommandBlock("pose@shonin");
+
+                cmdBlk.blkIns.connectOut(cmdBlk2.blkIns);
+
+                workSpace.addCommandLumpBlock(cmdBlk);
+                workSpace.updateLayout();
+            }
+        });
+/*
+        makeAddCommandBlockBtn(128,size.height-96,"振り向き",function(button,type){
+            if(type==0)
+            {
+                var blk = new CommandBlock();
+                blk.setLabel("振り向き");            
+                workSpace.addCommandBlock(blk);
+                workSpace.updateLayout();
+            }
+        });
+        makeAddCommandBlockBtn(128,size.height-128,"Gotoラベル",function(button,type){
+            if(type==0)
+            {
+                var blk = new CommandBlock();
+                blk.setLabel("Gotoラベル");            
+                workSpace.addCommandBlock(blk);
+                workSpace.updateLayout();
+            }
+        });
+*/
+        return true;
+    },
+});
+
+//
+
 var MainScene = cc.Scene.extend({
   onEnter:function () {
       this._super();
-      var layer = new MainLayer();
-      this.addChild(layer);
+      var mainLayer = new MainLayer();
+      this.addChild(mainLayer);
+      var blockLayer = new BlockLayer();
+      this.addChild(blockLayer);
   }
 });
 
 
 //
 $(function(){
-  var blockManager  = new BlockManager({});
-  var materialWsLst = [];
-  pepperBlock.runRegisterBlock(blockManager, materialWsLst);
-
-/*
-  var blockWs = blockManager.createBlockWorkSpaceIns("work1");
-  var block0   = blockManager.createBlockIns("talkBlock@basicBlk");
-  var block1   = blockManager.createBlockIns("talkBlock@basicBlk");
-  block0.connectOut(block1);
-  block0.setValueInData("talkText0",{string:"こんにち"});
-  block1.setValueInData("talkText0",{string:"わおーん"});
-  var dfd = block0.deferred();
-*/
 
 //ブロック管理
 // スプライトとブロックを扱うクラス？
@@ -106,6 +392,8 @@ $(function(){
 // 生成ボタン押すと、ワークスペースに追加orどこかのテーブルに追加
 // その後、それが表示される。
 // 表示されたモノを接続などは別管理？ひとまず別管理でよさそう。
+// 選択時のエディタの表示
+// 選択解除時のエディタのOFF
 
   cc.game.onStart = function(){
       //load resources
@@ -123,24 +411,52 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
     // 会話ブロック
     blockManager.registBlockDef(
       {
-          blockOpt:{
-              blockWorldId:"talkBlock@basicBlk",
-              color:'red',
+          blockHeader:{
+              blockWorldId:"talk@shonin",
               head:'in',
-              tail:'out'
+              tail:'out',
           },
           blockContents:[
               {expressions:[
-                  {input_text:{default:{string:"こんにちわ"}},dataName:'talkText0'},
-                  {label:'と　しゃべる'},
+                  {input_text:{default:{string:""}},dataName:'talkLabel0'},
               ]},
           ],
+          blockVisual:{
+              disp_name:'会話',
+          },
       },
       function(ctx,valueDataTbl){
           var onFail = function(e) {console.error('fail:' + e);};
           var dfd = $.Deferred();
           
-          console.log(valueDataTbl['talkText0'].string);
+          console.log(valueDataTbl['talkLabel0'].string);
+
+          dfd.resolve();
+          return dfd.promise();
+      }
+    );
+    // ポーズブロック
+    blockManager.registBlockDef(
+      {
+          blockHeader:{
+              blockWorldId:"pose@shonin",
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {input_text:{default:{string:""}},dataName:'poseLabel'},
+              ]},
+          ],
+          blockVisual:{
+              disp_name:'ポーズ',
+          },
+      },
+      function(ctx,valueDataTbl){
+          var onFail = function(e) {console.error('fail:' + e);};
+          var dfd = $.Deferred();
+          
+          console.log(valueDataTbl['poseLabel'].string);
 
           dfd.resolve();
           return dfd.promise();
