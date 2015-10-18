@@ -8,11 +8,78 @@ var res = {
     HelloWorld_png : "cocos_res/HelloWorld.png",
     frame01_png : "cocos_res/frame01.png",
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
+    pepper_icone_png : "cocos_res/pepper-icone.png",
 };
 var preload_res = [];
 for (var i in res) {
     preload_res.push(res[i]);
 }
+
+//
+var ShouninCore = function(){
+    var self = this;
+    
+    self.curCmdBlk = null;
+
+    var listenerLst_ = [];
+    self.notifyUpdate = function()
+    {
+        $.each(listenerLst_,function(k,listener){
+            if(listener.shouninCoreUpdate)
+            {
+                listener.shouninCoreUpdate();
+            }
+        });
+    };
+    self.addListener = function(instance)
+    {
+        listenerLst_.push(instance);
+    };
+    self.removeListener = function(instance)
+    {
+        var idx = listenerLst_.indexOf(instance);
+        if(idx>=0){
+            listenerLst_.splice(idx,1);
+        }
+    };
+
+    self.setCurCmdBlk = function(cmdBlk)
+    {
+        self.curCmdBlk = cmdBlk;
+
+        //
+        var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
+        if("talk@shonin" == blkWId)
+        {
+            var value = self.curCmdBlk.getValueInData();
+            self.notifyUpdate();
+        }
+                self.notifyUpdate();
+    };
+    self.getTalkText = function(text)
+    {
+        if(self.curCmdBlk)
+        {
+            var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
+            if("talk@shonin" == blkWId) {
+                return self.curCmdBlk.getValueInData("talkLabel0").string;
+            }
+        }
+        return "";
+    };
+    self.updateTalkText = function(text)
+    {
+        if(self.curCmdBlk)
+        {
+            var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
+            if(blkWId = "talk@shonin") {
+                return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
+            }
+        }
+        self.notifyUpdate();
+    };
+};
+var ShouninCoreIns = new ShouninCore();
 
 
 // ブロックの生成とかを管理します
@@ -60,6 +127,25 @@ var CommandBlock = function(blkIns)
     var visualTempl = blkIns.blockTemplate.blockVisual;
 
     self.blkIns = blkIns;
+    
+    // 余り構造を隠しすぎる隠蔽は好きじゃないけど、不便なのでアクセサ系を定義します
+    self.getHeaderTemplate = function(){
+        return self.blkIns.getTemplate().blockHeader;
+    };
+    self.getVisibleTemplate = function(){
+        return self.blkIns.getTemplate().blockVisual;
+    };
+
+    self.deferred = function(){
+        return self.blkIns.deferred();
+    };
+
+    self.setValueInData = function(key,value){
+        self.blkIns.setValueInData(key,value);
+    };
+    self.getValueInData = function(key){
+        return self.blkIns.getValueInData(key);
+    };
 
     self.bg       = cc.Scale9Sprite.create(res.cmdblock_frame01_png);
     self.label    = cc.LabelTTF.create("", "Arial", 20);
@@ -69,6 +155,7 @@ var CommandBlock = function(blkIns)
     var click = function()
     {
         //エディタ開くとかカレントにする
+        ShouninCoreIns.setCurCmdBlk(self); 
         //self.blkIns.deferred();
     }
     cc.eventManager.addListener({
@@ -204,7 +291,6 @@ var MainLayer = cc.Layer.extend({
     ctor:function () {
         this._super();
         var self = this;
-
         var size = cc.director.getWinSize();
 /*
         var sprite = cc.Sprite.create(res.HelloWorld_png);
@@ -233,16 +319,47 @@ var MainLayer = cc.Layer.extend({
         editBox.setDelegate(this);
         this.addChild(editBox);
 */
-        var bg = cc.Scale9Sprite.create(res.frame01_png);
-//        var editBox = cc.EditBox.create(cc.size(size.width, 80), bg);
-//        editBox.setPosition(cc.p(size.width/2, 80/2));
-//        editBox.setDelegate(this);
-//        this.addChild(editBox);
+        function TalkTextBox(layer){
+            var self = this;
+            var bg = cc.Scale9Sprite.create(res.frame01_png);
+            var editBox = cc.EditBox.create(cc.size(size.width, 80), bg);
+            editBox.fontColor = new cc.Color(0,0,0,255);
+            editBox.setPosition(cc.p(size.width/2, 80/2));
+            editBox.setDelegate(self);
+            layer.addChild(editBox);
+            //
+            self.setTalkText = function(text)
+            {
+                editBox.string = text;
+            },
+            self.getTalkText = function()
+            {
+                return editBox.string;
+            };
+            //
+            self.shouninCoreUpdate = function()
+            {
+                self.setTalkText( ShouninCoreIns.getTalkText() );
+            };
+            self.editBoxTextChanged = function(sender,text)
+            {
+                ShouninCoreIns.updateTalkText(sender.string);
+            };
+            self.editBoxReturn = function(sender)
+            {
+                ShouninCoreIns.updateTalkText(sender.string);
+            };
+            // 
+            ShouninCoreIns.addListener(self);
+        };
+        self.talkTextBox = new TalkTextBox(self);
+
+
         //bg.setScale(2.8);
-        bg.setAnchorPoint(0.0,0.0);
-        bg.setPosition(160, 0);
-        bg.setContentSize(size.width-320, 128);
-        this.addChild(bg);
+//        bg.setAnchorPoint(0.0,0.0);
+//        bg.setPosition(160, 0);
+//        bg.setContentSize(size.width-320, 128);
+//        this.addChild(bg);
 
 
         var widget = ccui.Widget.create();
@@ -369,15 +486,39 @@ var BlockLayer = cc.Layer.extend({
     },
 });
 
+var PepperLayer = cc.Layer.extend({
+    ctor:function () {
+        this._super();
+        var self = this;        
+        var size = cc.director.getWinSize();
+
+        var sprite = cc.Sprite.create(res.pepper_icone_png);
+        sprite.setPosition(size.width / 2, size.height / 2);
+        var qq = sprite.getQuad();
+        self.addChild(sprite, 0);
+
+        return true;
+    },
+});
+
+
 //
 
 var MainScene = cc.Scene.extend({
+  mainLayer:null,
+  blockLayer:null,
   onEnter:function () {
       this._super();
-      var mainLayer = new MainLayer();
-      this.addChild(mainLayer);
-      var blockLayer = new BlockLayer();
-      this.addChild(blockLayer);
+      var self = this;
+      
+      self.mainLayer = new MainLayer();
+      this.addChild(self.mainLayer);
+
+      self.pepperLayer = new PepperLayer();
+      this.addChild(self.pepperLayer);
+
+      self.blockLayer = new BlockLayer();
+      this.addChild(self.blockLayer);
   }
 });
 

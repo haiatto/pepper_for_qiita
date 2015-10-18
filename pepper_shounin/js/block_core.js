@@ -188,6 +188,8 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 
 // ブロック
 //
+// ■ アクセサ
+//    getTemplate()
 // ■ 接続関連の処理
 //    clearOut()
 //    clearIn()
@@ -206,6 +208,14 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //    // 複製します(内側のブロックも辿って複製します)
 //    cloneThisBlockAndConnectBlock()
 // ■ その他
+//
+//    // データをセットします(ブロックが繋がっていれば外します)
+//    setValueInData(dataName,data)
+//    // データを取得します(デフォルト値または最後のキャッシュから取得します。)
+//    getValueInData(dataName)
+//    // 値入力ブロックを明示的に実行(評価)します(デフォルト値または最後のキャッシュから取得します。)
+//    updateValueInData(dataName)
+//
 //    //値用ブロックが指定のデータにつなげられる場合、型名を返します
 //    getTypeAccept(tgtDataName,valueBlock)
 //
@@ -220,6 +230,11 @@ function Block(blockManager, blockTemplate, callback) {
     self.blockManager  = blockManager;
     self.blockTemplate = JSON.parse(JSON.stringify(blockTemplate));
     self.callback      = callback;
+    
+    self.getTemplate = function()
+    {
+        return self.blockTemplate;
+    };
 
     // ■ブロックテンプレからの準備
 
@@ -520,6 +535,31 @@ function Block(blockManager, blockTemplate, callback) {
             }
         }
     };
+    // データを取得します(デフォルト値または最後のキャッシュから取得します。)
+    self.getValueInData = function(dataName){
+        var valueIn = self.valueInTbl[dataName];
+        if(valueIn)
+        {
+            return valueIn.value;
+        }
+        return null;
+    };
+    // 値入力ブロックを明示的に実行(評価)します(デフォルト値または最後のキャッシュから取得します。)
+    self.updateValueInData = function(dataName){
+        var valueIn = self.valueInTbl[dataName];
+        if(valueIn && valueIn.block && !valueIn.forPolling){
+            // ポーリング用以外でブロックがある時のみ評価
+            valueIn.block.deferred().then(function(valueData){
+                // 値入力枠に代入しておきます(値ブロックを枠から外した時に最後の評価結果が残る挙動になります)
+                valueIn.value = valueData;
+            },function(){
+            });
+            // ついでに利便性の為、値も返しておきます
+            return valueIn.value;
+        }
+        return null;
+    };
+
     // 複製します(内側のブロックは複製されません)
     self.cloneThisBlock = function(){
         var ins = self.blockManager.createBlockIns(self.blockTemplate.blockHeader.blockWorldId);

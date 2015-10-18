@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - collada</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #000000;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				color: #fff;
+				position: absolute;
+				top: 10px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+
+			}
+
+			a { color: skyblue }
+		</style>
+	</head>
+	<body>
+		<div id="info">
+			<a href="http://threejs.org" target="_blank">three.js</a> -
+			monster by <a href="http://www.3drt.com/downloads.htm" target="_blank">3drt</a>
+		</div>
+		<script type='text/javascript' src='../libs/jquery-2.1.3.js'></script>
+
+		<script src="build/three.min.js"></script>
+		<script src="js/loaders/collada/Animation.js"></script>
+		<script src="js/loaders/collada/AnimationHandler.js"></script>
+		<script src="js/loaders/collada/KeyFrameAnimation.js"></script>
+
+		<script src="js/loaders/ColladaLoader.js"></script>
+
+		<script src="js/renderers/Projector.js"></script>
+		<script src="js/renderers/CanvasRenderer.js"></script>
+
+		<script src="js/Detector.js"></script>
+		<script src="js/libs/stats.min.js"></script>
+
+		<script>
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container, stats;
+
+			var camera, scene, renderer, objects;
+			var particleLight;
+			var dae;
+
+			var loader = new THREE.ColladaLoader();
+			loader.options.convertUpAxis = true;
+
+			var daeFileLst=[
+			"HeadPitch.dae",
+			"HeadYaw.dae",
+			"HipPitch.dae",
+			"HipRoll.dae",
+			"KneePitch.dae",
+			"LElbowRoll.dae",
+			"LElbowYaw.dae",
+			"LShoulderPitch.dae",
+			"LShoulderRoll.dae",
+			"LWristYaw.dae",
+			"RElbowRoll.dae",
+			"RElbowYaw.dae",
+			"RShoulderPitch.dae",
+			"RShoulderRoll.dae",
+			"RWristYaw.dae",
+			"Torso.dae",
+			"WheelB.dae",
+			"WheelFL.dae",
+			"WheelFR.dae",
+			"LFinger11.dae",
+			"LFinger12.dae",
+			"LFinger13.dae",
+			"LFinger21.dae",
+			"LFinger22.dae",
+			"LFinger23.dae",
+			"LFinger31.dae",
+			"LFinger32.dae",
+			"LFinger33.dae",
+			"LFinger41.dae",
+			"LFinger42.dae",
+			"LFinger43.dae",
+			"LThumb1.dae",
+			"LThumb2.dae",
+			"RFinger11.dae",
+			"RFinger12.dae",
+			"RFinger13.dae",
+			"RFinger21.dae",
+			"RFinger22.dae",
+			"RFinger23.dae",
+			"RFinger31.dae",
+			"RFinger32.dae",
+			"RFinger33.dae",
+			"RFinger41.dae",
+			"RFinger42.dae",
+			"RFinger43.dae",
+			"RThumb1.dae",
+			"RThumb2.dae",
+			];
+			var daeTbl = {};
+			var loadFunc = function(name){
+				return function(){
+					var dfd = $.Deferred();
+					loader.load( './PepperResource/pepper_meshes/meshes/1.0/'+name, function ( collada ) {
+						dae = collada.scene;
+						dae.traverse( function ( child ) {
+							if ( child instanceof THREE.SkinnedMesh ) {
+								var animation = new THREE.Animation( child, child.geometry.animation );
+								animation.play();
+							}
+						} );
+						dae.scale.x = dae.scale.y = dae.scale.z = 1.000;
+						dae.updateMatrix();
+						daeTbl[name] = dae;
+						dfd.resolve();
+					} );
+					return dfd;
+				};
+			}
+			var pepperModel = null;
+
+			var dfdTop = $.Deferred();
+			var dfd = dfdTop;
+			$.each(daeFileLst,function(k,v){
+				dfd = dfd.then(loadFunc(v));
+			});
+			dfd.then(function(){return $.ajax({
+				  type: 'GET',
+				  url: "./PepperResource/pepper_description/urdf/pepper1.0_generated_urdf/pepper.xml",
+				  dataType: 'xml',
+				  success: function(data) {
+				  }
+				});
+			})
+			.then(function(xml){
+				var joints={};
+				var links={};
+				var str2Vec3 = function(str){
+					var v = str.split(" ");
+					return new THREE.Vector3(
+						parseFloat(v[0]),
+						parseFloat(v[1]),
+						parseFloat(v[2])
+					);
+				};
+				$("joint",xml).each(function(k,elm_){
+					var elm = $(elm_);
+					var data = {
+					};
+					if(elm.children("parent").length>0){
+						var tmp = $(elm.children("parent")[0]);
+						data["parent"] = {link: tmp.attr("link"),};
+					}
+					if(elm.children("child").length>0){
+						var tmp = $(elm.children("child")[0]);
+						data["child"] = {link: tmp.attr("link"),};
+					}
+					if(elm.children("origin").length>0){
+						var tmp = $(elm.children("origin")[0]);
+						data["origin"] = {
+							rpy: str2Vec3(tmp.attr("rpy")),
+							xyz: str2Vec3(tmp.attr("xyz")),
+						};
+					}
+					if(elm.children("axis").length>0){
+						var tmp = $(elm.children("axis")[0]);
+						data["axis"] = {
+							xyz: str2Vec3(tmp.attr("xyz")),
+						};
+					}
+					joints[elm.attr("name")] = data;
+				});
+				$("link",xml).each(function(k,elm_){	
+					var elm = $(elm_);
+					var data = {
+					};
+					if(elm.children("visual").length>0){
+						var vis = $(elm.children("visual")[0]);
+						var geom = $(vis.children("geometry")[0]);
+						var mesh = $(geom.children("mesh")[0]);
+						data["visible"] = {
+							geometry:{
+								mesh: {
+									filename:mesh.attr("filename"),
+									scale:   str2Vec3( mesh.attr("scale") ),
+								},
+							},
+						};
+						if(vis.children("origin").length>0){
+							var tmp = $(vis.children("origin")[0]);
+							data["origin"] = {
+								rpy: str2Vec3(tmp.attr("rpy")),
+								xyz: str2Vec3(tmp.attr("xyz")),
+							};
+						}
+					}
+					links[elm.attr("name")] = data;
+				});
+				//dae組み立て？
+				pepperModel = new function(){
+					var self = this;
+					self.joints = joints;
+					self.links  = links;
+					self.daeTbl = daeTbl;
+					self.jointObjTbl = {};
+					self.linkObjTbl  = {};
+
+					$.each(self.links,function(name,link){
+						var linkObj = {};
+						
+						linkObj.obj3d = new THREE.Object3D();
+						if(link.origin){
+							linkObj.obj3d.position = link.origin.xyz;
+							linkObj.obj3d.rotation = link.origin.rpy;
+						}
+						self.linkObjTbl[name] = linkObj;
+					});
+					$.each(self.joints,function(name,joint){
+						var jointObj = {};
+						
+						jointObj.obj3d = new THREE.Object3D();
+						jointObj.obj3d.position = joint.origin.xyz;
+						jointObj.obj3d.rotation = joint.origin.rpy;
+
+						jointObj.parentLinkObj = self.linkObjTbl[joint.parent.link];
+						jointObj.childLinkObj  = self.linkObjTbl[joint.child.link];
+						jointObj.parentLinkObj.obj3d.add(jointObj.obj3d);
+						jointObj.obj3d.add(jointObj.childLinkObj.obj3d);
+
+						self.jointObjTbl[name] = jointObj;
+					});
+					self.linkObjTbl["base_link"].obj3d.updateMatrix();
+				};
+			})
+			.then(function(){
+				init();
+				animate();
+			});
+
+			
+			dfdTop.resolve();
+/*
+			//loader.load( './models/collada/monster/monster.dae', function ( collada ) {
+			loader.load( './PepperResource/pepper_meshes/meshes/1.0/LWristYaw.dae', function ( collada ) {
+				dae = collada.scene;
+				dae.traverse( function ( child ) {
+					if ( child instanceof THREE.SkinnedMesh ) {
+						var animation = new THREE.Animation( child, child.geometry.animation );
+						animation.play();
+					}
+				} );
+				dae.scale.x = dae.scale.y = dae.scale.z = 1.000;
+				dae.updateMatrix();
+				init();
+				animate();
+			} );
+*/
+			function init() {
+
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 2000 );
+				camera.position.set( 2, 2, 3 );
+
+				scene = new THREE.Scene();
+
+				// Grid
+
+				var size = 14, step = 1;
+
+				var geometry = new THREE.Geometry();
+				var material = new THREE.LineBasicMaterial( { color: 0x303030 } );
+
+				for ( var i = - size; i <= size; i += step ) {
+
+					geometry.vertices.push( new THREE.Vector3( - size, - 0.04, i ) );
+					geometry.vertices.push( new THREE.Vector3(   size, - 0.04, i ) );
+
+					geometry.vertices.push( new THREE.Vector3( i, - 0.04, - size ) );
+					geometry.vertices.push( new THREE.Vector3( i, - 0.04,   size ) );
+
+				}
+
+				var line = new THREE.LineSegments( geometry, material );
+				scene.add( line );
+
+				// Add the COLLADA
+				$.each(daeTbl,function(k,dae){
+					scene.add( dae );				
+				});
+
+				particleLight = new THREE.Mesh( new THREE.SphereGeometry( 4, 8, 8 ), new THREE.MeshBasicMaterial( { color: 0xffffff } ) );
+				scene.add( particleLight );
+
+				// Lights
+
+				scene.add( new THREE.AmbientLight( 0x222222 ) );
+
+				var directionalLight = new THREE.DirectionalLight(/*Math.random() * 0xffffff*/0xeeeeee );
+				directionalLight.position.x = Math.random() - 0.5;
+				directionalLight.position.y = Math.random() - 0.5;
+				directionalLight.position.z = Math.random() - 0.5;
+				directionalLight.position.normalize();
+				scene.add( directionalLight );
+
+				//var pointLight = new THREE.PointLight( 0xffffff, 4 );
+				//particleLight.add( pointLight );
+
+				renderer = new THREE.WebGLRenderer();
+				//renderer = new THREE.CanvasRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				container.appendChild( stats.domElement );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			//
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+			var clock = new THREE.Clock();
+
+			function render() {
+
+				var timer = Date.now() * 0.0005;
+
+				camera.position.x = Math.cos( timer ) * 10;
+				camera.position.y = 2;
+				camera.position.z = Math.sin( timer ) * 10;
+
+				camera.lookAt( scene.position );
+
+				particleLight.position.x = Math.sin( timer * 4 ) * 3009;
+				particleLight.position.y = Math.cos( timer * 5 ) * 4000;
+				particleLight.position.z = Math.cos( timer * 4 ) * 3009;
+
+				THREE.AnimationHandler.update( clock.getDelta() );
+
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+	</body>
+</html>
