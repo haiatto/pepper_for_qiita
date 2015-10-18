@@ -487,6 +487,7 @@ var BlockLayer = cc.Layer.extend({
 });
 
 var PepperLayer = cc.Layer.extend({
+    pepperModel:null,
     ctor:function () {
         this._super();
         var self = this;        
@@ -496,6 +497,345 @@ var PepperLayer = cc.Layer.extend({
         sprite.setPosition(size.width / 2, size.height / 2);
         var qq = sprite.getQuad();
         self.addChild(sprite, 0);
+
+        //Threejsによるペッパー君描画
+        if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+        var PepperModel = function(){
+            //
+            var self = this;
+            
+            //self.joints = joints;
+            //self.links  = links;
+            //self.daeTbl = daeTbl;
+            //self.jointObjTbl = {};
+            //self.linkObjTbl  = {};
+
+            self.setJointAngle = function(jointName,angleDeg)
+            {
+                var jointObj = self.jointObjTbl[jointName];
+                if(jointObj){
+                    var angleRad = THREE.Math.degToRad(angleDeg);
+                    var obj3d = jointObj.obj3d;
+                    var q = new THREE.Quaternion();
+                    angleRad = THREE.Math.clamp(angleRad, jointObj.src.limit.lower, jointObj.src.limit.upper);
+                    q.setFromAxisAngle( jointObj.src.axis.xyz, -angleRad );
+                    obj3d.quaternion.copy(q);
+                    obj3d.updateMatrix();
+                }
+            };
+            self.getJointAngle = function(jointName)
+            {
+                if(self.jointObjTbl[jointName]){
+                }
+                return null;
+            };
+            self.loadDfd = function()
+            {
+                var dfdTop = $.Deferred();
+
+                var loader = new THREE.ColladaLoader();
+                loader.options.convertUpAxis = true;
+
+                var daeFileLst=[
+                "HeadPitch.dae","HeadYaw.dae",
+                "HipPitch.dae","HipRoll.dae",
+                "KneePitch.dae",
+                "LElbowRoll.dae","LElbowYaw.dae",
+                "LShoulderPitch.dae","LShoulderRoll.dae","LWristYaw.dae",
+                "RElbowRoll.dae","RElbowYaw.dae",
+                "RShoulderPitch.dae","RShoulderRoll.dae","RWristYaw.dae",
+                "Torso.dae",
+                "WheelB.dae","WheelFL.dae","WheelFR.dae",
+                "LFinger11.dae","LFinger12.dae","LFinger13.dae","LFinger21.dae",
+                "LFinger22.dae","LFinger23.dae","LFinger31.dae","LFinger32.dae",
+                "LFinger33.dae","LFinger41.dae","LFinger42.dae","LFinger43.dae",
+                "LThumb1.dae","LThumb2.dae",
+                "RFinger11.dae","RFinger12.dae","RFinger13.dae","RFinger21.dae",
+                "RFinger22.dae","RFinger23.dae","RFinger31.dae","RFinger32.dae",
+                "RFinger33.dae","RFinger41.dae","RFinger42.dae","RFinger43.dae",
+                "RThumb1.dae","RThumb2.dae",
+                ];
+
+                var daeTbl = {};
+                var loadFunc = function(name){
+                    return function(){
+                        var dfd = $.Deferred();
+                        loader.load( './PepperResource/pepper_meshes/meshes/1.0/'+name, function ( collada ) {
+                            dae = collada.scene;
+                            dae.traverse( function ( child ) {
+                                if ( child instanceof THREE.SkinnedMesh ) {
+                                    var animation = new THREE.Animation( child, child.geometry.animation );
+                                    animation.play();
+                                }
+                            } );
+                            dae.scale.x = dae.scale.y = dae.scale.z = 1.000;
+                            dae.updateMatrix();
+                            daeTbl[name] = dae;
+                            dfd.resolve();
+                        } );
+                        return dfd;
+                    };
+                };
+
+                var dfd = dfdTop;
+
+                // colladaモデルのロード
+                $.each(daeFileLst,function(k,v){
+                    dfd = dfd.then(loadFunc(v));
+                });
+                // urdf(Rosから頂いたPepperロボモデル定義ファイル)のロード
+                dfd = 
+                dfd.then(function(){return $.ajax({
+                      type: 'GET',
+                      url: "./PepperResource/pepper_description/urdf/pepper1.0_generated_urdf/pepper.xml",
+                      dataType: 'xml',
+                      success: function(data) {
+                      }
+                    });
+                })
+                // urdfをもとに構築
+                .then(function(xml){
+                    var joints={};
+                    var links={};
+                    var str2Vec3 = function(str){
+                        var v = str.split(" ");
+                        return new THREE.Vector3(
+                            parseFloat(v[0]),
+                            parseFloat(v[2]),
+                            parseFloat(v[1])
+                        );
+                    };
+                    $("joint",xml).each(function(k,elm_){
+                        var elm = $(elm_);
+                        var data = {
+                        };
+                        if(elm.children("parent").length>0){
+                            var tmp = $(elm.children("parent")[0]);
+                            data["parent"] = {link: tmp.attr("link"),};
+                        }
+                        if(elm.children("child").length>0){
+                            var tmp = $(elm.children("child")[0]);
+                            data["child"] = {link: tmp.attr("link"),};
+                        }
+                        if(elm.children("origin").length>0){
+                            var tmp = $(elm.children("origin")[0]);
+                            data["origin"] = {
+                                rpy: str2Vec3(tmp.attr("rpy")),
+                                xyz: str2Vec3(tmp.attr("xyz")),
+                            };
+                        }
+                        if(elm.children("axis").length>0){
+                            var tmp = $(elm.children("axis")[0]);
+                            data["axis"] = {
+                                xyz: str2Vec3(tmp.attr("xyz")),
+                            };
+                        }
+                        if(elm.children("limit").length>0){
+                            var tmp = $(elm.children("limit")[0]);
+                            data["limit"] = {
+                                effort:   parseFloat(tmp.attr("effort")),
+                                lower:    parseFloat(tmp.attr("lower")),
+                                upper:    parseFloat(tmp.attr("upper")),
+                                velocity: parseFloat(tmp.attr("velocity")),
+                            };
+                        }
+                        joints[elm.attr("name")] = data;
+                    });
+                    $("link",xml).each(function(k,elm_){	
+                        var elm = $(elm_);
+                        var data = {
+                        };
+                        if(elm.children("visual").length>0){
+                            var vis = $(elm.children("visual")[0]);
+                            var geom = $(vis.children("geometry")[0]);
+                            var mesh = $(geom.children("mesh")[0]);
+                            data["visible"] = {
+                                geometry:{
+                                    mesh: {
+                                        filename:mesh.attr("filename").replace("package://pepper_meshes/meshes/1.0/",""),
+                                        scale:   str2Vec3( mesh.attr("scale") ),
+                                    },
+                                },
+                            };
+                            if(vis.children("origin").length>0){
+                                var tmp = $(vis.children("origin")[0]);
+                                data["origin"] = {
+                                    rpy: str2Vec3(tmp.attr("rpy")),
+                                    xyz: str2Vec3(tmp.attr("xyz")),
+                                };
+                            }
+                        }
+                        links[elm.attr("name")] = data;
+                    });
+                    //dae組み立て
+                    self.joints = joints;
+                    self.links  = links;
+                    self.daeTbl = daeTbl;
+                    self.jointObjTbl = {};
+                    self.linkObjTbl  = {};
+
+                    $.each(self.links,function(name,link){
+                        var linkObj = {};
+
+                        linkObj.src = link;
+                        linkObj.obj3d = new THREE.Object3D();
+                        if(link.origin){
+                            //ここは効いてない？
+                            linkObj.obj3d.position.copy(link.origin.xyz);
+                            linkObj.obj3d.position.copy(new THREE.Vector3(1,0,0));
+                            linkObj.obj3d.rotation.setFromVector3(
+                                link.origin.rpy
+                            );
+                            linkObj.obj3d.updateMatrix();
+                        }
+                        if(link.visible){
+                            linkObj.daeObj3d = daeTbl[link.visible.geometry.mesh.filename];
+                            linkObj.obj3d.add(linkObj.daeObj3d);
+                            if(link.visible.geometry.mesh.scale){
+                                linkObj.daeObj3d.scale.copy(link.visible.geometry.mesh.scale);
+                            }
+                        }
+                        self.linkObjTbl[name] = linkObj;
+                    });
+                    $.each(self.joints,function(name,joint){
+                        var jointObj = {};
+
+                        jointObj.src = joint;
+                        jointObj.obj3d = new THREE.Object3D();
+                        jointObj.obj3d.position.copy(joint.origin.xyz);
+                        jointObj.obj3d.rotation.setFromVector3(
+                            joint.origin.rpy
+                            //new THREE.Vector3(-joint.origin.rpy.x, -joint.origin.rpy.y, -joint.origin.rpy.z)
+                        );
+                        jointObj.parentLinkObj = self.linkObjTbl[joint.parent.link];
+                        jointObj.childLinkObj  = self.linkObjTbl[joint.child.link];
+                        jointObj.parentLinkObj.obj3d.add(jointObj.obj3d);
+                        jointObj.obj3d.add(jointObj.childLinkObj.obj3d);
+
+                        self.jointObjTbl[name] = jointObj;
+                    });
+                    self.topLinkObj  = self.linkObjTbl["base_link"];
+                    self.topLinkObj.obj3d.updateMatrix();
+                    self.topLinkObj.obj3d.traverse(function(obj3d){
+                        obj3d.updateMatrix();
+                        obj3d.matrixAutoUpdate = false;
+                    }) ;
+                });
+                dfdTop.resolve()
+                return dfd;
+            };
+        };
+        self.pepperModel = new PepperModel();
+        self.pepperModel.loadDfd()
+        .then(function(){
+            init();
+            animate();
+        });
+
+        var container, stats;
+        var camera, scene, renderer, objects;
+        var particleLight;
+        var dae;
+        function init() {
+            var containerElm = $("#threejsCanvas");
+            containerElm.css("position","absolute");
+            containerElm.css("zIndex","998");
+            containerElm.css("marginLeft","250px");
+            containerElm.css("marginTop", "50px");
+            container = containerElm[0];
+
+            var width=300, height=320;
+
+            camera = new THREE.PerspectiveCamera( 25, width / height, 0.1, 2000 );
+            camera.position.set( 2, 0.0, 0 );
+
+            scene = new THREE.Scene();
+
+            // Add the COLLADA
+            scene.add( self.pepperModel.linkObjTbl["base_link"].obj3d );
+
+            particleLight = new THREE.Mesh( new THREE.SphereGeometry( 4, 8, 8 ), new THREE.MeshBasicMaterial( { color: 0xffffff } ) );
+            scene.add( particleLight );
+
+            // Lights
+
+            scene.add( new THREE.AmbientLight( 0x101010 ) );
+
+            var directionalLight = new THREE.DirectionalLight( 0x404040 );
+            directionalLight.position.x = 0.0;
+            directionalLight.position.y = -0.5;
+            directionalLight.position.z = -0.5;
+            directionalLight.position.normalize();
+            scene.add( directionalLight );
+
+            //var pointLight = new THREE.PointLight( 0xffffff, 4 );
+            //particleLight.add( pointLight );
+
+            //renderer = new THREE.CanvasRenderer();
+            renderer = new THREE.WebGLRenderer({ alpha: true });
+            renderer.setSize(width, height);
+            renderer.setClearColor( 0x0000FF, 1 );
+//			renderer.setClearColor( 0xFFFF00, 0.5  ); // the default
+            renderer.setPixelRatio( window.devicePixelRatio );
+            container.appendChild( renderer.domElement );
+
+            stats = new Stats();
+            stats.domElement.style.position = 'absolute';
+            stats.domElement.style.top = '0px';
+            container.appendChild( stats.domElement );
+
+            camera.aspect = renderer.getSize().width / renderer.getSize().height;
+            camera.updateProjectionMatrix();
+        }
+        function animate() {
+            requestAnimationFrame( animate );
+            render();
+            stats.update();
+        }
+        var clock = new THREE.Clock();
+        function render() {
+            var timer = Date.now() * 0.0005;
+
+            //camera.position.x = Math.cos( timer ) * 1.5;
+            //camera.position.y = 0.5;
+            //camera.position.z = Math.sin( timer ) * 1.5;
+
+            self.pepperModel.topLinkObj.obj3d.rotation.setFromVector3(
+                new THREE.Vector3(0,Math.sin( timer ),0)
+            );
+            self.pepperModel.topLinkObj.obj3d.updateMatrix();
+
+            //self.pepperModel.setJointAngle("LShoulderPitch",Math.sin( timer )*200);
+            self.pepperModel.setJointAngle("LShoulderRoll",Math.sin( timer )*200);
+            //self.pepperModel.setJointAngle("LElbowYaw",Math.sin( timer )*100);
+            //self.pepperModel.setJointAngle("LElbowRoll",Math.sin( timer )*100);
+            //self.pepperModel.setJointAngle("LWristYaw",Math.sin( timer )*100);
+
+            camera.lookAt( scene.position );
+
+            particleLight.position.x = Math.sin( timer * 4 ) * 3009;
+            particleLight.position.y = Math.cos( timer * 5 ) * 4000;
+            particleLight.position.z = Math.cos( timer * 4 ) * 3009;
+
+            THREE.AnimationHandler.update( clock.getDelta() );
+
+            renderer.render( scene, camera );
+        }
+
+        // ShouninCoreと連動するエディター
+        var PoseBox = function(pepperLayer)
+        {
+            var self = this;
+            
+            
+            self.shouninCoreUpdate = function()
+            {
+                self.pepperModel.setJointAngle();
+            };
+            ShouninCoreIns.addListener(self);
+        };
+        self.poseBox = new PoseBox(self);
 
         return true;
     },
@@ -604,6 +944,29 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

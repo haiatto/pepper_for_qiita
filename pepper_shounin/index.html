@@ -34,6 +34,16 @@
   <script type='text/javascript' src="project.js"></script>
   <script type="text/javascript" src="libs/cocos2d-js-v3.8/cocos2d-js-v3.8.js" charset="UTF-8"></script>
 
+  <script type="text/javascript" src="libs/three.min.js"></script>
+  <script type="text/javascript" src="libs/three_js/loaders/collada/Animation.js"></script>
+  <script type="text/javascript" src="libs/three_js/loaders/collada/AnimationHandler.js"></script>
+  <script type="text/javascript" src="libs/three_js/loaders/collada/KeyFrameAnimation.js"></script>
+  <script type="text/javascript" src="libs/three_js/loaders/ColladaLoader.js"></script>
+  <script type="text/javascript" src="libs/three_js/renderers/Projector.js"></script>
+  <script type="text/javascript" src="libs/three_js/renderers/CanvasRenderer.js"></script>
+  <script type="text/javascript" src="libs/three_js/Detector.js"></script>
+  <script type="text/javascript" src="libs/three_js/libs/stats.min.js"></script>
+
   <script type='text/javascript' src="js/block_core.js"></script>
 <!--  
   <script type='text/javascript' src="js/blockdef_basicBlk.js"></script>
@@ -50,6 +60,7 @@
     </div>
     <div data-role="content">
         <div>version 0.100</div>
+        <div id="threejsCanvas"></div>
         <canvas id="gameCanvas" width="800" height="450"></canvas>
     </div><!-- /content -->
     <div data-role="footer">
