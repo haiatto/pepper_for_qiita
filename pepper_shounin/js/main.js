@@ -21,6 +21,14 @@ var ShouninCore = function(){
     
     self.curCmdBlk = null;
 
+    var getCurCmdBlkWorldId_ = function(){
+        if ( self.curCmdBlk ){
+            return self.curCmdBlk.getHeaderTemplate().blockWorldId;
+        }
+        return null;
+    };
+
+    //
     var listenerLst_ = [];
     self.notifyUpdate = function()
     {
@@ -43,41 +51,65 @@ var ShouninCore = function(){
         }
     };
 
+    //
     self.setCurCmdBlk = function(cmdBlk)
     {
         self.curCmdBlk = cmdBlk;
-
-        //
-        var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
+        var blkWId = getCurCmdBlkWorldId_();
         if("talk@shonin" == blkWId)
         {
-            var value = self.curCmdBlk.getValueInData();
             self.notifyUpdate();
         }
-                self.notifyUpdate();
+        if("pose@shonin" == blkWId)
+        {
+            self.notifyUpdate();
+        }
     };
+
+    //
     self.getTalkText = function(text)
     {
-        if(self.curCmdBlk)
-        {
-            var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
-            if("talk@shonin" == blkWId) {
-                return self.curCmdBlk.getValueInData("talkLabel0").string;
-            }
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId) {
+            return self.curCmdBlk.getValueInData("talkLabel0").string;
         }
         return "";
     };
     self.updateTalkText = function(text)
     {
-        if(self.curCmdBlk)
-        {
-            var blkWId = self.curCmdBlk.getHeaderTemplate().blockWorldId;
-            if(blkWId = "talk@shonin") {
-                return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
-            }
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId) {
+            return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
         }
         self.notifyUpdate();
     };
+
+    // 
+    self.isPoseEdit = function()
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return true;
+        }
+        return false;
+    };
+    self.getPoseEditData = function()
+    {//TODO:参照先はそのうちリソースボックス的な所からのデータの編集に書き換わる予定
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return self.curCmdBlk.getValueInData("poseData0");
+        }
+        return null;
+    };
+    self.setPoseEditData = function(poseEditData)
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return self.curCmdBlk.setValueInData("poseData0",poseEditData);
+        }
+        return null;
+    };
+
 };
 var ShouninCoreIns = new ShouninCore();
 
@@ -681,9 +713,7 @@ var PepperLayer = cc.Layer.extend({
                         linkObj.src = link;
                         linkObj.obj3d = new THREE.Object3D();
                         if(link.origin){
-                            //ここは効いてない？
                             linkObj.obj3d.position.copy(link.origin.xyz);
-                            linkObj.obj3d.position.copy(new THREE.Vector3(1,0,0));
                             linkObj.obj3d.rotation.setFromVector3(
                                 link.origin.rpy
                             );
@@ -827,11 +857,33 @@ var PepperLayer = cc.Layer.extend({
         var PoseBox = function(pepperLayer)
         {
             var self = this;
+
+            var widget = ccui.Widget.create();
+            var layout = ccui.Layout.create();
+
+            layout.setPosition(560, 100);
+            layout.setContentSize(200, 320);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            pepperLayer.addChild(layout);
+
+            var sprite = cc.Sprite.create(res.HelloWorld_png);
+            sprite.setPosition(200/2, 320/2);
+            sprite.setScale(0.2);
+            layout.addChild(sprite, 0);
             
-            
+            layout.setVisible(false);
+
             self.shouninCoreUpdate = function()
             {
-                self.pepperModel.setJointAngle();
+                if(ShouninCoreIns.isPoseEdit())
+                {
+                    layout.setVisible(true);
+                    //pepperLayer.pepperModel.setJointAngle();
+                }else{
+                    layout.setVisible(false);
+                }
             };
             ShouninCoreIns.addListener(self);
         };
@@ -926,7 +978,8 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {input_text:{default:{string:""}},dataName:'poseLabel'},
+                  //{input_text:{default:{string:""}},dataName:'poseLabel'},
+                  {input_dropOnly:{default:{poseData:{}}},dataName:'poseData0',acceptTypes:["poseData"]},
               ]},
           ],
           blockVisual:{
