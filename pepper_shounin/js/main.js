@@ -7,6 +7,8 @@
 var res = {
     HelloWorld_png : "cocos_res/HelloWorld.png",
     frame01_png : "cocos_res/frame01.png",
+    slider_frame_png : "cocos_res/slider_frame.png",
+    slider_volume_png: "cocos_res/slider_volume.png",
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
     pepper_icone_png : "cocos_res/pepper-icone.png",
 };
@@ -547,18 +549,14 @@ var PepperLayer = cc.Layer.extend({
             {
                 var jointObj = self.jointObjTbl[jointName];
                 if(jointObj){
-                    var angleRad = THREE.Math.degToRad(angleDeg);
-                    var obj3d = jointObj.obj3d;
-                    var q = new THREE.Quaternion();
-                    angleRad = THREE.Math.clamp(angleRad, jointObj.src.limit.lower, jointObj.src.limit.upper);
-                    q.setFromAxisAngle( jointObj.src.axis.xyz, -angleRad );
-                    obj3d.quaternion.copy(q);
-                    obj3d.updateMatrix();
+                    jointObj.setJointAngle(angleDeg);
                 }
             };
             self.getJointAngle = function(jointName)
             {
-                if(self.jointObjTbl[jointName]){
+                var jointObj = self.jointObjTbl[jointName];
+                if(jointObj){
+                    return jointObj.getJointAngle();
                 }
                 return null;
             };
@@ -743,6 +741,19 @@ var PepperLayer = cc.Layer.extend({
                         jointObj.parentLinkObj.obj3d.add(jointObj.obj3d);
                         jointObj.obj3d.add(jointObj.childLinkObj.obj3d);
 
+                        jointObj.nowAngleDeg = 0;
+                        jointObj.setJointAngle = function(angleDeg){
+                            var angleRad = THREE.Math.degToRad(angleDeg);
+                            angleRad = THREE.Math.clamp(angleRad, jointObj.src.limit.lower, jointObj.src.limit.upper);
+                            var q = new THREE.Quaternion();
+                            q.setFromAxisAngle( jointObj.src.axis.xyz, -angleRad );
+                            jointObj.obj3d.quaternion.copy(q);
+                            jointObj.obj3d.updateMatrix();
+                            jointObj.nowAngleDeg = THREE.Math.radToDeg( angleRad );
+                        };
+                        jointObj.getJointAngle = function (){
+                            return jointObj.nowAngleDeg;
+                        };
                         self.jointObjTbl[name] = jointObj;
                     });
                     self.topLinkObj  = self.linkObjTbl["base_link"];
@@ -761,6 +772,7 @@ var PepperLayer = cc.Layer.extend({
         .then(function(){
             init();
             animate();
+            layerSetup();
         });
 
         var container, stats;
@@ -852,43 +864,148 @@ var PepperLayer = cc.Layer.extend({
 
             renderer.render( scene, camera );
         }
-
-        // ShouninCoreと連動するエディター
-        var PoseBox = function(pepperLayer)
+        function layerSetup()
         {
-            var self = this;
-
-            var widget = ccui.Widget.create();
-            var layout = ccui.Layout.create();
-
-            layout.setPosition(560, 100);
-            layout.setContentSize(200, 320);
-            layout.setBackGroundImage(res.frame01_png);
-            layout.setBackGroundImageScale9Enabled(true);
-            layout.setClippingEnabled(true);
-            pepperLayer.addChild(layout);
-
-            var sprite = cc.Sprite.create(res.HelloWorld_png);
-            sprite.setPosition(200/2, 320/2);
-            sprite.setScale(0.2);
-            layout.addChild(sprite, 0);
-            
-            layout.setVisible(false);
-
-            self.shouninCoreUpdate = function()
+            var Slider = function(parentUI,sliderBoxW,sliderBoxH,listener)
             {
-                if(ShouninCoreIns.isPoseEdit())
-                {
-                    layout.setVisible(true);
-                    //pepperLayer.pepperModel.setJointAngle();
-                }else{
-                    layout.setVisible(false);
-                }
-            };
-            ShouninCoreIns.addListener(self);
-        };
-        self.poseBox = new PoseBox(self);
+                var self = this;
+                var slider_layout = ccui.Layout.create();
+                self.min = 0;
+                self.max = 1;
+                self.value = 0;
+                var sliderUiPixelLen = sliderBoxW-8;
 
+                self.setPosition = function(x,y){
+                    slider_layout.setPosition(x,y);
+                };
+                self.setRange = function(min,max){
+                    self.min = min;
+                    self.max = max;
+                    self.setValue(self.value);
+                };
+                self.setValue = function(value){
+                    self.value = THREE.Math.clamp(value, self.min, self.max);
+
+                    var ratio = (self.value - self.min) / (self.max - self.min);
+                    volume.setPosition(4 + sliderUiPixelLen*ratio, sliderBoxH/2);
+                };
+                self.getValue = function(){
+                    return self.value;
+                };
+                slider_layout.setContentSize(sliderBoxW, sliderBoxH);
+                slider_layout.setBackGroundImage(res.slider_frame_png);
+                slider_layout.setBackGroundImageScale9Enabled(true);
+                parentUI.addChild( slider_layout, 1 );
+
+                var volume = cc.Sprite.create(res.slider_volume_png);
+                volume.setPosition(10, sliderBoxH/2);
+                slider_layout.addChild(volume, 0);
+
+                // イベントリスナー
+                cc.eventManager.addListener({
+                    event: cc.EventListener.TOUCH_ONE_BY_ONE,
+                    onTouchBegan: function(touch, event) 
+                    {
+                        var rc = volume.getBoundingBoxToWorld();
+                        rc.x     -= 5;
+                        rc.width +=10;
+                        if (cc.rectContainsPoint(rc, touch.getLocation())) 
+                        {
+                            return true;
+                        }
+                        return false;
+                    },
+                    onTouchMoved: function(touch, event) 
+                    {
+                        var delta = touch.getDelta();
+                        var dltVal = (delta.x / sliderUiPixelLen) * (self.max - self.min);
+                        self.setValue( self.getValue() + dltVal );
+                        if(listener && listener.updateSlider)
+                        {
+                            listener.updateSlider( self, self.getValue() );
+                        }
+                    },
+                    onTouchEnd: function(touch, event) 
+                    {
+                    }
+                }, slider_layout);
+            };
+            // ShouninCoreと連動するエディター
+            var PoseBox = function(pepperLayer)
+            {
+                var self = this;
+
+                var widget = ccui.Widget.create();
+                var layout = ccui.Layout.create();
+
+                var boxW = 240;
+                var boxH = 320;
+
+                layout.setPosition(560, 100);
+                layout.setContentSize(boxW, boxH);
+                layout.setBackGroundImage(res.frame01_png);
+                layout.setBackGroundImageScale9Enabled(true);
+                layout.setClippingEnabled(true);
+                pepperLayer.addChild(layout);
+
+                var jointKeyLst={
+                "HeadPitch":"首たて","HeadYaw":"首よこ",
+                "HipPitch":"腰左右","HipRoll":"腰前後","KneePitch":"ひざ",
+                "LElbowRoll":"左ひじ回転","LElbowYaw":"左ひじ曲げ","LShoulderPitch":"左肩回転","LShoulderRoll":"左肩振り","LWristYaw":"左手首",
+                "RElbowRoll":"右ひじ回転","RElbowYaw":"右ひじ曲げ","RShoulderPitch":"右肩回転","RShoulderRoll":"右肩振り","RWristYaw":"右手首"};
+
+                var fontSize = 20;
+                var posY = +8;
+                var sliderTbl={};
+                $.each(jointKeyLst,function(key,name)
+                {
+                    var label = cc.LabelTTF.create(name, "Arial", fontSize);
+                    var jointObj = pepperLayer.pepperModel.jointObjTbl[key];
+                    
+                    label.setPosition(label.getContentSize().width/2+boxW/4*2, boxH - posY - fontSize/2);
+                    label.setColor(new cc.Color(0,0,0,255));
+                    layout.addChild(label, 2);
+
+                    var slider = new Slider(layout, boxW/4*2, fontSize-2,{
+                        updateSlider:function(slider,value){
+                            jointObj.setJointAngle( value );
+                        },
+                    });
+                    slider.setRange( THREE.Math.radToDeg(jointObj.src.limit.lower), THREE.Math.radToDeg(jointObj.src.limit.upper) );
+                    slider.setValue( pepperLayer.pepperModel.getJointAngle() );
+                    slider.setPosition(0, boxH - posY - fontSize/2 - 8);
+                    sliderTbl[key] = slider;
+                    posY += fontSize;
+                });
+
+                layout.setVisible(false);
+
+                self.shouninCoreUpdate = function()
+                {
+                    if(ShouninCoreIns.isPoseEdit())
+                    {
+                        // エディット中
+                        layout.setVisible(true);
+                        // まず、現在の状態をスライダーに反映します
+                        $.each(jointKeyLst,function(key,name)
+                        {
+                            var jointObj = pepperLayer.pepperModel.jointObjTbl[key];
+                            sliderTbl[key].setValue(
+                                jointObj.getJointAngle()
+                             );
+                        });
+                        // その後、データの内容をスライダーに反映します
+                        {
+                            
+                        }
+                    }else{
+                        layout.setVisible(false);
+                    }
+                };
+                ShouninCoreIns.addListener(self);
+            };
+            self.poseBox = new PoseBox(self);
+        }
         return true;
     },
 });
