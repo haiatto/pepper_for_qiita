@@ -127,6 +127,7 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //      - {options:{default:{string:'いち'},list:[{text:'いち',value:'1'},{text:'に',value:'2'},]},dataName:'dataC', acceptTypes:["string"]},
 //    - input_dropOnly  
 //      - 例 {dropOnly:{default:{}, label:"しゃしん１", dataName:'photo1', acceptTypes:["image"]},
+//    - input_dropOnlyNoSerialize  
 //
 //   ■ データ
 //    - dataName    データ名 ※省略不可
@@ -387,6 +388,11 @@ function Block(blockManager, blockTemplate, callback) {
                     {
                         //ここはデフォルトの受け入れ型指定は 無し です
                         expressionIns.value = expTmpl.input_dropOnly.default||{};
+                    }
+                    if(expTmpl.input_dropOnlyNoSerialize)
+                    {
+                        //ここはデフォルトの受け入れ型指定は 無し です
+                        expressionIns.value = expTmpl.input_dropOnlyNoSerialize.default||{};
                     }
                     // データフォーマットの受け入れチェックをしておきます
                     if(!self.checkDataAccept(expTmpl.dataName,expressionIns.value))
@@ -985,7 +991,7 @@ function BlockManager(execContext){
                 if(valueIn.block){
                     jsonTbl.valTbl[k].block=recv(valueIn.block);
                 }
-                if(!valueIn.expTmpl.dropOnly)//都合により今はdropOnlyは除外します(保存しなくても動くのと画像データとか入れてるので保存すると落ちる場合が…)
+                if(!valueIn.expTmpl.input_dropOnlyNoSerialize)//input_dropOnlyNoSerializeは除外します(保存しなくても動くのと画像データとか入れてるので保存すると落ちる場合が…)
                 {
                     jsonTbl.valTbl[k].value = valueIn.value;
                 }

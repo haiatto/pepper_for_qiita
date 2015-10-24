@@ -2,6 +2,137 @@
 // ペッパー商人
 //
 
+// KiiCound周り
+var KiiShouninCore = function()
+{
+    var self = this;
+
+    // 仮ユーザー作成
+    self.createKariUserDfd = function()
+    {
+        var dfd = $.Deferred();        
+        var userFields = {"age":20};
+        KiiUser.registerAsPseudoUser({
+          success: function(user) {
+            var access_token = user.getAccessToken();
+            localStorage.access_token = access_token;
+            dfd.resolve();
+          },
+          failure: function(user, errorString) {
+            dfd.reject(errorString);
+          }
+        }, userFields);
+        return dfd.promise();
+    };
+    // 最後の情報でログイン
+    self.lastLoginUserDfd = function()
+    {
+        var dfd = $.Deferred();
+        var access_token = localStorage.access_token;
+        KiiUser.authenticateWithToken(access_token, {
+          // Called on successful registration
+          success: function(theUser) {
+            dfd.resolve();
+          },
+          // Called on a failed authentication
+          failure: function(theUser, errorString) {
+            // handle error
+            dfd.reject(errorString);
+          }
+        });
+        return dfd.promise();
+    };
+    
+    // 商人を公開
+    self.publishShounin = function( shouninJsonTbl )
+    {
+        var dfd = $.Deferred();
+        var pubCampoBucket = Kii.bucketWithName("pubShouninCampo");//公開する商人の広場バケット
+        var obj = pubCampoBucket.createObject();
+        obj.set("owner", "unknown")
+        obj.set("shoukonData",shouninJsonTbl);
+        obj.save()
+        .then(
+            function(theObject){
+                dfd.resolve();
+            }
+        ).catch(
+            function(error){
+                alert("すみませぬ。公開に失敗しました！:" + error);
+                dfd.reject(error);
+            }
+        );
+        return dfd.promise();
+    };
+
+    // 商人一覧を取得
+    // 成功時の引数 {shouninList:[{jsonTbl:,owner:,id:,},], nextQuery:}
+    self.queryShouninList = function( query )
+    {
+        var dfd = $.Deferred();
+
+        var bucket = Kii.bucketWithName("pubShouninCampo");
+        var query  = query || KiiQuery.queryWithClause();//無指定の場合は最大数
+        bucket.executeQuery(query)
+        .then(
+            function(param) 
+            {
+                var queryPerformed = param[0];
+                var resultSet      = param[1];
+                var nextQuery      = param[2];
+                var retParam = {
+                    shouninList:[],
+                    nextQuery:nextQuery,
+                };
+                for(var ii=0; ii<resultSet.length; ii++) 
+                {
+                    var shouninJsonTbl = resultSet[ii].get("shoukonData");
+                    var owner = resultSet[ii].get("owner");
+                    var id    = resultSet[ii].getUUID();                    
+                    retParam.shouninList.push({
+                        jsonTbl:shouninJsonTbl,
+                        owner:owner,
+                        id:id,
+                    });
+                }
+                dfd.resolve(retParam);
+            }
+        ).catch(
+            function(error)
+            {
+                alert("すみませぬ。商人一覧の取得に失敗しました！" + error);
+                dfd.reject(error);
+            }
+        );
+
+        return dfd.promise();
+    };
+
+    // ■開始処理
+
+    // KiiCloud初期化します
+    Kii.initializeWithSite("1a730270", "bff0e36d33abbef33bedec08e366f60f", KiiSite.JP);
+
+    // 仮ユーザーでログインします
+    var dfd = $.Deferred();
+    var dfdItr = dfd;
+    if(!localStorage.access_token)
+    {
+        dfdItr = dfdItr.then(self.createKariUserDfd);
+    }
+    dfdItr = dfdItr.then(self.lastLoginUserDfd);
+    dfdItr = dfdItr.then(null,function(errString){
+        return self.createKariUserDfd()
+        .then(self.lastLoginUserDfd)
+    })
+    .fail(function(errString){
+        alert("自動ログイン失敗です！" + errString);
+    });
+    dfd.resolve();
+};
+var KiiShouninCoreIns = null;
+
+
 
 // Cocosのリソース
 var res = {
@@ -439,18 +570,21 @@ var MainLayer = cc.Layer.extend({
         {
             var layout = ccui.Layout.create();
             layout.setPosition(0, size.height-64);
-            layout.setContentSize(180,64);
+            layout.setContentSize(64*4 + 8*2,64);
             layout.setBackGroundImage(res.frame01_png);
             layout.setBackGroundImageScale9Enabled(true);
             layout.setClippingEnabled(true);
+
+            var posX = 8;
 
             var loadBtn = ccui.Button.create();
             loadBtn.setTouchEnabled(true);
             loadBtn.setScale9Enabled(true);
             loadBtn.loadTextures(res.cmdblock_frame01_png, null, null);
             loadBtn.setTitleText("Load");
-            loadBtn.setPosition(cc.p(0+32+8,32));
+            loadBtn.setPosition(cc.p(posX+64/2,32));
             loadBtn.setSize(cc.size(64, 32));
+            posX += 64;
             loadBtn.addTouchEventListener(function(button,type)
             {
                 if(0==type){
@@ -493,8 +627,9 @@ var MainLayer = cc.Layer.extend({
             saveBtn.setScale9Enabled(true);
             saveBtn.loadTextures(res.cmdblock_frame01_png, null, null);
             saveBtn.setTitleText("Save");
-            saveBtn.setPosition(cc.p(64+32+8,32));
+            saveBtn.setPosition(cc.p(posX+64/2,32));
             saveBtn.setSize(cc.size(64, 32));
+            posX += 64;
             saveBtn.addTouchEventListener(function(button,type)
             {
                 if(0==type)
@@ -523,6 +658,94 @@ var MainLayer = cc.Layer.extend({
                 }
             });
             layout.addChild(saveBtn);
+
+            var publishBtn = ccui.Button.create();
+            publishBtn.setTouchEnabled(true);
+            publishBtn.setScale9Enabled(true);
+            publishBtn.loadTextures(res.cmdblock_frame01_png, null, null);
+            publishBtn.setTitleText("公開");
+            publishBtn.setPosition(cc.p(posX+64/2,32));
+            publishBtn.setSize(cc.size(64, 32));
+            posX += 64;
+            publishBtn.addTouchEventListener(function(button,type)
+            {
+                if(0==type)
+                {
+                    var jsonTbl = ShouninCoreIns.saveToJsonTable();
+                    KiiShouninCoreIns.publishShounin(jsonTbl)
+                    .then(function(){
+                        alert("公開しました！");
+                    });
+                }
+            });
+            layout.addChild(publishBtn);
+
+            var pubShouninListBtn = ccui.Button.create();
+            pubShouninListBtn.setTouchEnabled(true);
+            pubShouninListBtn.setScale9Enabled(true);
+            pubShouninListBtn.loadTextures(res.cmdblock_frame01_png, null, null);
+            pubShouninListBtn.setTitleText("商人広場");
+            pubShouninListBtn.setPosition(cc.p(posX+64/2,32));
+            pubShouninListBtn.setSize(cc.size(64, 32));
+            posX += 64;
+            pubShouninListBtn.addTouchEventListener(function(button,type)
+            {
+                if(0==type)
+                {
+                    var lv = ccui.ListView.create();
+                    lv.setDirection(ccui.ScrollView.DIR_VERTICAL);
+                    lv.setTouchEnabled(true);
+                    lv.setBounceEnabled(true);
+                    lv.setPosition(500, 0);
+                    lv.setContentSize(256, size.height/5*4);
+                    lv.setBackGroundImage(res.frame01_png);
+                    lv.setBackGroundImageScale9Enabled(true);
+                    lv.setClippingEnabled(true);
+                    self.addChild(lv,0);
+
+                    var itemLo = ccui.Layout.create();
+                    itemLo.setPosition(0, 0);
+                    itemLo.setContentSize(256,64);
+                    itemLo.setBackGroundImage(res.frame01_png);
+                    itemLo.setBackGroundImageScale9Enabled(true);
+                    itemLo.setClippingEnabled(true);
+
+                    var btn = ccui.Button.create();
+                    btn.setName("callBtn");
+                    btn.setTouchEnabled(true);
+                    btn.setScale9Enabled(true);
+                    btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                    btn.setTitleText("呼ぶ");
+                    btn.setPosition(cc.p(230,32));
+                    btn.setSize(cc.size(64, 32));
+                    itemLo.addChild(btn,2);
+                    lv.setItemModel(itemLo);
+
+                    KiiShouninCoreIns.queryShouninList()
+                    .then(
+                        function(param){
+                            $.each(param.shouninList,function(idx,shouninItem){
+                                lv.pushBackDefaultItem();
+                                var items = lv.getItems();
+                                var item  = items[items.length-1];
+                                var btn   = item.getChildByName("callBtn");
+                                btn.addTouchEventListener(function(button,type)
+                                {
+                                    if(0==type)
+                                    {
+                                        ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
+                                    }
+                                });
+                                var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
+                                label.setPosition(label.getContentSize().width/2, 32);
+                                label.setColor(new cc.Color(0,0,0,255));
+                                item.addChild(label);
+                            });
+                        }
+                    );
+                }
+            });
+            layout.addChild(pubShouninListBtn);
 
             self.addChild(layout);
             return layout;
@@ -1238,6 +1461,7 @@ var MainScene = cc.Scene.extend({
 
 //
 $(function(){
+    KiiShouninCoreIns = new KiiShouninCore();
 
     ShouninCoreIns = new ShouninCore();
 
