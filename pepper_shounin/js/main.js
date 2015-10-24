@@ -17,105 +17,6 @@ for (var i in res) {
     preload_res.push(res[i]);
 }
 
-//
-var ShouninCore = function(){
-    var self = this;
-    
-    self.curCmdBlk = null;
-
-    var getCurCmdBlkWorldId_ = function(){
-        if ( self.curCmdBlk ){
-            return self.curCmdBlk.getHeaderTemplate().blockWorldId;
-        }
-        return null;
-    };
-
-    //
-    var listenerLst_ = [];
-    self.notifyUpdate = function()
-    {
-        $.each(listenerLst_,function(k,listener){
-            if(listener.shouninCoreUpdate)
-            {
-                listener.shouninCoreUpdate();
-            }
-        });
-    };
-    self.addListener = function(instance)
-    {
-        listenerLst_.push(instance);
-    };
-    self.removeListener = function(instance)
-    {
-        var idx = listenerLst_.indexOf(instance);
-        if(idx>=0){
-            listenerLst_.splice(idx,1);
-        }
-    };
-
-    //
-    self.setCurCmdBlk = function(cmdBlk)
-    {
-        self.curCmdBlk = cmdBlk;
-        var blkWId = getCurCmdBlkWorldId_();
-        if("talk@shonin" == blkWId)
-        {
-            self.notifyUpdate();
-        }
-        if("pose@shonin" == blkWId)
-        {
-            self.notifyUpdate();
-        }
-    };
-
-    //
-    self.getTalkText = function(text)
-    {
-        var blkWId = getCurCmdBlkWorldId_();
-        if("talk@shonin" == blkWId) {
-            return self.curCmdBlk.getValueInData("talkLabel0").string;
-        }
-        return "";
-    };
-    self.updateTalkText = function(text)
-    {
-        var blkWId = getCurCmdBlkWorldId_();
-        if("talk@shonin" == blkWId) {
-            return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
-        }
-        self.notifyUpdate();
-    };
-
-    // 
-    self.isPoseEdit = function()
-    {
-        var blkWId = getCurCmdBlkWorldId_();
-        if("pose@shonin" == blkWId) {
-            return true;
-        }
-        return false;
-    };
-    self.getPoseEditData = function()
-    {//TODO:参照先はそのうちリソースボックス的な所からのデータの編集に書き換わる予定
-        var blkWId = getCurCmdBlkWorldId_();
-        if("pose@shonin" == blkWId) {
-            return self.curCmdBlk.getValueInData("poseData0");
-        }
-        return null;
-    };
-    self.setPoseEditData = function(poseEditData)
-    {
-        var blkWId = getCurCmdBlkWorldId_();
-        if("pose@shonin" == blkWId) {
-            return self.curCmdBlk.setValueInData("poseData0",poseEditData);
-        }
-        return null;
-    };
-
-};
-var ShouninCoreIns = new ShouninCore();
-
-
 // ブロックの生成とかを管理します
 // (表示は一切扱いません。それはブロック単体の管理とそれを扱う側が管理してます)
 // (ブロック間のリンクも管理しません。それはBlockManagerがやってます。)
@@ -139,22 +40,59 @@ var CommandBlockManager = function()
     {
         var blkIns  = self.blockManager.createBlockIns(blockWorldId);
         var cmdBlk  = new CommandBlock(blkIns);
-        self.cmdBlockTbl[blkIns] = cmdBlk;
+        self.cmdBlockTbl[blkIns.getLutKey()] = cmdBlk;
         return cmdBlk;
     };
+
     // 
-    self.createCommandBlockByBlockIns = function(blkIns)
+    self.cloneCommandBlockByBlockIns = function(cmdBlk)
     {
+        alert("未実装。これはクローン向け");
     };
+
+    // ブロックの塊をJson向けのテーブル化します
+    self.saveCommandBlockLumpToJsonTable = function(cmdBlockLumpTop,callback)
+    {
+        return self.blockManager.toJsonTable_LumpBlocks( cmdBlockLumpTop.blkIns, function(blkIns,jsonTbl)
+        {
+            //HACK: UI系保存する？
+
+            //情報付加用
+            if(callback){
+                callback(lookupCommandBlock(blkIns),jsonTbl);
+            }
+        });
+    };
+    // ブロックの塊をJson向けのテーブルから作ります
+    self.loadCommandBlockLumpFromJsonTable = function(cmdBlkLumpJsonTbl, callback)
+    {
+        var lumpBlkIns = self.blockManager.fromJsonTable(cmdBlkLumpJsonTbl,function(blkIns,jsonTbl)
+        {
+            // コマンドブロックの作成
+            var cmdBlk  = new CommandBlock(blkIns);
+            self.cmdBlockTbl[blkIns.getLutKey()] = cmdBlk;
+            //HACK: UI系復元する？
+
+            //付加情報用
+            if(callback){
+                callback(cmdBlk,jsonTbl);
+            }
+        });
+        return self.lookupCommandBlock(lumpBlkIns);
+    };
+
     //
     self.lookupCommandBlock = function(blkIns)
     {
-        return  self.cmdBlockTbl[blkIns];
+        return  self.cmdBlockTbl[blkIns.getLutKey()];
     };
 };
 
 // ブロック単体を管理します。扱うのは主に表示やUI操作などです。
-// (ブロック間のリンクやスコープの接続先などの管理は一切やりません。それは外の管理がやります)
+// (ブロック間のリンクやスコープの接続先などの管理は一切やりません。
+//  それは外の人が管理します。UIについても同様に自分自身の見た目のみです。
+//  スコープ先の内容によって自身が伸縮する場合でも、外の人が提供する操作を使って調整します。
+//  ※今後のリファクタリングの結果次第で基底クラス的になってデフォルトではUIすら提供しない存在になるカモ。)
 var CommandBlock = function(blkIns)
 {
     var self = this;
@@ -259,6 +197,32 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.cmdBlkMan = commandBlockManager;
     self.cmdBlockLumpList = [];
 
+    self.saveToJsonTable = function()
+    {
+        var jsonTbl={
+            lampBlockLst:[],
+        };
+        $.each(self.cmdBlockLumpList,function(idx,cmdBlockLump)
+        {
+            var blkInsJson = self.cmdBlkMan.saveCommandBlockLumpToJsonTable(cmdBlockLump);
+
+            jsonTbl.lampBlockLst.push( blkInsJson );
+        });
+        return jsonTbl;
+    };
+    self.loadFromJsonTable = function(jsonTbl)
+    {
+        self.cmdBlockLumpList = [];
+
+        $.each(jsonTbl.lampBlockLst,function(idx,lumpBlockJsonTbl)
+        {
+            var cmdBlockLump = self.cmdBlkMan.loadCommandBlockLumpFromJsonTable(lumpBlockJsonTbl);
+            self.cmdBlockLumpList.push( cmdBlockLump );
+        });
+
+        return true;
+    };
+
     var layout = ccui.Layout.create();
     layout.setBackGroundImage(res.frame01_png);
     layout.setBackGroundImageScale9Enabled(true);
@@ -319,6 +283,138 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
 };
 
 // -- --
+//
+var ShouninCore = function(){
+    var self = this;
+    
+    self.cmdBlkMan = new CommandBlockManager();
+    self.workSpaceMain = null;
+
+    self.curCmdBlk = null;
+
+    var getCurCmdBlkWorldId_ = function(){
+        if ( self.curCmdBlk ){
+            return self.curCmdBlk.getHeaderTemplate().blockWorldId;
+        }
+        return null;
+    };
+
+    // セーブ/ロード
+    self.saveToJsonTable = function()
+    {
+        var jsonTbl = {
+            version:"shouninCore@ver0.01",
+        };
+        jsonTbl.wsMainTbl = ShouninCoreIns.workSpaceMain.saveToJsonTable();
+
+        return jsonTbl;
+    };
+    self.loadFromJsonTable = function(jsonTbl)
+    {
+        if(!ShouninCoreIns.workSpaceMain.loadFromJsonTable(jsonTbl.wsMainTbl))
+        {
+            return false;
+        }  
+        ShouninCoreIns.workSpaceMain.updateLayout();
+        return true;
+    };
+
+
+    //
+    var listenerLst_ = [];
+    self.notifyUpdate = function()
+    {
+        $.each(listenerLst_,function(k,listener){
+            if(listener.shouninCoreUpdate)
+            {
+                listener.shouninCoreUpdate();
+            }
+        });
+    };
+    self.addListener = function(instance)
+    {
+        listenerLst_.push(instance);
+    };
+    self.removeListener = function(instance)
+    {
+        var idx = listenerLst_.indexOf(instance);
+        if(idx>=0){
+            listenerLst_.splice(idx,1);
+        }
+    };
+
+    //
+    self.setCurCmdBlk = function(cmdBlk)
+    {
+        self.curCmdBlk = cmdBlk;
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId)
+        {
+            self.notifyUpdate();
+        }
+        if("pose@shonin" == blkWId)
+        {
+            var poseEditData = self.curCmdBlk.getValueInData("poseData0");
+            if ( Object.keys(poseEditData.poseData.jointAngles).length <= 0)
+            {
+                //とりあえずここで新規データ生成してみる
+                var initPoseJointData = {
+                "HeadPitch":0,"HeadYaw":0,
+                "LShoulderPitch":0,"LShoulderRoll":0,"LElbowYaw":0,"LElbowRoll":0,"LWristYaw":0,
+                "RShoulderPitch":0,"RShoulderRoll":0,"RElbowYaw":0,"RElbowRoll":0,"RWristYaw":0,
+                "HipPitch":0,"HipRoll":0,"KneePitch":0,};
+                poseEditData.poseData.jointAngles = initPoseJointData;
+            }
+            self.notifyUpdate();
+        }
+    };
+
+    //
+    self.getTalkText = function(text)
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId) {
+            return self.curCmdBlk.getValueInData("talkLabel0").string;
+        }
+        return "";
+    };
+    self.updateTalkText = function(text)
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId) {
+            return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
+        }
+        self.notifyUpdate();
+    };
+
+    // 
+    self.isPoseEdit = function()
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return true;
+        }
+        return false;
+    };
+    self.getPoseEditData = function()
+    {//TODO:参照先はそのうちリソースボックス的な所からのデータの編集に書き換わる予定
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return self.curCmdBlk.getValueInData("poseData0");
+        }
+        return null;
+    };
+    self.setPoseEditData = function(poseEditData)
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("pose@shonin" == blkWId) {
+            return self.curCmdBlk.setValueInData("poseData0",poseEditData);
+        }
+        return null;
+    };
+
+};
+var ShouninCoreIns = null;
 
 //
 var MainLayer = cc.Layer.extend({
@@ -337,6 +433,102 @@ var MainLayer = cc.Layer.extend({
         self.addChild(label, 1);
 */
         var widgetSize = size;
+
+        //
+        var makeFileMenu_ = function()
+        {
+            var layout = ccui.Layout.create();
+            layout.setPosition(0, size.height-64);
+            layout.setContentSize(180,64);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+
+            var loadBtn = ccui.Button.create();
+            loadBtn.setTouchEnabled(true);
+            loadBtn.setScale9Enabled(true);
+            loadBtn.loadTextures(res.cmdblock_frame01_png, null, null);
+            loadBtn.setTitleText("Load");
+            loadBtn.setPosition(cc.p(0+32+8,32));
+            loadBtn.setSize(cc.size(64, 32));
+            loadBtn.addTouchEventListener(function(button,type)
+            {
+                if(0==type){
+                    if($("#input_dummy")[0])
+                    {
+                        document.body.removeChild($("#input_dummy")[0]);
+                    }
+                    var input = document.createElement( 'input' );
+                    $(input).attr({id:"input_dummy",type:"file"});
+                    $(input).css({display:"none"});
+                    input.addEventListener( 'change', function ( event ) {
+                        if(event.target.files[ 0 ]){
+                            var fr = new FileReader();
+                            fr.onload = function(e)
+                            {
+                                try{
+                                    var jsonTbl = JSON.parse(e.target.result);
+                                    var bOk = ShouninCoreIns.loadFromJsonTable(jsonTbl);
+                                    if(bOk){
+                                        alert("ロード完了です！");
+                                    }else{
+                                        alert("申し訳ありませぬ。ロードできませんでした。データの内容がおかしいようです。");
+                                    }
+                                }
+                                catch(e){
+                                    alert("申し訳ありませぬ。ロードできませんでした。ファイルが違うものかもしれません。:\n"+e.name + "\n" + e.message);
+                                }
+                            };
+                            fr.readAsText(event.target.files[ 0 ]);
+                        }
+                    } );
+                    document.body.appendChild(input);
+                    $(input).click();
+                }
+            });
+            layout.addChild(loadBtn);
+
+            var saveBtn = ccui.Button.create();
+            saveBtn.setTouchEnabled(true);
+            saveBtn.setScale9Enabled(true);
+            saveBtn.loadTextures(res.cmdblock_frame01_png, null, null);
+            saveBtn.setTitleText("Save");
+            saveBtn.setPosition(cc.p(64+32+8,32));
+            saveBtn.setSize(cc.size(64, 32));
+            saveBtn.addTouchEventListener(function(button,type)
+            {
+                if(0==type)
+                {
+                    //Three.jsよりコピペ。後で整理する
+                    var link = document.createElement( 'a' );
+                    link.style.display = 'none';
+                    document.body.appendChild( link );
+                    var exportString = function ( output, filename ) {
+                        var blob = new Blob( [ output ], { type: 'text/plain' } );
+                        var objectURL = URL.createObjectURL( blob );
+
+                        link.href = objectURL;
+                        link.download = filename || 'data.json';
+                        link.target = '_blank';
+
+                        var event = document.createEvent("MouseEvents");
+                        event.initMouseEvent(
+                            "click", true, false, window, 0, 0, 0, 0, 0
+                            , false, false, false, false, 0, null
+                        );
+                        link.dispatchEvent(event);
+                    };
+                    var jsonTbl = ShouninCoreIns.saveToJsonTable();
+                    exportString(JSON.stringify(jsonTbl),"shoukonScript.json");
+                }
+            });
+            layout.addChild(saveBtn);
+
+            self.addChild(layout);
+            return layout;
+        };
+        makeFileMenu_();
+
 /*
         var textButton = ccui.Button.create()
         textButton.setTouchEnabled(true)
@@ -437,10 +629,10 @@ var BlockLayer = cc.Layer.extend({
         this._super();
         var self = this;
 
-        var cmdBlkMan = new CommandBlockManager();
-
-        var workSpace = new CommandBlockWorkSpace(self,cmdBlkMan);
         
+        var workSpace = new CommandBlockWorkSpace(self, ShouninCoreIns.cmdBlkMan);
+        ShouninCoreIns.workSpaceMain = workSpace;
+
         var size = cc.director.getWinSize();
 
         var frameX = 0;
@@ -475,20 +667,20 @@ var BlockLayer = cc.Layer.extend({
             self.addChild(btn);
         };
 
-        makeAddCommandBlockBtn(128,size.height-32,"会話",function(button,type){
+        makeAddCommandBlockBtn(128,size.height-(80+0),"会話",function(button,type){
             if(type==0)
             {
-                var cmdBlk = cmdBlkMan.createCommandBlock("talk@shonin");
+                var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("talk@shonin");
                 workSpace.addCommandLumpBlock( cmdBlk );
                 workSpace.updateLayout();
             }
         });
-        makeAddCommandBlockBtn(128,size.height-64,"ポーズ",function(button,type){
+        makeAddCommandBlockBtn(128,size.height-(80+32),"ポーズ",function(button,type){
             if(type==0)
             {
-                var cmdBlk = cmdBlkMan.createCommandBlock("pose@shonin");
+                var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("pose@shonin");
 
-                var cmdBlk2 = cmdBlkMan.createCommandBlock("pose@shonin");
+                var cmdBlk2 = ShouninCoreIns.cmdBlkMan.createCommandBlock("pose@shonin");
 
                 cmdBlk.blkIns.connectOut(cmdBlk2.blkIns);
 
@@ -843,13 +1035,13 @@ var PepperLayer = cc.Layer.extend({
             //camera.position.y = 0.5;
             //camera.position.z = Math.sin( timer ) * 1.5;
 
-            self.pepperModel.topLinkObj.obj3d.rotation.setFromVector3(
-                new THREE.Vector3(0,Math.sin( timer ),0)
-            );
-            self.pepperModel.topLinkObj.obj3d.updateMatrix();
+            //self.pepperModel.topLinkObj.obj3d.rotation.setFromVector3(
+            //    new THREE.Vector3(0,Math.sin( timer ),0)
+            //);
+            //self.pepperModel.topLinkObj.obj3d.updateMatrix();
 
             //self.pepperModel.setJointAngle("LShoulderPitch",Math.sin( timer )*200);
-            self.pepperModel.setJointAngle("LShoulderRoll",Math.sin( timer )*200);
+            //self.pepperModel.setJointAngle("LShoulderRoll",Math.sin( timer )*200);
             //self.pepperModel.setJointAngle("LElbowYaw",Math.sin( timer )*100);
             //self.pepperModel.setJointAngle("LElbowRoll",Math.sin( timer )*100);
             //self.pepperModel.setJointAngle("LWristYaw",Math.sin( timer )*100);
@@ -950,9 +1142,10 @@ var PepperLayer = cc.Layer.extend({
 
                 var jointKeyLst={
                 "HeadPitch":"首たて","HeadYaw":"首よこ",
+                "LShoulderPitch":"左肩回転","LShoulderRoll":"左肩振り","LElbowYaw":"左ひじ回転","LElbowRoll":"左ひじ曲げ","LWristYaw":"左手首",
+                "RShoulderPitch":"右肩回転","RShoulderRoll":"右肩振り","RElbowYaw":"右ひじ回転","RElbowRoll":"右ひじ曲げ","RWristYaw":"右手首",
                 "HipPitch":"腰左右","HipRoll":"腰前後","KneePitch":"ひざ",
-                "LElbowRoll":"左ひじ回転","LElbowYaw":"左ひじ曲げ","LShoulderPitch":"左肩回転","LShoulderRoll":"左肩振り","LWristYaw":"左手首",
-                "RElbowRoll":"右ひじ回転","RElbowYaw":"右ひじ曲げ","RShoulderPitch":"右肩回転","RShoulderRoll":"右肩振り","RWristYaw":"右手首"};
+                };
 
                 var fontSize = 20;
                 var posY = +8;
@@ -969,6 +1162,11 @@ var PepperLayer = cc.Layer.extend({
                     var slider = new Slider(layout, boxW/4*2, fontSize-2,{
                         updateSlider:function(slider,value){
                             jointObj.setJointAngle( value );
+                            var poseEditData = ShouninCoreIns.getPoseEditData();
+                            if(poseEditData)
+                            {
+                                poseEditData.poseData.jointAngles[key] = value;
+                            }
                         },
                     });
                     slider.setRange( THREE.Math.radToDeg(jointObj.src.limit.lower), THREE.Math.radToDeg(jointObj.src.limit.upper) );
@@ -987,16 +1185,22 @@ var PepperLayer = cc.Layer.extend({
                         // エディット中
                         layout.setVisible(true);
                         // まず、現在の状態をスライダーに反映します
-                        $.each(jointKeyLst,function(key,name)
+                        $.each(jointKeyLst,function(jointName,name)
                         {
-                            var jointObj = pepperLayer.pepperModel.jointObjTbl[key];
-                            sliderTbl[key].setValue(
+                            var jointObj = pepperLayer.pepperModel.jointObjTbl[jointName];
+                            sliderTbl[jointName].setValue(
                                 jointObj.getJointAngle()
                              );
                         });
-                        // その後、データの内容をスライダーに反映します
+                        // その後、データの内容をスライダーとモデルに反映します
+                        var poseEditData = ShouninCoreIns.getPoseEditData();
+                        if(poseEditData)
                         {
-                            
+                            $.each(poseEditData.poseData.jointAngles,function(jointName,angle){
+                                sliderTbl[jointName].setValue( angle );
+                                var jointObj = pepperLayer.pepperModel.jointObjTbl[jointName];
+                                jointObj.setJointAngle(sliderTbl[jointName].getValue());
+                            });
                         }
                     }else{
                         layout.setVisible(false);
@@ -1034,6 +1238,8 @@ var MainScene = cc.Scene.extend({
 
 //
 $(function(){
+
+    ShouninCoreIns = new ShouninCore();
 
 //ブロック管理
 // スプライトとブロックを扱うクラス？
@@ -1096,7 +1302,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           blockContents:[
               {expressions:[
                   //{input_text:{default:{string:""}},dataName:'poseLabel'},
-                  {input_dropOnly:{default:{poseData:{}}},dataName:'poseData0',acceptTypes:["poseData"]},
+                  {input_dropOnly:{default:{poseData:{jointAngles:{}}}},dataName:'poseData0',acceptTypes:["poseData"]},
               ]},
           ],
           blockVisual:{

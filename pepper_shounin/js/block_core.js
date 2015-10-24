@@ -190,6 +190,7 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //
 // ■ アクセサ
 //    getTemplate()
+//    getLutKey()
 // ■ 接続関連の処理
 //    clearOut()
 //    clearIn()
@@ -223,6 +224,8 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //    deferred(option)
 //    deferredForPolling(pollingValueEndCheckCallback)
 //
+var blockKeySeed_ = 1;
+
 function Block(blockManager, blockTemplate, callback) {
     var self = this;
 
@@ -230,10 +233,17 @@ function Block(blockManager, blockTemplate, callback) {
     self.blockManager  = blockManager;
     self.blockTemplate = JSON.parse(JSON.stringify(blockTemplate));
     self.callback      = callback;
+    self.lutKey        = blockKeySeed_++;
     
     self.getTemplate = function()
     {
         return self.blockTemplate;
+    };
+    // テーブルで参照用する為に使える識別用のキー向けの値。
+    // シリアライズ対象外で、ロード時に書き換わる値なのでこれを宛にしてシリアライズしないように注意してください。
+    self.getLutKey = function()
+    {
+        return self.lutKey;
     };
 
     // ■ブロックテンプレからの準備
@@ -767,7 +777,7 @@ var BlockWorkSpace = function (blockManager, workspaceName){
     self.id                = blockManager.blockWsIdSeed_++;
 
     // シリアライズ関連です
-    self.toJSON = function()
+    self.toJsonTable = function()
     {
         var topBlockList = [];
         $.each(self.blockList,function(k,block){
@@ -778,19 +788,19 @@ var BlockWorkSpace = function (blockManager, workspaceName){
         });
         var blocks = [];
         $.each(topBlockList,function(k,topBlock){
-            blocks.push(self.blockManager.toJSON_LumpBlocks(topBlock));
+            blocks.push(self.blockManager.toJsonTable_LumpBlocks(topBlock));
         });
         return {
             name:  self.workspaceName,
             blocks:blocks,
         };
     };
-    self.fromJSON = function(json)
+    self.fromJsonTalbe = function(jsonTbl)
     {
         self.clearAllBlocks();
-        self.workspaceName = json.name;
-        $.each(json.blocks,function(k,topBlockJson){
-            var block = self.blockManager.fromJSON(topBlockJson);
+        self.workspaceName = jsonTbl.name;
+        $.each(jsonTbl.blocks,function(k,topBlockJson){
+            var block = self.blockManager.fromJsonTable(topBlockJson);
             self.addBlock( block );
         });
     };
@@ -963,45 +973,46 @@ function BlockManager(execContext){
     //■ シリアライズ回り
 
     // ブロックの塊(指定ブロック以下全て)をJSON用データに変換します
-    self.toJSON_LumpBlocks = function(block){
+    self.toJsonTable_LumpBlocks = function(block,callback){
         var recv = function(block){
-            var json={
+            var jsonTbl={
                 blkWId:block.blockTemplate.blockHeader.blockWorldId,
                 valTbl:{},
                 scpTbl:{},
             };
             $.each(block.valueInTbl,function(k,valueIn){
-                json.valTbl[k]={};
+                jsonTbl.valTbl[k]={};
                 if(valueIn.block){
-                    json.valTbl[k].block=recv(valueIn.block);
+                    jsonTbl.valTbl[k].block=recv(valueIn.block);
                 }
-                if(!valueIn.dataTemplate.dropOnly)//都合により今はdropOnlyは除外します(保存しなくても動くのと画像データとか入れてるので保存すると落ちる場合が…)
+                if(!valueIn.expTmpl.dropOnly)//都合により今はdropOnlyは除外します(保存しなくても動くのと画像データとか入れてるので保存すると落ちる場合が…)
                 {
-                    json.valTbl[k].value = valueIn.value;
+                    jsonTbl.valTbl[k].value = valueIn.value;
                 }
             });
             $.each(block.scopeOutTbl,function(k,scopeOut){
                 if(scopeOut.block)
                 {
-                    json.scpTbl[k] = recv(scopeOut.block);
+                    jsonTbl.scpTbl[k] = recv(scopeOut.block);
                 }
             });
             if(block.out && block.out.block){
-                json.out = recv(block.out.block);
+                jsonTbl.out = recv(block.out.block);
             }
-            return json;
+            if(callback){
+                callback(block,jsonTbl);
+            }
+            return jsonTbl;
         };
         var json = recv(block);
-        json.posX=block.posX()*block.pix2em;
-        json.posY=block.posY()*block.pix2em;
         return json;
     };
 
     // JSON用データからブロックの塊を復元します(塊でなくてもフォーマットは変わりません)
-    self.fromJSON = function(json){
-        var recv = function(json){
-            var block = self.createBlockIns( json.blkWId );
-            $.each(json.valTbl,function(k,valJson){
+    self.fromJsonTable = function(jsonTbl,callback){
+        var recv = function(jsonTbl){
+            var block = self.createBlockIns( jsonTbl.blkWId );
+            $.each(jsonTbl.valTbl,function(k,valJson){
                 if(block.valueInTbl[k]){
                     if(valJson.value){
                         block.valueInTbl[k].value = valJson.value;
@@ -1011,19 +1022,20 @@ function BlockManager(execContext){
                     }
                 }
             });
-            $.each(json.scpTbl,function(k,scpJson){
+            $.each(jsonTbl.scpTbl,function(k,scpJson){
                 if(block.scopeOutTbl[k]){
                     block.connectScopeOut(k,recv(scpJson));
                 }
             });
-            if(block.out && json.out){
-                block.connectOut(recv(json.out));
+            if(block.out && jsonTbl.out){
+                block.connectOut(recv(jsonTbl.out));
+            }
+            if(callback){
+                callback(block,jsonTbl);
             }
             return block;
         };
-        var block = recv(json);
-        if(json.posX)block.posX(json.posX/block.pix2em);
-        if(json.posY)block.posY(json.posY/block.pix2em);
+        var block = recv(jsonTbl);
         return block;
     };
 
