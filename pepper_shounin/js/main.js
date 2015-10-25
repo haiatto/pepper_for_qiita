@@ -2,6 +2,32 @@
 // ペッパー商人
 //
 
+
+// Cocosのリソース定義
+var res = {
+    HelloWorld_png : "cocos_res/HelloWorld.png",
+    frame01_png : "cocos_res/frame01.png",
+    workspace_frame_png : "cocos_res/workspace_frame.png",
+    workspace_linehead_png : "cocos_res/workspace_linehead.png",
+    workspace_separate_bar_png : "cocos_res/workspace_separate_bar.png",
+
+    slider_frame_png : "cocos_res/slider_frame.png",
+    slider_volume_png: "cocos_res/slider_volume.png",
+
+    cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
+    cmdblock_frame_select01_png : "cocos_res/cmdblock_frame_select01.png",
+
+    icon_dustbox_png: "cocos_res/icon_dustbox.png",
+
+    pepper_icone_png : "cocos_res/pepper-icone.png",
+};  
+var preload_res = [];
+for (var i in res) {
+    preload_res.push(res[i]);
+}
+
+
+
 // KiiCound周り
 var KiiShouninCore = function()
 {
@@ -133,21 +159,6 @@ var KiiShouninCore = function()
 var KiiShouninCoreIns = null;
 
 
-
-// Cocosのリソース
-var res = {
-    HelloWorld_png : "cocos_res/HelloWorld.png",
-    frame01_png : "cocos_res/frame01.png",
-    slider_frame_png : "cocos_res/slider_frame.png",
-    slider_volume_png: "cocos_res/slider_volume.png",
-    cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
-    pepper_icone_png : "cocos_res/pepper-icone.png",
-};
-var preload_res = [];
-for (var i in res) {
-    preload_res.push(res[i]);
-}
-
 // ブロックの生成とかを管理します
 // (表示は一切扱いません。それはブロック単体の管理とそれを扱う側が管理してます)
 // (ブロック間のリンクも管理しません。それはBlockManagerがやってます。)
@@ -179,6 +190,14 @@ var CommandBlockManager = function()
     self.cloneCommandBlockByBlockIns = function(cmdBlk)
     {
         alert("未実装。これはクローン向け");
+    };
+
+    // ブロック単体を破棄します(破棄するだけ。内部のリンクの再接続何もしません。また、このコマンドブロックを外部で参照している箇所を消すのは呼んだ側の仕事です。)
+    self.destryCommandBlock = function(cmdBlk)
+    {
+        var blkIns  = cmdBlk.blkIns;
+        self.cmdBlockTbl[blkIns.getLutKey()] = null;
+        cmdBlk.destry();
     };
 
     // ブロックの塊をJson向けのテーブル化します
@@ -250,9 +269,42 @@ var CommandBlock = function(blkIns)
         return self.blkIns.getValueInData(key);
     };
 
-    self.bg       = cc.Scale9Sprite.create(res.cmdblock_frame01_png);
+    var createSpriteFrameByFilePath_ = function(filePath){    
+        var texture = cc.textureCache.addImage(filePath);
+        var texSize = texture.getContentSize();
+        return new cc.SpriteFrame(texture, cc.rect(0,0,texSize.width,texSize.height));
+    };
+    var bgFrame    = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
+    var bgFrameSel = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
+
+    self.bg       = cc.Scale9Sprite.create(bgFrame);
     self.label    = cc.LabelTTF.create("", "Arial", 20);
     self.parentUI = null;
+
+    self.destry = function()
+    {
+        self.blkIns   = null;
+        self.setParentUI(null);
+        //これでいいのか後で調べる…html5版だと破棄要らないとかあるけど…domだから？さらにテクスチャ等リソースは全部キャッシュ式だから？
+        self.bg.removeFromParentAndCleanup(true);
+        self.label.removeFromParentAndCleanup(true);
+    };
+
+    var eventListener = null;
+    self.setEventListener = function(listenerParam)
+    {
+        self.clearEventListener();    
+        eventListener = cc.eventManager.addListener(listenerParam,self.bg);
+    };
+    self.clearEventListener = function()
+    {
+        if(!eventListener){
+            eventListener = null;
+            cc.eventManager.removeListener(eventListener);
+        }
+    };
+/*
+ワークスペース側でやることにします
 
     // イベントリスナー
     var click = function()
@@ -266,13 +318,25 @@ var CommandBlock = function(blkIns)
         onTouchBegan: function(touch, event) {
             if (cc.rectContainsPoint(self.bg.getBoundingBoxToWorld(), touch.getLocation())) {
                 click();
+                event.stopPropagation();
                 return true;
             }
             return false;
         },
         onTouchMoved: function(touch, event) {
-        }
+            var delta = touch.getDelta();
+            var pos = self.bg.getPosition();
+            pos.x += delta.x;
+            pos.y += delta.y;
+            self.setPosition(pos.x,pos.y);
+            event.stopPropagation();
+            return true;
+        },
+        onTouchEnded: function(touch, event) 
+        {
+        },
     }, self.bg);
+*/
 
     //
     self.setParentUI = function(parentUI)
@@ -285,9 +349,14 @@ var CommandBlock = function(blkIns)
             self.parentUI.removeChild(self.label, 1);
         }
         self.parentUI = parentUI;
-        self.parentUI.addChild(self.bg);
-        self.parentUI.addChild(self.label, 1);
+        if(self.parentUI){
+            self.parentUI.addChild(self.bg);
+            self.parentUI.addChild(self.label, 1);
+        }
     }
+    self.getParentUI = function(){
+        return self.parentUI;  
+    };
 
 
     self.setPosition = function(x,y)
@@ -298,7 +367,7 @@ var CommandBlock = function(blkIns)
 
     self.setSize = function(w,h)
     {
-        self.bg.setContentSize(w,h);
+        self.bg.setContentSize(cc.size(w,h));
     };
 
     self.getSize = function(){
@@ -310,6 +379,17 @@ var CommandBlock = function(blkIns)
         var lblSize = self.label.getContentSize();
         self.setSize(Math.max(lblSize.width,64),
                      Math.max(lblSize.height,32));
+    };
+
+    self.setCurrentVisial = function(){
+        var size = self.bg.getContentSize();
+        self.bg.setSpriteFrame(bgFrameSel);
+        self.bg.setContentSize(size);
+    };
+    self.resetCurrentVisial = function(){
+        var size = self.bg.getContentSize();
+        self.bg.setSpriteFrame(bgFrame);
+        self.bg.setContentSize(size);
     };
 
     self.setLabel( visualTempl.disp_name );
@@ -328,6 +408,43 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.cmdBlkMan = commandBlockManager;
     self.cmdBlockLumpList = [];
 
+    //ワークスペース内を全部走査します
+    var traverseAllCmdBlock_ = function(callbackBlk)
+    {
+        var isProcOk = false;
+        $.each(self.cmdBlockLumpList,function(idx, cmdBlkLump){
+            //
+            var recv = function(cmdBlk){
+                //
+                if(callbackBlk){
+                    if(callbackBlk(cmdBlk)){
+                        isProcOk = true;
+                        return;
+                    }
+                }
+                $.each(cmdBlk.blkIns.scopeOutTbl,function(idx2,scopeOut){
+                    if(scopeOut.block)
+                    {
+                        recv( self.cmdBlkMan.lookupCommandBlock( scopeOut.block ) );
+                        if(isProcOk) return false;//each終了
+                    }
+                });
+                if(isProcOk)return true;
+                if(cmdBlk.blkIns.out)
+                { 
+                    if(cmdBlk.blkIns.out.block)
+                    {
+                        recv( self.cmdBlkMan.lookupCommandBlock( cmdBlk.blkIns.out.block ) );
+                        if(isProcOk) return;
+                    }
+                }
+            };
+            recv(cmdBlkLump);
+            if(isProcOk)return false;//each終了
+        });
+        return isProcOk;
+    };
+
     self.saveToJsonTable = function()
     {
         var jsonTbl={
@@ -343,6 +460,9 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
     self.loadFromJsonTable = function(jsonTbl)
     {
+        traverseAllCmdBlock_(function(cmdBlk){
+            self.cmdBlkMan.destryCommandBlock(cmdBlk);
+        });
         self.cmdBlockLumpList = [];
 
         $.each(jsonTbl.lampBlockLst,function(idx,lumpBlockJsonTbl)
@@ -354,10 +474,119 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         return true;
     };
 
-    var layout = ccui.Layout.create();
-    layout.setBackGroundImage(res.frame01_png);
+
+    // イベントリスナー
+    var click = function(cmdBlk)
+    {
+        //エディタ開くとかカレントにする
+        ShouninCoreIns.setCurCmdBlk(cmdBlk); 
+        //cmdBlk.blkIns.deferred();
+    }
+    var tgtCmdBlk_ = null;
+    var overrapCmdBlk_ = null;
+    var overrapDir_    = 0;
+    var listenerParam = 
+    {
+        event: cc.EventListener.TOUCH_ONE_BY_ONE,
+        onTouchBegan: function(touch, event) {    
+            var isOk = traverseAllCmdBlock_(function(cmdBlk){
+                if (cc.rectContainsPoint(cmdBlk.bg.getBoundingBoxToWorld(), touch.getLocation())) 
+                {
+                    tgtCmdBlk_ = cmdBlk;
+                    event.stopPropagation();
+                    click(tgtCmdBlk_);
+                    return true;
+                }
+            });
+            return isOk;
+        },
+        onTouchMoved: function(touch, event) {
+            if(tgtCmdBlk_)
+            {
+                //ブロックを移動します
+                var delta = touch.getDelta();
+                var pos = tgtCmdBlk_.bg.getPosition();
+                pos.x += delta.x;
+                pos.y += delta.y;
+                tgtCmdBlk_.setPosition(pos.x,pos.y);
+                event.stopPropagation();
+                // 付加的な操作をします
+                if(overrapCmdBlk_){
+                    var p = overrapCmdBlk_.bg.getPosition();
+                    overrapCmdBlk_.setPosition(p.x+5, p.y - 5*overrapDir_);
+                    overrapCmdBlk_ = null;
+                    overrapDir_    = 0;
+                }
+                var isOk = traverseAllCmdBlock_(function(cmdBlk){
+                    var rc = cmdBlk.bg.getBoundingBoxToWorld();
+                    var pt = touch.getLocation();
+                    rc.x    = -9999;//横方向は無視します
+                    rc.width = 9999*2;
+                    if (cc.rectContainsPoint( rc, pt )) 
+                    {
+                        if(tgtCmdBlk_!=cmdBlk){
+                            overrapCmdBlk_ = cmdBlk;
+                            var dy = pt.y - rc.y;
+                            if(dy > rc.height/2){ 
+                                overrapDir_ = -1;
+                            }else{
+                                overrapDir_ = 1;
+                            }
+                            return true;
+                        }
+                    }
+                });
+                if(overrapCmdBlk_){
+                    var p = overrapCmdBlk_.bg.getPosition();
+                    overrapCmdBlk_.setPosition(p.x-5, p.y + 5*overrapDir_);
+                }
+                return true;
+            }
+            return false;
+        },
+        onTouchEnded: function(touch, event) 
+        {
+            // 重なるブロックがあるなら接続を変更します
+            if(tgtCmdBlk_ && overrapCmdBlk_)
+            {
+                // まずは対象のワークスペース内での接続を解除します
+                self.cutCommandBlock(tgtCmdBlk_);
+                // 
+                if(overrapDir_>0){
+                    //下(out)に接続します
+                    overrapCmdBlk_.blkIns.connectOut(tgtCmdBlk_.blkIns);
+                }else{
+                    //上(in)に接続します
+                    if(overrapCmdBlk_.blkIns.in && overrapCmdBlk_.blkIns.in.block)
+                    {
+                        overrapCmdBlk_.blkIns.in.block.connectOut( tgtCmdBlk_.blkIns );
+                    }
+                    else{
+                        tgtCmdBlk_.blkIns.connectOut( overrapCmdBlk_.blkIns );
+                    }
+                    // 先頭リストのブロックだったなら入れ替えます
+                    var idx = self.cmdBlockLumpList.indexOf(overrapCmdBlk_);
+                    if(idx>=0){
+                        self.cmdBlockLumpList[idx] = tgtCmdBlk_;
+                        return true;
+                    }
+                }
+            }
+            self.updateLayout();
+            tgtCmdBlk_ = null;
+            overrapCmdBlk_ = null;
+            overrapDir_ = 0;
+        },
+    };
+
+    //
+    var layout = ccui.ScrollView.create();
+    layout.setBackGroundImage(res.workspace_frame_png);
     layout.setBackGroundImageScale9Enabled(true);
     layout.setClippingEnabled(true);
+    layout.setDirection(ccui.ScrollView.DIR_VERTICAL);
+    layout.setTouchEnabled(true);
+    layout.setBounceEnabled(true);
     layer.addChild(layout);
 
     self.setPosition = function(x,y)
@@ -366,25 +595,58 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
     self.setSize = function(w,h)
     {
-        layout.setContentSize(w,h);    
+        layout.setContentSize(cc.size(w,h));    
     };
 
     self.updateLayout = function()
     {
+        var TAG_SPRITE = 100;
+
+        var removeChildrenByTag = function(layout,tag,cleanup)
+        {
+            var removes=[];
+            $.each(layout.getChildren(),function(idx,child){
+                if(child.getTag() == TAG_SPRITE){
+                    removes.push(child);
+                } 
+            });
+            $.each(removes,function(idx,child){
+                layout.removeChild(child,cleanup);
+            });
+        };
+        removeChildrenByTag(layout,TAG_SPRITE,true);
+
         var size = layout.getContentSize();
-        var x = 0;
+        var x = 32;
         var y = size.height;
         $.each(self.cmdBlockLumpList,function(idx, cmdBlkLump)
         {
+            y -= 16;
+            var sepBarSprt = cc.Scale9Sprite.create(res.workspace_separate_bar_png);
+            sepBarSprt.setPosition(cc.p(size.width/2, y+8));
+            sepBarSprt.setContentSize(cc.size(size.width,16));
+            layout.addChild(sepBarSprt, 0, TAG_SPRITE);
+
             var recv = function(cmdBlk)
             {
                 cmdBlk.setParentUI(layout);
+                cmdBlk.setEventListener({
+                    event:        listenerParam.event,
+                    onTouchBegan: listenerParam.onTouchBegan,
+                    onTouchMoved: listenerParam.onTouchMoved,
+                    onTouchEnded: listenerParam.onTouchEnded,
+                });
                 
                 var blkSize = cmdBlk.getSize();
                 cmdBlk.setPosition( 
                     x + blkSize.width /2, 
                     y - blkSize.height/2 
                 );
+
+                var lineHeadSprt = cc.Sprite.create(res.workspace_linehead_png);
+                lineHeadSprt.setPosition(cc.p(32/2, y - 32/2));
+                layout.addChild(lineHeadSprt, 0, TAG_SPRITE);
+
                 y -= blkSize.height;
 
                 $.each(cmdBlk.blkIns.scopeOutTbl,function(idx2,scopeOut)
@@ -403,18 +665,70 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 }
             };
             recv(cmdBlkLump);
-            y -= 10;
         });
+        if(y<0)
+        {
+            $.each(layout.getChildren(),function(idx,item){
+                var p = item.getPosition();
+                p.y += -y;
+                item.setPosition(p);
+            });
+            layout.setInnerContainerSize(cc.size(size.width, -y + size.height));
+        }
+        else
+        {
+            layout.setInnerContainerSize(cc.size(size.width, size.height));
+        }
     };
-
-    self.addCommandLumpBlock = function(blkLumpTop)
+    self.cutCommandBlock = function(cmdBlk,removeWorkspace)
     {
-        self.cmdBlockLumpList.push(blkLumpTop);
+        if ( cmdBlk.getParentUI() != layout ){
+            console.warn("other workspace command block");
+            return;
+        }
+        var idx = self.cmdBlockLumpList.indexOf(cmdBlk);
+        if(idx>=0){
+            // 先頭ブロックリストに居たので下のブロックに入れ替えます。なければ項目を除去します。
+            if(cmdBlk.blkIns.out && cmdBlk.blkIns.out.block){
+                var outCmdBlk = self.cmdBlkMan.lookupCommandBlock(cmdBlk.blkIns.out.block);
+                self.cmdBlockLumpList[idx] = outCmdBlk;
+            }else{
+                self.cmdBlockLumpList.splice(idx,1);            
+            }
+        }
+        // 対象をリンクからカット（前後を再接続して独立させる）します
+        cmdBlk.blkIns.cutInOut();
+        if(removeWorkspace){
+            cmdBlk.setParentUI(null);
+        }
+    };
+    self.addCommandLumpBlock = function(cmdBlkLumpTop)
+    {
+        var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+        if(curCmdBlk){
+            if ( curCmdBlk.getParentUI() == layout ){
+                // カレントがワークスペース内ならその後ろにつなぎます
+                curCmdBlk.blkIns.connectOut(cmdBlkLumpTop.blkIns);
+                return;
+            }
+        }
+        // それ以外は最後に追加します
+        self.cmdBlockLumpList.push(cmdBlkLumpTop);
+    };
+    self.removeCommandLumpBlock = function(cmdBlkLumpTop)
+    {
+        var idx = self.cmdBlockLumpList.indexOf(cmdBlkLumpTop);
+        if(idx>=0){
+            self.cmdBlockLumpList.splice(idx,1);
+            return true;
+        }
+        return false;
     };
 };
 
 // -- --
-//
+// 商人のコア部分
+// MVCのVC的な感じも一応担います。
 var ShouninCore = function(){
     var self = this;
     
@@ -477,7 +791,17 @@ var ShouninCore = function(){
     //
     self.setCurCmdBlk = function(cmdBlk)
     {
+        if(self.curCmdBlk)
+        {
+            self.curCmdBlk.resetCurrentVisial();
+            self.curCmdBlk = null;
+        }
+        if(!cmdBlk){
+            self.notifyUpdate();
+            return;
+        }
         self.curCmdBlk = cmdBlk;
+        self.curCmdBlk.setCurrentVisial();
         var blkWId = getCurCmdBlkWorldId_();
         if("talk@shonin" == blkWId)
         {
@@ -497,6 +821,52 @@ var ShouninCore = function(){
                 poseEditData.poseData.jointAngles = initPoseJointData;
             }
             self.notifyUpdate();
+        }
+    };
+    self.getCurCmdBlk = function(){
+        return self.curCmdBlk;  
+    };
+
+    self.removeCmdBlk = function(removeCmdBlkTop)
+    {
+        var removeBlkIns = removeCmdBlkTop.blkIns;        
+
+        //TODO:ここらへんリファクタリング
+
+        // 削除後に塊の先頭リスト再接続が必要ならリンクを保存しておきます
+        var nextCmdLumpBlkTop = null;
+        if(!removeBlkIns.in || !removeBlkIns.in.block){    
+            if(removeBlkIns.out && removeBlkIns.out.block){
+                nextCmdLumpBlkTop = self.cmdBlkMan.lookupCommandBlock(removeBlkIns.out.block);
+            }
+        }
+        
+        // 対象をリンクからカット（前後を再接続）します
+        removeBlkIns.cutInOut();
+
+        // 自身とその接続先を再帰的に破棄してゆきます
+        var isClearCurrent = false;
+        self.cmdBlkMan.blockManager.traverseUnderBlock(removeBlkIns,{
+            blockCb:function(blockIns)
+            {
+                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blockIns);
+                if(self.curCmdBlk == cmdBlk)
+                {
+                    isClearCurrent = true;
+                }
+                self.cmdBlkMan.destryCommandBlock(cmdBlk);
+            },
+        });
+        if(isClearCurrent){
+            self.setCurCmdBlk(null);
+        }
+        
+        // ワークスペースの塊の先頭リスト内に居た場合はクリアします
+        if(self.workSpaceMain.removeCommandLumpBlock(removeCmdBlkTop))
+        {
+            if(nextCmdLumpBlkTop){
+                self.workSpaceMain.addCommandLumpBlock(nextCmdLumpBlkTop);
+            }
         }
     };
 
@@ -877,6 +1247,24 @@ var BlockLayer = cc.Layer.extend({
         this.addChild(layout);
         */
 
+        // ゴミ箱ボタン
+        var dustboxBtn = ccui.Button.create();
+        dustboxBtn.setTouchEnabled(true);
+        dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
+        dustboxBtn.setPosition(cc.p(32,32+48));
+        dustboxBtn.addTouchEventListener(function(button,type)
+        {
+            var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+            if(curCmdBlk)
+            {
+                ShouninCoreIns.removeCmdBlk(curCmdBlk);
+            }
+            //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
+            workSpace.updateLayout();
+        });        
+        self.addChild(dustboxBtn);
+
+
         var makeAddCommandBlockBtn = function(x,y,text,cb)
         {
             var btn = ccui.Button.create();
@@ -902,11 +1290,6 @@ var BlockLayer = cc.Layer.extend({
             if(type==0)
             {
                 var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("pose@shonin");
-
-                var cmdBlk2 = ShouninCoreIns.cmdBlkMan.createCommandBlock("pose@shonin");
-
-                cmdBlk.blkIns.connectOut(cmdBlk2.blkIns);
-
                 workSpace.addCommandLumpBlock(cmdBlk);
                 workSpace.updateLayout();
             }
@@ -1340,7 +1723,7 @@ var PepperLayer = cc.Layer.extend({
                             listener.updateSlider( self, self.getValue() );
                         }
                     },
-                    onTouchEnd: function(touch, event) 
+                    onTouchEnded: function(touch, event) 
                     {
                     }
                 }, slider_layout);
@@ -1461,7 +1844,7 @@ var MainScene = cc.Scene.extend({
 
 //
 $(function(){
-    KiiShouninCoreIns = new KiiShouninCore();
+    //@@KiiShouninCoreIns = new KiiShouninCore();
 
     ShouninCoreIns = new ShouninCore();
 

@@ -198,12 +198,14 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //    clearScopeOut(scopeName)
 //    clearValueIn(dataName)
 //    clearValueOut()
-//    // 外側につながるブロックをセットします
+//    // 外側につながるブロックをセットします(現在の接続は繋げたブロックの終端に再接続されます。挿入的動作)
 //    connectOut(block)
 //    // 値の入力のブロックをセットします
 //    connectValueIn(dataName, valueBlock)
 //    // 内側につながるブロックをセットします
 //    connectScopeOut(scopeName, block)
+//    // 前後のブロックを繋ぎなおして指定ブロックを外します
+//    cutInOut()
 //
 //    // 複製します(内側のブロックは複製されません)
 //    cloneThisBlock(){
@@ -537,6 +539,39 @@ function Block(blockManager, blockTemplate, callback) {
                 bottomBlock.connectOut(oldConnectOut);
             }
         }
+    };
+
+    // 前後のブロックを繋ぎなおして指定ブロックを外します
+    self.cutInOut = function(){
+        if(self.in && self.in.block)
+        {
+            if(self.out && self.out.block)
+            {
+                // inのブロックをoutにつなぎなおします
+                if(self.in.srcScopeName)
+                {
+                    //in側のリンクをoutに再接続
+                    self.in.block.scopeOutTbl[self.in.srcScopeName].block = self.out.block;
+                    //out側のリンクをinに再接続
+                    self.out.block.in.block     = self.in.block;
+                    self.out.block.srcScopeName = self.in.srcScopeName;
+                }
+                else
+                {
+                    //in側のリンクをoutに再接続
+                    self.in.block.out.block = self.out.block;
+                    //out側のリンクをinに再接続
+                    self.out.block.in.block = self.in.block;
+                }
+                self.in.srcScopeName = null;
+                self.in.block = null;
+                self.out.block = null;
+            }
+            else{
+                self.clearIn();
+            }
+        }
+        self.clearOut();
     };
 
     // データをセットします(ブロックが繋がっていれば外します)
