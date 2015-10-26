@@ -250,7 +250,7 @@ function NaoQiCore()
                 self.nowState = "接続中";
                 self.service("ALTextToSpeech")
                 .done(function (tts) {
-                    tts.say("せつぞく、ぺっぷ");
+                    tts.say("せつぞく、しょうにん");
                     dfd.resolve();
                 });
                 //execContext.setupExecContextFromQim(self.qim);
@@ -2149,8 +2149,6 @@ var PepperLayer = cc.Layer.extend({
 });
 
 
-//
-
 var MainScene = cc.Scene.extend({
   mainLayer:null,
   blockLayer:null,
@@ -2498,7 +2496,8 @@ function makeNullData_Image(){
     return {pixels:null, w:0, h:0,};
 }
 
-$(function(){
+//$(
+var dummy=function(){
     //■ 実行環境を構築(ブロックのコールバックが使えるグローバル環境です) ■
     var makeExecContext = function()
     {
@@ -2858,4 +2857,4 @@ $(function(){
     }
     myModel = new MyModel();
     ko.applyBindings( myModel );
-});
+};

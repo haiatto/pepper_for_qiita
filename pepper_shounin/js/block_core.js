@@ -900,11 +900,13 @@ function BlockManager(execContext){
     self.elementBlockLookupTbl = {};
 
     // ブロック作業場リストなど
+/*
     self.floatDraggingList = ko.observableArray();
     self.floatDraggingInfo = {
         fromWs:null,
         droppedWs:null,
     };
+*/
     self.blockWorkSpaceList = [];
     self.elementBlockWsLookupTbl = {};
     self.blockWsIdSeed_ = 1;
