@@ -2,6 +2,29 @@
 // ペッパー商人
 //
 
+// パラメータ解析です
+function getUrlParameter(sParam)
+{
+    var sPageURL = window.location.search.substring(1);
+    var sURLVariables = sPageURL.split('&');
+    for (var i = 0; i < sURLVariables.length; i++) 
+    {
+        var sParameterName = sURLVariables[i].split('=');
+        if (sParameterName[0] == sParam) 
+        {
+            return sParameterName[1];
+        }
+    }
+}
+$(function(){
+    if(!getUrlParameter("lunchPepper"))
+    {
+        $(window).on('beforeunload', function() {
+            return 'このまま移動しますか？';
+        });
+    }
+});
+
 
 // Cocosのリソース定義
 var res = {
@@ -157,6 +180,259 @@ var KiiShouninCore = function()
     dfd.resolve();
 };
 var KiiShouninCoreIns = null;
+
+// NaoQi周り
+function NaoQiCore()
+{
+    var self = this;
+    self.ipAddr      = "128.0.0.1"
+    self.lunchPepper = false;
+    self.qim         = null;
+    self.nowState    = "未接続";
+
+    if(getUrlParameter("lunchPepper"))
+    {
+        self.lunchPepper = true;
+    }
+
+    self.serviceCache = {};
+    
+    // qimのサービスのラッパ
+    // ※サービス取得が猛烈に重いのでキャッシュします
+    //   (pythonのクラスをダンプした結果のコメント文も込みで、
+    //    うん万文字も送られてくるので頻繁にやると処理に影響出るくらい本当に遅いです。
+    //    関節動かす時とかに色々と反応送れる原因がコレでした…。
+    //    ホントは文字列を直転送じゃなくてハッシュ値で済ます仕組みだったらモット早くなるはず…
+    //    そこは現状がパケットのフレーム内に入る程度か次第？)
+    self.service = function(name){
+        //TODO:キャッシュ作る
+        return self.qim.service(name);
+    };
+
+    // ipアドレス設定
+    if(localStorage)
+    {
+        var lastIpAddr = localStorage.getItem("pepper_ip");
+        if(lastIpAddr){
+            self.ipAddr = lastIpAddr;
+        }
+    }
+    self.setIpAddress = function(ipAddr)
+    {
+        self.ipAddr = ipAddr;
+        localStorage.setItem("pepper_ipAddr",ipAddr);
+    };
+    self.getIpAddress = function()
+    {
+        return self.ipAddr;
+    };
+
+    // ■ 接続部分
+    self.connect = function() 
+    {
+        var dfd = $.Deferred();
+        if(self.qim){
+            //TODO: 接続状態の確認と再接続の方法を考える
+            if(self.nowState!="接続中"){
+                self.qim.socket().socket.connect();
+            }else{
+                dfd.resolve();
+            }
+        }
+        else{
+            if(self.lunchPepper){
+                 self.qim = new QiSession();
+            }else{
+                 self.qim = new QiSession(self.ipAddr);
+            }
+            self.qim.socket()
+            .on('connect', function () {
+                self.nowState = "接続中";
+                self.service("ALTextToSpeech")
+                .done(function (tts) {
+                    tts.say("せつぞく、ぺっぷ");
+                    dfd.resolve();
+                });
+                //execContext.setupExecContextFromQim(self.qim);
+            })
+            .on('disconnect', function () {
+                self.nowState = "切断";
+            })
+            .on('error', function (err) {
+                self.nowState = "エラー";
+                dfd.reject(err);
+            });
+        }
+        return dfd;
+    };
+    self.disconnect = function()
+    {
+    };
+    
+    // ■その他便利処理
+
+    // タブレットをリセットします
+    // (2.05だと切断されるので再接続したい…けど現在未完成)
+    self.resetTabletSystem = function()
+    {
+        var dfd = $.Deferred();
+        NaoQiCoreIns.service("ALTabletService")
+        .then(
+            function(alTb)
+            {
+                alTb.cleanWebview()
+                .then(
+                    function(){
+                    },
+                    function(err){
+                        // Qimの通信が切れて、必ず失敗する(2.05だとエラー出す関数っぽい)
+                        console.log("err:"+err);
+                        // エラーは織り込み済みなので復帰
+                        return $.Deferred().resolve();
+                    }
+                ).then(
+                    function(){
+                        // 少し待つ
+                        console.log("wait");
+                        var dfd = $.Deferred();
+                        setTimeout(function(){
+                            dfd.resolve();
+                        },1000);
+                        return dfd;
+                    }
+                ).then(
+                    function(){
+                        // 再接続
+                        console.log("reconnect");  
+                        return NaoQiCoreIns.connect();
+                    }
+                ).then(
+                    function(){
+                       console.log("connect");  
+                       dfd.resolve();  
+                    },
+                    function(){
+                       console.log("tabletResetFailed");
+                       dfd.reject();  
+                    }
+                ).fail(
+                   function(){
+                       console.log("tabletResetFailed");
+                       dfd.reject();  
+                   }
+                );
+            }
+        ).fail(
+           function(){
+               console.log("tabletResetFailed");
+               dfd.reject();  
+           }
+        );
+        return dfd;
+    };
+
+    // 未接続時の接続試行処理付タブレットサービスの取得
+    self.tabletWifiConnect = function()
+    {
+        var dfdRet = $.Deferred();
+        self.service("ALTabletService")
+        .then(
+            function(alTb)
+            {
+                var retryCnt = 10;
+                var loopFunc = function()
+                {
+                    //まずステータスチェックします
+                    alTb.getWifiStatus()
+                    .then(
+                        function(state)
+                        {
+                            console.log(state);
+                            //IDLE, SCANNING, DISCONNECTED, or CONNECTED.
+                            if("CONNECTED"==state){
+                                dfdRet.resolve(alTb);
+                            }
+                            else{
+                                // 接続中以外なら有効にしてみます
+                                alTb.enableWifi()
+                                .then(
+                                    function()
+                                    {
+                                        if(retryCnt>0){
+                                            retryCnt--;
+                                            //二秒おいて再試行してみます
+                                            setTimeout(loopFunc,2000);
+                                        }
+                                        else{
+                                            // 失敗にします
+                                            dfdRet.reject("retryCnt End");
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    );
+                };
+                loopFunc();
+            },
+            function(err)
+            {
+                dfdRet.reject(err);
+            }
+        );
+        return dfdRet;
+    };
+
+    // 未接続時の接続試行処理などを付けたURLのタブレット表示をします
+    self.isShowTablet = false;
+    self.showTabletUrl = function(url)
+    {
+        var dfdRet = new $.Deferred();
+
+        self.tabletWifiConnect()
+        .then(function(alTb)
+        {
+            var dfd = $.Deferred();
+            var dfdItr = dfd;
+            if(self.isShowTablet)
+            {
+                dfdItr = dfdItr.then(
+                    function(){
+                        // 色々安定化に対する噂があるのでとりあえずshowとhideをなるべく対にしておきます。
+                        return alTb.hideWebview();
+                    }
+                ).then(
+                    function(){
+                        self.isShowTablet = false;
+                        // ついでに気になるのを幾つかよんでおきます
+                        return alTb.resetToDefaultValue();
+                    }
+                ).then(
+                    function(){
+                        return alTb.hide();
+                    }
+                );
+            }
+            dfdItr.then(function(){
+                return alTb.showWebview();
+            })
+            .then(function(){
+                self.isShowTablet = true;
+                return alTb.loadUrl(url);
+            })
+            .then(function(){
+                dfdRet.resolve();                
+            })
+            .fail(function(){
+               dfdRet.reject();
+            });
+            dfd.resolve();
+        });
+        return dfdRet;
+    };
+}
+var NaoQiCoreIns = null;
+
 
 
 // ブロックの生成とかを管理します
@@ -940,7 +1216,7 @@ var MainLayer = cc.Layer.extend({
         {
             var layout = ccui.Layout.create();
             layout.setPosition(0, size.height-64);
-            layout.setContentSize(64*4 + 8*2,64);
+            layout.setContentSize(64*6 + 8*2,64);
             layout.setBackGroundImage(res.frame01_png);
             layout.setBackGroundImageScale9Enabled(true);
             layout.setClippingEnabled(true);
@@ -1116,6 +1392,58 @@ var MainLayer = cc.Layer.extend({
                 }
             });
             layout.addChild(pubShouninListBtn);
+            
+            var addBtn_ = function(label,cb){
+                var btn = ccui.Button.create();
+                btn.setTouchEnabled(true);
+                btn.setScale9Enabled(true);
+                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.setTitleText(label);
+                btn.setPosition(cc.p(posX+64/2,32));
+                btn.setSize(cc.size(64, 32));
+                posX += 64;
+                btn.addTouchEventListener(function(button,type)
+                {
+                    if(0==type)
+                    {
+                        if(cb)cb(button,type);
+                    }
+                });
+                layout.addChild(btn);
+            };
+            //Test
+            addBtn_("Table",function(){
+                NaoQiCoreIns.setIpAddress("192.168.11.19");
+                NaoQiCoreIns.connect()
+                .then(
+                    function(){
+                        NaoQiCoreIns.showTabletUrl(
+                            "http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
+                        ).then(function(){
+                            //NaoQiCoreIns.showTabletUrl(
+                            //    "http://google.co.jp/"
+                            //);
+                        });
+                        //消えなくなるのは抜けられないようにしてあるからかも…要検証…
+                        //return alTb.loadUrl("http://haiatto.github.io/pepper_for_qiita/pepper_shounin/");
+                        //return alTb.loadUrl("http://www.yahoo.co.jp/");
+                        //"http://google.co.jp/"
+                        //http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true 
+                    },
+                    function(err){
+                        console.log("err:"+err);
+                    }
+                );
+            });
+            addBtn_("KillTable",function(){
+                NaoQiCoreIns.setIpAddress("192.168.11.19");
+                NaoQiCoreIns.connect()
+                .then(
+                    function(){
+                        NaoQiCoreIns.resetTabletSystem()
+                    }
+                );
+            });
 
             self.addChild(layout);
             return layout;
@@ -1833,8 +2161,8 @@ var MainScene = cc.Scene.extend({
       self.mainLayer = new MainLayer();
       this.addChild(self.mainLayer);
 
-      self.pepperLayer = new PepperLayer();
-      this.addChild(self.pepperLayer);
+//      self.pepperLayer = new PepperLayer();
+//      this.addChild(self.pepperLayer);
 
       self.blockLayer = new BlockLayer();
       this.addChild(self.blockLayer);
@@ -1845,7 +2173,7 @@ var MainScene = cc.Scene.extend({
 //
 $(function(){
     //@@KiiShouninCoreIns = new KiiShouninCore();
-
+    NaoQiCoreIns   = new NaoQiCore();
     ShouninCoreIns = new ShouninCore();
 
 //ブロック管理
@@ -1927,10 +2255,6 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       }
     );
 });
-
-
-
-
 
 
 
@@ -2163,15 +2487,6 @@ function PepperCamera(alVideoDevice,option) {
     self.subscribe();
 }
 
-
-$(function(){
-    if(!getUrlParameter("lunchPepper"))
-    {
-        $(window).on('beforeunload', function() {
-            return 'このまま移動しますか？';
-        });
-    }
-});
 
 
 // データ(試行中)
