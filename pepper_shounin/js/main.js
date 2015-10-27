@@ -166,6 +166,11 @@ var KiiShouninCore = function()
     // KiiCloud初期化します
     Kii.initializeWithSite("1a730270", "bff0e36d33abbef33bedec08e366f60f", KiiSite.JP);
 
+    console.log("kii login start..");
+    if(!localStorage){
+        console.log("localStorage..not suppert!!");
+    }
+
     // 仮ユーザーでログインします
     var dfd = $.Deferred();
     var dfdItr = dfd;
@@ -2264,7 +2269,7 @@ var MainScene = cc.Scene.extend({
 //
 $(function(){
 
-    console.log("shounin start! v3");
+    console.log("shounin start! v4");
 
     KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
