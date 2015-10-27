@@ -359,8 +359,46 @@ function NaoQiCore()
                         {
                             console.log(state);
                             //IDLE, SCANNING, DISCONNECTED, or CONNECTED.
-                            if("CONNECTED"==state){
-                                dfdRet.resolve(alTb);
+                            if("CONNECTED"==state)
+                            {
+                                // メッセージ受信用にイベント登録します
+                                self.service("ALMemory")
+                                .then(function(alMemory)
+                                    {
+                                        alMemory.subscriber("ALTabletService/error")
+                                        .then(
+                                            function (subscriber) 
+                                            {
+                                                subscriber.signal.connect(function (value,value2) {
+                                                    console.log(value);
+                                                    console.log(value2);
+                                                });
+                                                return alMemory.subscriber("ALTabletService/message");
+                                            }
+                                        )
+                                        .then(
+                                            function (subscriber) 
+                                            {
+                                                subscriber.signal.connect(function (value,value2) {
+                                                    console.log(value);
+                                                    console.log(value2);
+                                                });
+                                                return alMemory.subscriber("ALTabletService/onInputText");
+                                            }
+                                        )
+                                        .then(
+                                            function (subscriber) 
+                                            {
+                                                subscriber.signal.connect(function (value,value2) {
+                                                    console.log(value);
+                                                    console.log(value2);
+                                                });
+                                                //完了
+                                                dfdRet.resolve(alTb);
+                                            }
+                                        );
+                                    }
+                                );
                             }
                             else{
                                 // 接続中以外なら有効にしてみます
@@ -2146,6 +2184,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setSize(cc.size(64, 32));
         itemLo.addChild(btn,2);
         lv.setItemModel(itemLo);
+        return true;
 
         KiiShouninCoreIns.queryShouninList()
         .then(
