@@ -2259,7 +2259,7 @@ var MainScene = cc.Scene.extend({
 //
 $(function(){
 
-    console.log("shounin start!");
+    console.log("shounin start! v2");
 
 //    KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
