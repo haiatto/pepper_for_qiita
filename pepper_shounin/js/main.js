@@ -81,11 +81,13 @@ var KiiShouninCore = function()
         KiiUser.authenticateWithToken(access_token, {
           // Called on successful registration
           success: function(theUser) {
+            console.log("login Ok! ");
             dfd.resolve();
           },
           // Called on a failed authentication
           failure: function(theUser, errorString) {
             // handle error
+            console.log("login Err! "+ errorString);
             dfd.reject(errorString);
           }
         });
@@ -159,6 +161,8 @@ var KiiShouninCore = function()
 
     // ■開始処理
 
+    console.log("kii start..");
+
     // KiiCloud初期化します
     Kii.initializeWithSite("1a730270", "bff0e36d33abbef33bedec08e366f60f", KiiSite.JP);
 
@@ -175,7 +179,8 @@ var KiiShouninCore = function()
         .then(self.lastLoginUserDfd)
     })
     .fail(function(errString){
-        alert("自動ログイン失敗です！" + errString);
+        console.log("failed auto login! "+ errString);
+        //alert("自動ログイン失敗です！" + errString);
     });
     dfd.resolve();
 };
@@ -2259,9 +2264,9 @@ var MainScene = cc.Scene.extend({
 //
 $(function(){
 
-    console.log("shounin start! v2");
+    console.log("shounin start! v3");
 
-//    KiiShouninCoreIns = new KiiShouninCore();
+    KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
     ShouninCoreIns = new ShouninCore();
 
