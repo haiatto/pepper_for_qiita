@@ -342,6 +342,7 @@ function NaoQiCore()
     };
 
     // 未接続時の接続試行処理付タブレットサービスの取得
+    var isRegistedEvent = false;
     self.tabletWifiConnect = function()
     {
         var dfdRet = $.Deferred();
@@ -362,43 +363,52 @@ function NaoQiCore()
                             if("CONNECTED"==state)
                             {
                                 // メッセージ受信用にイベント登録します
-                                self.service("ALMemory")
-                                .then(function(alMemory)
-                                    {
-                                        alMemory.subscriber("ALTabletService/error")
-                                        .then(
-                                            function (subscriber) 
-                                            {
-                                                subscriber.signal.connect(function (value,value2) {
-                                                    console.log(value);
-                                                    console.log(value2);
-                                                });
-                                                return alMemory.subscriber("ALTabletService/message");
-                                            }
-                                        )
-                                        .then(
-                                            function (subscriber) 
-                                            {
-                                                subscriber.signal.connect(function (value,value2) {
-                                                    console.log(value);
-                                                    console.log(value2);
-                                                });
-                                                return alMemory.subscriber("ALTabletService/onInputText");
-                                            }
-                                        )
-                                        .then(
-                                            function (subscriber) 
-                                            {
-                                                subscriber.signal.connect(function (value,value2) {
-                                                    console.log(value);
-                                                    console.log(value2);
-                                                });
-                                                //完了
-                                                dfdRet.resolve(alTb);
-                                            }
-                                        );
-                                    }
-                                );
+                                if(isRegistedEvent)
+                                {
+                                    //完了
+                                    dfdRet.resolve(alTb);
+                                }
+                                else
+                                {
+                                    isRegistedEvent = true;
+                                    self.service("ALMemory")
+                                    .then(function(alMemory)
+                                        {
+                                            alMemory.subscriber("ALTabletService/error")
+                                            .then(
+                                                function (subscriber) 
+                                                {
+                                                    subscriber.signal.connect(function (value,value2) {
+                                                        console.log(value);
+                                                        console.log(value2);
+                                                    });
+                                                    return alMemory.subscriber("ALTabletService/message");
+                                                }
+                                            )
+                                            .then(
+                                                function (subscriber) 
+                                                {
+                                                    subscriber.signal.connect(function (value,value2) {
+                                                        console.log(value);
+                                                        console.log(value2);
+                                                    });
+                                                    return alMemory.subscriber("ALTabletService/onInputText");
+                                                }
+                                            )
+                                            .then(
+                                                function (subscriber) 
+                                                {
+                                                    subscriber.signal.connect(function (value,value2) {
+                                                        console.log(value);
+                                                        console.log(value2);
+                                                    });
+                                                    //完了
+                                                    dfdRet.resolve(alTb);
+                                                }
+                                            );
+                                        }
+                                    );
+                                }
                             }
                             else{
                                 // 接続中以外なら有効にしてみます
@@ -1386,6 +1396,7 @@ var MainLayer = cc.Layer.extend({
                     function(){
                         NaoQiCoreIns.showTabletUrl(
                             "http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
+                            //"http://google.co.jp/"
                         ).then(function(){
                             //NaoQiCoreIns.showTabletUrl(
                             //    "http://google.co.jp/"
@@ -2250,7 +2261,7 @@ $(function(){
 
     console.log("shounin start!");
 
-    KiiShouninCoreIns = new KiiShouninCore();
+//    KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
     ShouninCoreIns = new ShouninCore();
 
