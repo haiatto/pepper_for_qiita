@@ -209,7 +209,7 @@ function NaoQiCore()
         return self.qim.service(name);
     };
 
-    // ipアドレス設定
+    // ■ ipアドレス設定
     if(localStorage)
     {
         var lastIpAddr = localStorage.getItem("pepper_ip");
@@ -228,6 +228,11 @@ function NaoQiCore()
     };
 
     // ■ 接続部分
+
+    self.isConnected = function(){
+        return "接続中" == self.nowState;
+    };
+
     self.connect = function() 
     {
         var dfd = $.Deferred();
@@ -268,6 +273,11 @@ function NaoQiCore()
     self.disconnect = function()
     {
     };
+
+    if ( self.lunchPepper ){
+        //Pepperから起動の場合は、つながる前提なので繋いでおきます。
+        self.connect();
+    }
     
     // ■その他便利処理
 
@@ -1010,6 +1020,7 @@ var ShouninCore = function(){
     
     self.cmdBlkMan = new CommandBlockManager();
     self.workSpaceMain = null;
+    self.mainScene = null;
 
     self.curCmdBlk = null;
 
@@ -1040,6 +1051,15 @@ var ShouninCore = function(){
         return true;
     };
 
+    // 再生
+
+    self.playStartCurCmdBlk = function()
+    {
+        if(self.curCmdBlk)
+        {
+            self.curCmdBlk.blkIns.deferred();
+        }
+    };
 
     //
     var listenerLst_ = [];
@@ -1216,22 +1236,31 @@ var MainLayer = cc.Layer.extend({
         {
             var layout = ccui.Layout.create();
             layout.setPosition(0, size.height-64);
-            layout.setContentSize(64*6 + 8*2,64);
+            layout.setContentSize(64*8 + 8*2,64);
             layout.setBackGroundImage(res.frame01_png);
             layout.setBackGroundImageScale9Enabled(true);
             layout.setClippingEnabled(true);
 
             var posX = 8;
-
-            var loadBtn = ccui.Button.create();
-            loadBtn.setTouchEnabled(true);
-            loadBtn.setScale9Enabled(true);
-            loadBtn.loadTextures(res.cmdblock_frame01_png, null, null);
-            loadBtn.setTitleText("Load");
-            loadBtn.setPosition(cc.p(posX+64/2,32));
-            loadBtn.setSize(cc.size(64, 32));
-            posX += 64;
-            loadBtn.addTouchEventListener(function(button,type)
+            var addBtn_ = function(label,cb){
+                var btn = ccui.Button.create();
+                btn.setTouchEnabled(true);
+                btn.setScale9Enabled(true);
+                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.setTitleText(label);
+                btn.setPosition(cc.p(posX+64/2,32));
+                btn.setSize(cc.size(64, 32));
+                posX += 64;
+                btn.addTouchEventListener(function(button,type)
+                {
+                    if(0==type)
+                    {
+                        if(cb)cb(button,type);
+                    }
+                });
+                layout.addChild(btn);
+            };
+            addBtn_("Load",function(button,type)
             {
                 if(0==type){
                     if($("#input_dummy")[0])
@@ -1266,17 +1295,7 @@ var MainLayer = cc.Layer.extend({
                     $(input).click();
                 }
             });
-            layout.addChild(loadBtn);
-
-            var saveBtn = ccui.Button.create();
-            saveBtn.setTouchEnabled(true);
-            saveBtn.setScale9Enabled(true);
-            saveBtn.loadTextures(res.cmdblock_frame01_png, null, null);
-            saveBtn.setTitleText("Save");
-            saveBtn.setPosition(cc.p(posX+64/2,32));
-            saveBtn.setSize(cc.size(64, 32));
-            posX += 64;
-            saveBtn.addTouchEventListener(function(button,type)
+            addBtn_("Save",function(button,type)
             {
                 if(0==type)
                 {
@@ -1303,17 +1322,7 @@ var MainLayer = cc.Layer.extend({
                     exportString(JSON.stringify(jsonTbl),"shoukonScript.json");
                 }
             });
-            layout.addChild(saveBtn);
-
-            var publishBtn = ccui.Button.create();
-            publishBtn.setTouchEnabled(true);
-            publishBtn.setScale9Enabled(true);
-            publishBtn.loadTextures(res.cmdblock_frame01_png, null, null);
-            publishBtn.setTitleText("公開");
-            publishBtn.setPosition(cc.p(posX+64/2,32));
-            publishBtn.setSize(cc.size(64, 32));
-            posX += 64;
-            publishBtn.addTouchEventListener(function(button,type)
+            addBtn_("公開",function(button,type)
             {
                 if(0==type)
                 {
@@ -1324,95 +1333,15 @@ var MainLayer = cc.Layer.extend({
                     });
                 }
             });
-            layout.addChild(publishBtn);
-
-            var pubShouninListBtn = ccui.Button.create();
-            pubShouninListBtn.setTouchEnabled(true);
-            pubShouninListBtn.setScale9Enabled(true);
-            pubShouninListBtn.loadTextures(res.cmdblock_frame01_png, null, null);
-            pubShouninListBtn.setTitleText("商人広場");
-            pubShouninListBtn.setPosition(cc.p(posX+64/2,32));
-            pubShouninListBtn.setSize(cc.size(64, 32));
-            posX += 64;
-            pubShouninListBtn.addTouchEventListener(function(button,type)
+            addBtn_("商人広場",function(button,type)
             {
-                if(0==type)
-                {
-                    var lv = ccui.ListView.create();
-                    lv.setDirection(ccui.ScrollView.DIR_VERTICAL);
-                    lv.setTouchEnabled(true);
-                    lv.setBounceEnabled(true);
-                    lv.setPosition(500, 0);
-                    lv.setContentSize(256, size.height/5*4);
-                    lv.setBackGroundImage(res.frame01_png);
-                    lv.setBackGroundImageScale9Enabled(true);
-                    lv.setClippingEnabled(true);
-                    self.addChild(lv,0);
-
-                    var itemLo = ccui.Layout.create();
-                    itemLo.setPosition(0, 0);
-                    itemLo.setContentSize(256,64);
-                    itemLo.setBackGroundImage(res.frame01_png);
-                    itemLo.setBackGroundImageScale9Enabled(true);
-                    itemLo.setClippingEnabled(true);
-
-                    var btn = ccui.Button.create();
-                    btn.setName("callBtn");
-                    btn.setTouchEnabled(true);
-                    btn.setScale9Enabled(true);
-                    btn.loadTextures(res.cmdblock_frame01_png, null, null);
-                    btn.setTitleText("呼ぶ");
-                    btn.setPosition(cc.p(230,32));
-                    btn.setSize(cc.size(64, 32));
-                    itemLo.addChild(btn,2);
-                    lv.setItemModel(itemLo);
-
-                    KiiShouninCoreIns.queryShouninList()
-                    .then(
-                        function(param){
-                            $.each(param.shouninList,function(idx,shouninItem){
-                                lv.pushBackDefaultItem();
-                                var items = lv.getItems();
-                                var item  = items[items.length-1];
-                                var btn   = item.getChildByName("callBtn");
-                                btn.addTouchEventListener(function(button,type)
-                                {
-                                    if(0==type)
-                                    {
-                                        ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
-                                    }
-                                });
-                                var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
-                                label.setPosition(label.getContentSize().width/2, 32);
-                                label.setColor(new cc.Color(0,0,0,255));
-                                item.addChild(label);
-                            });
-                        }
-                    );
-                }
+                ShouninCoreIns.mainScene.shouninCampoLayer.setVisible(true);
             });
-            layout.addChild(pubShouninListBtn);
-            
-            var addBtn_ = function(label,cb){
-                var btn = ccui.Button.create();
-                btn.setTouchEnabled(true);
-                btn.setScale9Enabled(true);
-                btn.loadTextures(res.cmdblock_frame01_png, null, null);
-                btn.setTitleText(label);
-                btn.setPosition(cc.p(posX+64/2,32));
-                btn.setSize(cc.size(64, 32));
-                posX += 64;
-                btn.addTouchEventListener(function(button,type)
-                {
-                    if(0==type)
-                    {
-                        if(cb)cb(button,type);
-                    }
-                });
-                layout.addChild(btn);
-            };
+            addBtn_("プレイ",function(){
+               ShouninCoreIns.playStartCurCmdBlk();
+            });
             //Test
-            addBtn_("Table",function(){
+            addBtn_("Tablet",function(){
                 NaoQiCoreIns.setIpAddress("192.168.11.19");
                 NaoQiCoreIns.connect()
                 .then(
@@ -2148,10 +2077,110 @@ var PepperLayer = cc.Layer.extend({
     },
 });
 
+// 商人小広場
+var ShouninCampoLayer = cc.Layer.extend({
+    ctor:function () {
+        this._super();
+        var self = this;
+
+        var size = cc.director.getWinSize();
+
+        var frameX = size.width /6*0.5;
+        var frameY = size.height/6*0.5;
+        var frameW = size.width /6*5;
+        var frameH = size.height/6*5;
+
+        var baseLayout = ccui.Layout.create();
+        
+        baseLayout.setPosition(cc.p(frameX,frameY));
+        baseLayout.setSize    (cc.size(frameW,frameH));
+        baseLayout.setBackGroundImage(res.frame01_png);
+        baseLayout.setBackGroundImageScale9Enabled(true);
+        baseLayout.setClippingEnabled(true);
+        self.addChild(baseLayout);
+
+        var btn = ccui.Button.create();
+        btn.setName("CloseBtn");
+        btn.setTouchEnabled(true);
+        btn.setScale9Enabled(true);
+        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.setTitleText("閉じる");
+        btn.setPosition(cc.p(32,frameH-32));
+        btn.setSize(cc.size(64,32));
+        btn.addTouchEventListener(function(button,type)
+        {
+            if(0==type)
+            {
+                self.setVisible(false);
+            }
+        });
+        baseLayout.addChild(btn,2);
+
+
+        var lv = ccui.ListView.create();
+        lv.setDirection(ccui.ScrollView.DIR_VERTICAL);
+        lv.setTouchEnabled(true);
+        lv.setBounceEnabled(true);
+        lv.setPosition(cc.p(0, 0));
+        lv.setContentSize(cc.size(frameW,frameH/6*5));
+        lv.setInnerContainerSize(cc.size(frameW-16,frameH/6*5-16));
+        lv.setBackGroundImage(res.frame01_png);
+        lv.setBackGroundImageScale9Enabled(true);
+        lv.setClippingEnabled(true);
+        baseLayout.addChild(lv,0);
+
+        var itemLo = ccui.Layout.create();
+        itemLo.setPosition(cc.p(0, 0));
+        itemLo.setContentSize(cc.size(frameW-16,64));
+        itemLo.setBackGroundImage(res.frame01_png);
+        itemLo.setBackGroundImageScale9Enabled(true);
+        itemLo.setClippingEnabled(true);
+
+        var btn = ccui.Button.create();
+        btn.setName("callBtn");
+        btn.setTouchEnabled(true);
+        btn.setScale9Enabled(true);
+        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.setTitleText("呼ぶ");
+        btn.setPosition(cc.p(frameW-16-40,32));
+        btn.setSize(cc.size(64, 32));
+        itemLo.addChild(btn,2);
+        lv.setItemModel(itemLo);
+
+        KiiShouninCoreIns.queryShouninList()
+        .then(
+            function(param){
+                $.each(param.shouninList,function(idx,shouninItem){
+                    lv.pushBackDefaultItem();
+                    var items = lv.getItems();
+                    var item  = items[items.length-1];
+                    var btn   = item.getChildByName("callBtn");
+                    btn.addTouchEventListener(function(button,type)
+                    {
+                        if(0==type)
+                        {
+                            ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
+                        }
+                    });
+                    var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
+                    label.setPosition(label.getContentSize().width/2, 32);
+                    label.setColor(new cc.Color(0,0,0,255));
+                    item.addChild(label);
+                });
+            }
+        );
+
+
+        return true;
+    },
+});
+
 
 var MainScene = cc.Scene.extend({
   mainLayer:null,
   blockLayer:null,
+  pepperLayer:null,
+  shouninCampoLayer:null,
   onEnter:function () {
       this._super();
       var self = this;
@@ -2164,13 +2193,16 @@ var MainScene = cc.Scene.extend({
 
       self.blockLayer = new BlockLayer();
       this.addChild(self.blockLayer);
+
+      self.shouninCampoLayer = new ShouninCampoLayer();
+      this.addChild(self.shouninCampoLayer);
   }
 });
 
 
 //
 $(function(){
-    //@@KiiShouninCoreIns = new KiiShouninCore();
+    KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
     ShouninCoreIns = new ShouninCore();
 
@@ -2186,8 +2218,10 @@ $(function(){
 
   cc.game.onStart = function(){
       //load resources
-      cc.LoaderScene.preload(preload_res, function () {
-          cc.director.runScene(new MainScene());
+      cc.LoaderScene.preload(preload_res, function () 
+      {
+          ShouninCoreIns.mainScene = new MainScene();
+          cc.director.runScene(ShouninCoreIns.mainScene);
       }, this);
   };
   cc.game.run("gameCanvas");
@@ -2218,9 +2252,35 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           var onFail = function(e) {console.error('fail:' + e);};
           var dfd = $.Deferred();
           
-          console.log(valueDataTbl['talkLabel0'].string);
+          if(NaoQiCoreIns.isConnected())
+          {
+              NaoQiCoreIns.service("ALTextToSpeech").then(function(tss){
+//                  return 
+//                  NaoQiCoreIns.service("ALMemory").subscriber("ALTextToSpeech/TextDone")
+//                  .then(
+//                     function()
+                     {
+                         tss.say(valueDataTbl['talkLabel0'].string)
+                         .done(function()
+                         {
+                             dfd.resolve();
+                         });
+                     }
+//                  );
+              },
+              function(err){
+                  dfd.reject(err);
+              });
+          }
+          else
+          {
+              console.log("会話");
+              console.log(valueDataTbl['talkLabel0'].string);
+              setTimeout(function(){
+                  dfd.resolve();
+              },500);
+          }
 
-          dfd.resolve();
           return dfd.promise();
       }
     );
@@ -2246,9 +2306,18 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           var onFail = function(e) {console.error('fail:' + e);};
           var dfd = $.Deferred();
           
-          console.log(valueDataTbl['poseLabel'].string);
-
-          dfd.resolve();
+          if(NaoQiCoreIns.isConnected())
+          {
+              dfd.resolve();
+          }
+          else
+          {
+              console.log("ポーズ");
+              console.log(valueDataTbl['poseData0'].poseData);
+              setTimeout(function(){
+                  dfd.resolve();
+              },500);
+          }
           return dfd.promise();
       }
     );
