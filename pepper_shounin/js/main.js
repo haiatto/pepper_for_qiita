@@ -2121,6 +2121,8 @@ var ShouninCampoLayer = cc.Layer.extend({
         this._super();
         var self = this;
 
+        console.log("ShouninCampoLayer ctor..");
+
         var size = cc.director.getWinSize();
 
         var frameX = size.width /6*0.5;
@@ -2184,6 +2186,8 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setSize(cc.size(64, 32));
         itemLo.addChild(btn,2);
         lv.setItemModel(itemLo);
+
+        console.log("ShouninCampoLayer ctor..finish!");
         return true;
 
         KiiShouninCoreIns.queryShouninList()
@@ -2223,6 +2227,8 @@ var MainScene = cc.Scene.extend({
   onEnter:function () {
       this._super();
       var self = this;
+
+      console.log("mainScene onEnter!");
       
       self.mainLayer = new MainLayer();
       this.addChild(self.mainLayer);
