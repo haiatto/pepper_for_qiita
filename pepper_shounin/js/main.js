@@ -2241,6 +2241,9 @@ var MainScene = cc.Scene.extend({
 
 //
 $(function(){
+
+    console.log("shounin start!");
+
     KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
     ShouninCoreIns = new ShouninCore();
