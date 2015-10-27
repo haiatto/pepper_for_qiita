@@ -276,7 +276,7 @@ function NaoQiCore()
 
     if ( self.lunchPepper ){
         //Pepperから起動の場合は、つながる前提なので繋いでおきます。
-        self.connect();
+        //self.connect();
     }
     
     // ■その他便利処理
