@@ -64,7 +64,11 @@ var KiiShouninCore = function()
         KiiUser.registerAsPseudoUser({
           success: function(user) {
             var access_token = user.getAccessToken();
-            localStorage.access_token = access_token;
+            if(localStorage){
+                localStorage.access_token = access_token;
+            }else{
+                Cookies.set('access_token', access_token);
+            }
             dfd.resolve();
           },
           failure: function(user, errorString) {
@@ -77,7 +81,12 @@ var KiiShouninCore = function()
     self.lastLoginUserDfd = function()
     {
         var dfd = $.Deferred();
-        var access_token = localStorage.access_token;
+        var access_token;
+        if(localStorage){
+            access_token = localStorage.access_token;
+        }else{
+            access_token = Cookies.get('access_token');
+        }
         KiiUser.authenticateWithToken(access_token, {
           // Called on successful registration
           success: function(theUser) {
@@ -174,10 +183,19 @@ var KiiShouninCore = function()
     // 仮ユーザーでログインします
     var dfd = $.Deferred();
     var dfdItr = dfd;
-    if(!localStorage.access_token)
-    {
-        dfdItr = dfdItr.then(self.createKariUserDfd);
+    if(localStorage){
+        if(!localStorage.access_token)
+        {
+            dfdItr = dfdItr.then(self.createKariUserDfd);
+        }
     }
+    else{
+        if(!Cookies.get('access_token'))
+        {
+            dfdItr = dfdItr.then(self.createKariUserDfd);
+        }
+    }
+
     dfdItr = dfdItr.then(self.lastLoginUserDfd);
     dfdItr = dfdItr.then(null,function(errString){
         return self.createKariUserDfd()
@@ -202,6 +220,7 @@ function NaoQiCore()
 
     if(getUrlParameter("lunchPepper"))
     {
+        console.log("lunchPepper mode on!");
         self.lunchPepper = true;
     }
 
@@ -255,13 +274,16 @@ function NaoQiCore()
             }
         }
         else{
+            console.log("nao qi connect..");
             if(self.lunchPepper){
-                 self.qim = new QiSession();
+                 self.qim = new QiSession("198.18.0.1");
             }else{
                  self.qim = new QiSession(self.ipAddr);
             }
             self.qim.socket()
             .on('connect', function () {
+                console.log("nao qi connect!");
+
                 self.nowState = "接続中";
                 self.service("ALTextToSpeech")
                 .done(function (tts) {
@@ -271,9 +293,11 @@ function NaoQiCore()
                 //execContext.setupExecContextFromQim(self.qim);
             })
             .on('disconnect', function () {
+                console.log("nao qi disconnect!");
                 self.nowState = "切断";
             })
             .on('error', function (err) {
+                console.log("nao qi error!:"+err);
                 self.nowState = "エラー";
                 dfd.reject(err);
             });
@@ -286,7 +310,7 @@ function NaoQiCore()
 
     if ( self.lunchPepper ){
         //Pepperから起動の場合は、つながる前提なので繋いでおきます。
-        //self.connect();
+        self.connect();
     }
     
     // ■その他便利処理
@@ -388,9 +412,8 @@ function NaoQiCore()
                                             .then(
                                                 function (subscriber) 
                                                 {
-                                                    subscriber.signal.connect(function (value,value2) {
+                                                    subscriber.signal.connect(function (value) {
                                                         console.log(value);
-                                                        console.log(value2);
                                                     });
                                                     return alMemory.subscriber("ALTabletService/message");
                                                 }
@@ -398,9 +421,8 @@ function NaoQiCore()
                                             .then(
                                                 function (subscriber) 
                                                 {
-                                                    subscriber.signal.connect(function (value,value2) {
+                                                    subscriber.signal.connect(function (value) {
                                                         console.log(value);
-                                                        console.log(value2);
                                                     });
                                                     return alMemory.subscriber("ALTabletService/onInputText");
                                                 }
@@ -408,9 +430,8 @@ function NaoQiCore()
                                             .then(
                                                 function (subscriber) 
                                                 {
-                                                    subscriber.signal.connect(function (value,value2) {
+                                                    subscriber.signal.connect(function (value) {
                                                         console.log(value);
-                                                        console.log(value2);
                                                     });
                                                     //完了
                                                     dfdRet.resolve(alTb);
@@ -1405,7 +1426,8 @@ var MainLayer = cc.Layer.extend({
                 .then(
                     function(){
                         NaoQiCoreIns.showTabletUrl(
-                            "http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
+                            //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
+                            "http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
                             //"http://google.co.jp/"
                         ).then(function(){
                             //NaoQiCoreIns.showTabletUrl(
@@ -2208,9 +2230,6 @@ var ShouninCampoLayer = cc.Layer.extend({
         itemLo.addChild(btn,2);
         lv.setItemModel(itemLo);
 
-        console.log("ShouninCampoLayer ctor..finish!");
-        return true;
-
         KiiShouninCoreIns.queryShouninList()
         .then(
             function(param){
@@ -2234,6 +2253,7 @@ var ShouninCampoLayer = cc.Layer.extend({
             }
         );
 
+        console.log("ShouninCampoLayer ctor..finish!");
 
         return true;
     },
