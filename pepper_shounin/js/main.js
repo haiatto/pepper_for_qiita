@@ -1180,7 +1180,6 @@ var ShouninCore = function(){
         var blkWId = getCurCmdBlkWorldId_();
         if("talk@shonin" == blkWId)
         {
-            self.notifyUpdate();
         }
         if("pose@shonin" == blkWId)
         {
@@ -1195,8 +1194,11 @@ var ShouninCore = function(){
                 "HipPitch":0,"HipRoll":0,"KneePitch":0,};
                 poseEditData.poseData.jointAngles = initPoseJointData;
             }
-            self.notifyUpdate();
         }
+        if("ask@shonin" == blkWId)
+        {
+        }
+        self.notifyUpdate();
     };
     self.getCurCmdBlk = function(){
         return self.curCmdBlk;  
@@ -1288,6 +1290,47 @@ var ShouninCore = function(){
         }
         return null;
     };
+
+    // 選択肢エディット
+    self.isAskEdit = function()
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("ask@shonin" == blkWId) {
+            return true;
+        }
+        return false;
+    };
+    self.getAskEditData = function()
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("ask@shonin" == blkWId) {
+            return {
+                askType:self.curCmdBlk.getValueInData("askType").string,
+                ask:self.curCmdBlk.getValueInData("ask").string,
+                ans0:self.curCmdBlk.getValueInData("ans0").string,
+                ans1:self.curCmdBlk.getValueInData("ans1").string,
+                ans2:self.curCmdBlk.getValueInData("ans2").string,
+                ans3:self.curCmdBlk.getValueInData("ans3").string,
+                ans4:self.curCmdBlk.getValueInData("ans4").string,
+            };
+        }
+        return null;
+    };
+    self.setAskEditData = function(askEditData)
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("ask@shonin" == blkWId) {
+            self.curCmdBlk.setValueInData("askType",{string:askEditData.askType});
+            self.curCmdBlk.setValueInData("ask",    {string:askEditData.ask });
+            self.curCmdBlk.setValueInData("ans0",   {string:askEditData.ans0});
+            self.curCmdBlk.setValueInData("ans1",   {string:askEditData.ans1});
+            self.curCmdBlk.setValueInData("ans2",   {string:askEditData.ans2});
+            self.curCmdBlk.setValueInData("ans3",   {string:askEditData.ans3});
+            self.curCmdBlk.setValueInData("ans4",   {string:askEditData.ans4});
+        }
+        return null;
+    };
+
 
 };
 var ShouninCoreIns = null;
@@ -1414,6 +1457,7 @@ var MainLayer = cc.Layer.extend({
             });
             addBtn_("商人広場",function(button,type)
             {
+                ShouninCoreIns.mainScene.shouninCampoLayer.updateShouninList();
                 ShouninCoreIns.mainScene.shouninCampoLayer.setVisible(true);
             });
             addBtn_("プレイ",function(){
@@ -1421,13 +1465,14 @@ var MainLayer = cc.Layer.extend({
             });
             //Test
             addBtn_("Tablet",function(){
-                NaoQiCoreIns.setIpAddress("192.168.11.19");
+                NaoQiCoreIns.setIpAddress("192.168.3.42");
                 NaoQiCoreIns.connect()
                 .then(
                     function(){
                         NaoQiCoreIns.showTabletUrl(
                             //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
-                            "http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
+                            //"http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
+                            "http://192.168.3.168:8080/pepper_shounin/?lunchPepper=true"
                             //"http://google.co.jp/"
                         ).then(function(){
                             //NaoQiCoreIns.showTabletUrl(
@@ -1602,21 +1647,30 @@ var BlockLayer = cc.Layer.extend({
         });        
         self.addChild(dustboxBtn);
 
+        //
+        var blockBtnLo = ccui.Layout.create();
+        blockBtnLo.setPosition   (160,180);
+        blockBtnLo.setContentSize(80,32*5);
+        blockBtnLo.setBackGroundImage(res.frame01_png);
+        blockBtnLo.setBackGroundImageScale9Enabled(true);
+        blockBtnLo.setClippingEnabled(true);
+        this.addChild(blockBtnLo);
 
-        var makeAddCommandBlockBtn = function(x,y,text,cb)
+        var nowY = blockBtnLo.getContentSize().height-16;
+        var makeAddCommandBlockBtn = function(text,cb)
         {
             var btn = ccui.Button.create();
             btn.setTouchEnabled(true);
             btn.setScale9Enabled(true);
             btn.loadTextures(res.cmdblock_frame01_png, null, null);
             btn.setTitleText(text);
-            btn.setPosition(cc.p(x,y));
+            btn.setPosition(cc.p(32,nowY));
             btn.setSize(cc.size(64, 32));
             btn.addTouchEventListener(cb);        
-            self.addChild(btn);
+            blockBtnLo.addChild(btn);
+            nowY -= 32;
         };
-
-        makeAddCommandBlockBtn(128,size.height-(80+0),"会話",function(button,type){
+        makeAddCommandBlockBtn("会話",function(button,type){
             if(type==0)
             {
                 var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("talk@shonin");
@@ -1624,10 +1678,18 @@ var BlockLayer = cc.Layer.extend({
                 workSpace.updateLayout();
             }
         });
-        makeAddCommandBlockBtn(128,size.height-(80+32),"ポーズ",function(button,type){
+        makeAddCommandBlockBtn("ポーズ",function(button,type){
             if(type==0)
             {
                 var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("pose@shonin");
+                workSpace.addCommandLumpBlock(cmdBlk);
+                workSpace.updateLayout();
+            }
+        });
+        makeAddCommandBlockBtn("質問",function(button,type){
+            if(type==0)
+            {
+                var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock("ask@shonin");
                 workSpace.addCommandLumpBlock(cmdBlk);
                 workSpace.updateLayout();
             }
@@ -2230,29 +2292,32 @@ var ShouninCampoLayer = cc.Layer.extend({
         itemLo.addChild(btn,2);
         lv.setItemModel(itemLo);
 
-        KiiShouninCoreIns.queryShouninList()
-        .then(
-            function(param){
-                $.each(param.shouninList,function(idx,shouninItem){
-                    lv.pushBackDefaultItem();
-                    var items = lv.getItems();
-                    var item  = items[items.length-1];
-                    var btn   = item.getChildByName("callBtn");
-                    btn.addTouchEventListener(function(button,type)
-                    {
-                        if(0==type)
+        self.updateShouninList = function()
+        {
+            KiiShouninCoreIns.queryShouninList()
+            .then(
+                function(param){
+                    $.each(param.shouninList,function(idx,shouninItem){
+                        lv.pushBackDefaultItem();
+                        var items = lv.getItems();
+                        var item  = items[items.length-1];
+                        var btn   = item.getChildByName("callBtn");
+                        btn.addTouchEventListener(function(button,type)
                         {
-                            ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
-                        }
+                            if(0==type)
+                            {
+                                ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
+                            }
+                        });
+                        var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
+                        label.setPosition(label.getContentSize().width/2, 32);
+                        label.setColor(new cc.Color(0,0,0,255));
+                        item.addChild(label);
                     });
-                    var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
-                    label.setPosition(label.getContentSize().width/2, 32);
-                    label.setColor(new cc.Color(0,0,0,255));
-                    item.addChild(label);
-                });
-            }
-        );
-
+                }
+            );
+        };
+        self.setVisible(false);
         console.log("ShouninCampoLayer ctor..finish!");
 
         return true;
@@ -2260,11 +2325,133 @@ var ShouninCampoLayer = cc.Layer.extend({
 });
 
 
+// タブレット表示用のレイヤ(ペッパー起動では再生中はこのレイヤだけになる)
+var TabletLayer = cc.Layer.extend({
+    ctor:function () {
+        this._super();
+        var self = this;
+
+        console.log("ShouninCampoLayer ctor..");
+
+        var size = cc.director.getWinSize();
+
+        var frameX = size.width /10*0.5;
+        var frameY = size.height/10*0.5;
+        var frameW = size.width /10*9;
+        var frameH = size.height/10*9;
+
+        var baseLayout = ccui.Layout.create();
+        
+        baseLayout.setPosition(cc.p(frameX,frameY));
+        baseLayout.setSize    (cc.size(frameW,frameH));
+        baseLayout.setBackGroundImage(res.frame01_png);
+        baseLayout.setBackGroundImageScale9Enabled(true);
+        baseLayout.setClippingEnabled(true);
+        self.addChild(baseLayout);
+
+        self.setVisible(false);
+
+        //
+        self.getBaseLayout = function(){
+            return baseLayout;
+        };
+        self.clearBaseLayout = function(){
+            baseLayout.removeAllChildren(true);
+        };
+
+        //
+        // ShouninCoreと連動するエディター
+        var AskBox = function(parentUI)
+        {
+            var self = this;
+
+            var layout = ccui.Layout.create();
+
+            var boxW = 240;
+            var boxH = 320;
+
+            layout.setPosition(560, 100);
+            layout.setContentSize(boxW, boxH);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            parentUI.addChild(layout);
+
+            var posY = boxH-32;
+            var makeEditBox = function()
+            {
+                var bg = cc.Scale9Sprite.create(res.frame01_png);
+                var editBox = cc.EditBox.create(cc.size(boxW, 32), bg);
+                editBox.fontColor = new cc.Color(0,0,0,255);
+                editBox.setPosition(cc.p(boxW/2, posY));
+                editBox.setDelegate(self);
+                layout.addChild(editBox);
+                posY -= 32;
+                return editBox;
+            };
+            var askEd = makeEditBox();
+            var ans0Ed = makeEditBox();
+            var ans1Ed = makeEditBox();
+            layout.setVisible(false);
+
+            self.shouninCoreUpdate = function()
+            {
+                if(ShouninCoreIns.isAskEdit())
+                {
+                    // エディット中
+                    var askEditData = ShouninCoreIns.getAskEditData();
+                    askEd.string  = askEditData.ask;
+                    ans0Ed.string = askEditData.ans0;
+                    ans1Ed.string = askEditData.ans1;
+                    layout.setVisible(true);
+                }
+                else{
+                    layout.setVisible(false);
+                }
+            };
+            ShouninCoreIns.addListener(self);
+
+            self.editBoxTextChanged = function(sender,text)
+            {
+                if(ShouninCoreIns.isAskEdit())
+                {
+                    // エディット中
+                    var askEditData = {
+                        ask: askEd.string,
+                        ans0:ans0Ed.string,
+                        ans1:ans1Ed.string,
+                    };
+                    ShouninCoreIns.setAskEditData(askEditData);
+                    layout.setVisible(true);
+                }
+            };
+            self.editBoxReturn = function(sender)
+            {
+                if(ShouninCoreIns.isAskEdit())
+                {
+                    // エディット中
+                    var askEditData = {
+                        ask: askEd.string,
+                        ans0:ans0Ed.string,
+                        ans1:ans1Ed.string,
+                    };
+                    ShouninCoreIns.setAskEditData(askEditData);
+                    layout.setVisible(true);
+                }
+            };
+        };
+        self.askBox = new AskBox(ShouninCoreIns.mainScene.mainLayer);
+
+        return true;
+    },
+});
+
 var MainScene = cc.Scene.extend({
   mainLayer:null,
   blockLayer:null,
   pepperLayer:null,
   shouninCampoLayer:null,
+  tabletLayer:null,
   onEnter:function () {
       this._super();
       var self = this;
@@ -2279,6 +2466,9 @@ var MainScene = cc.Scene.extend({
 
       self.blockLayer = new BlockLayer();
       this.addChild(self.blockLayer);
+
+      self.tabletLayer = new TabletLayer();
+      this.addChild(self.tabletLayer);
 
       self.shouninCampoLayer = new ShouninCampoLayer();
       this.addChild(self.shouninCampoLayer);
@@ -2410,6 +2600,78 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           return dfd.promise();
       }
     );
+    // 選択肢ブロック
+    blockManager.registBlockDef(
+      {
+          blockHeader:{
+              blockWorldId:"ask@shonin",
+              head:'in',
+              tail:'out',
+          },
+          blockContents:[
+              {expressions:[
+                  {input_text:{default:{string:"2taku"}},dataName:'askType'},
+                  {input_text:{default:{string:"しつもん"}},dataName:'ask'},
+                  {input_text:{default:{string:"こたえ１"}},dataName:'ans0'},
+                  {input_text:{default:{string:"こたえ２"}},dataName:'ans1'},
+                  {input_text:{default:{string:""}},dataName:'ans2'},
+                  {input_text:{default:{string:""}},dataName:'ans3'},
+                  {input_text:{default:{string:""}},dataName:'ans4'},
+              ]},
+          ],
+          blockVisual:{
+              disp_name:'質問',
+          },
+      },
+      function(ctx,valueDataTbl){
+          var onFail = function(e) {console.error('fail:' + e);};
+          var dfd = $.Deferred();
+
+          // タブレットレイヤーに何かするコードかくかんじ
+          var tabletLayer = ShouninCoreIns.mainScene.tabletLayer;
+
+          var lo = tabletLayer.getBaseLayout();
+          tabletLayer.clearBaseLayout();
+          
+          var addBtn_ = function(text,x,y,w,h,cb){
+                var btn = ccui.Button.create();
+                btn.setTouchEnabled(true);
+                btn.setScale9Enabled(true);
+                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.setTitleText(text);
+                btn.setPosition(cc.p(x,y));
+                btn.setSize(cc.size(w,h));
+                btn.addTouchEventListener(function(button,type)
+                {
+                    if(0==type)
+                    {
+                        if(cb)cb(button,type);
+                    }
+                });
+                lo.addChild(btn);
+          };
+          if("2taku" == valueDataTbl['askType'].string)
+          {
+              var label = cc.LabelTTF.create(valueDataTbl['ask'].string, "Arial", 40);
+              label.setPosition(300, 300);
+              label.setColor(new cc.Color(0,0,0,255));
+              lo.addChild(label, 2);
+
+              addBtn_(valueDataTbl['ans0'].string,90+    256/2,128,256,128,function(){
+                  dfd.resolve();
+                  tabletLayer.setVisible(false);
+              });
+              addBtn_(valueDataTbl['ans1'].string,90+300+256/2,128,256,128,function(){
+                  dfd.resolve();
+                  tabletLayer.setVisible(false);
+              });
+          }
+
+          tabletLayer.setVisible(true);
+          return dfd.promise();
+      }
+    );
+
 });
 
 
