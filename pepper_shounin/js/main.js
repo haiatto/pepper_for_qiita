@@ -1092,11 +1092,30 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         $.each(self.cmdBlockLumpList,function(idx, cmdBlkLump)
         {
             y -= 16;
+            
             var sepBarSprt = cc.Scale9Sprite.create(res.workspace_separate_bar_png);
             sepBarSprt.setPosition(cc.p(size.width/2, y+8));
             sepBarSprt.setContentSize(cc.size(size.width,16));
             layout.addChild(sepBarSprt, 0, TAG_SPRITE);
 
+            if(idx>0)
+            {
+                var btn = ccui.Button.create();
+                btn.setTouchEnabled(true);
+                btn.loadTextures(res.workspace_linehead_png, null, null);
+                btn.setPosition(cc.p(16/2, y+8));
+                btn.addTouchEventListener(function(button,type)
+                {
+                    if(0==type){
+                        // 結合
+                        self.concatCommandBlockLump(cmdBlkLump);
+                        self.updateLayout();
+                    }
+                });
+                layout.addChild(btn, 0, TAG_SPRITE);
+            }
+
+            var firstFlg = true;
             var recv = function(cmdBlk)
             {
                 cmdBlk.setParentUI(layout);
@@ -1111,10 +1130,28 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     x + blkSize.width /2, 
                     y - blkSize.height/2 
                 );
-
+/*
                 var lineHeadSprt = cc.Sprite.create(res.workspace_linehead_png);
                 lineHeadSprt.setPosition(cc.p(32/2, y - 32/2));
                 layout.addChild(lineHeadSprt, 0, TAG_SPRITE);
+*/
+                if(!firstFlg)
+                {
+                    var btn = ccui.Button.create();
+                    btn.setTouchEnabled(true);
+                    btn.loadTextures(res.workspace_linehead_png, null, null);
+                    btn.setPosition(cc.p(16/2, y));
+                    btn.addTouchEventListener(function(button,type)
+                    {
+                        if(0==type){
+                            // 分割
+                            self.splitCommandBlockLump(cmdBlk);
+                            self.updateLayout();
+                        }
+                    });
+                    layout.addChild(btn, 0, TAG_SPRITE);
+                }
+                firstFlg = false;
 
                 y -= blkSize.height;
 
@@ -1149,7 +1186,60 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             layout.setInnerContainerSize(cc.size(size.width, size.height));
         }
     };
-    self.cutCommandBlock = function(cmdBlk,removeWorkspace)
+    //指定ブロックのinの位置でLumpに分割します
+    self.splitCommandBlockLump = function(cmdBlk)
+    {
+        if(cmdBlk.blkIns.in && cmdBlk.blkIns.in.block)
+        {
+            var ownerLumpIdx = -1;
+            $.each(self.cmdBlockLumpList,function(idx,cmdLumpBlk){
+                var checkCmdBlk = cmdLumpBlk;
+                while(checkCmdBlk)
+                {
+                    if(checkCmdBlk == cmdBlk){
+                        ownerLumpIdx = idx;
+                        return false;
+                    }
+                    if(checkCmdBlk.blkIns.out && checkCmdBlk.blkIns.out.block){
+                        checkCmdBlk = self.cmdBlkMan.lookupCommandBlock( checkCmdBlk.blkIns.out.block );
+                    }
+                    else{
+                        checkCmdBlk = null;
+                    }
+                }
+            });
+            if(ownerLumpIdx>=0)
+            {
+                // inの接続解除します
+                cmdBlk.blkIns.clearIn();
+                self.cmdBlockLumpList.splice(ownerLumpIdx+1,0,1);
+                self.cmdBlockLumpList[ownerLumpIdx+1] = cmdBlk;
+            }
+        }
+    };
+    //指定Lumpブロックのinの位置で前のLumpと結合します
+    self.concatCommandBlockLump = function(cmdBlk)
+    {
+        if(cmdBlk.blkIns.in && !cmdBlk.blkIns.in.block)
+        {
+            var idx = self.cmdBlockLumpList.indexOf(cmdBlk);
+            if(idx > 0){
+                var preCmdBlk = self.cmdBlockLumpList[idx-1];
+                while(preCmdBlk.blkIns.out &&
+                      preCmdBlk.blkIns.out.block)
+                {
+                    preCmdBlk = self.cmdBlkMan.lookupCommandBlock( preCmdBlk.blkIns.out.block );
+                }
+                if ( preCmdBlk.blkIns.out )
+                {
+                    preCmdBlk.blkIns.connectOut(cmdBlk.blkIns);
+                    self.cmdBlockLumpList.splice(idx,1);
+                }
+            }
+        }
+    };
+    // 指定ブロックのみ抜き出します
+    self.cutCommandBlock = function(cmdBlk,isRemoveWorkspace)
     {
         if ( cmdBlk.getParentUI() != layout ){
             console.warn("other workspace command block");
@@ -1167,7 +1257,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         }
         // 対象をリンクからカット（前後を再接続して独立させる）します
         cmdBlk.blkIns.cutInOut();
-        if(removeWorkspace){
+        if(isRemoveWorkspace){
             cmdBlk.setParentUI(null);
         }
     };
