@@ -1375,6 +1375,11 @@ var ShouninCore = function(){
                 ans2:self.curCmdBlk.getValueInData("ans2").string,
                 ans3:self.curCmdBlk.getValueInData("ans3").string,
                 ans4:self.curCmdBlk.getValueInData("ans4").string,
+                ans0GotoLabel:self.curCmdBlk.getValueInData("ans0GotoLabel").string,
+                ans1GotoLabel:self.curCmdBlk.getValueInData("ans1GotoLabel").string,
+                ans2GotoLabel:self.curCmdBlk.getValueInData("ans2GotoLabel").string,
+                ans3GotoLabel:self.curCmdBlk.getValueInData("ans3GotoLabel").string,
+                ans4GotoLabel:self.curCmdBlk.getValueInData("ans4GotoLabel").string,
             };
         }
         return null;
@@ -1390,6 +1395,11 @@ var ShouninCore = function(){
             self.curCmdBlk.setValueInData("ans2",   {string:askEditData.ans2});
             self.curCmdBlk.setValueInData("ans3",   {string:askEditData.ans3});
             self.curCmdBlk.setValueInData("ans4",   {string:askEditData.ans4});
+            self.curCmdBlk.setValueInData("ans0GotoLabel",   {string:askEditData.ans0GotoLabel});
+            self.curCmdBlk.setValueInData("ans1GotoLabel",   {string:askEditData.ans1GotoLabel});
+            self.curCmdBlk.setValueInData("ans2GotoLabel",   {string:askEditData.ans2GotoLabel});
+            self.curCmdBlk.setValueInData("ans3GotoLabel",   {string:askEditData.ans3GotoLabel});
+            self.curCmdBlk.setValueInData("ans4GotoLabel",   {string:askEditData.ans4GotoLabel});
         }
         return null;
     };
@@ -2444,20 +2454,28 @@ var TabletLayer = cc.Layer.extend({
             parentUI.addChild(layout);
 
             var posY = boxH-32;
-            var makeEditBox = function()
+            var makeEditBox = function(labelText,marginY)
             {
-                var bg = cc.Scale9Sprite.create(res.frame01_png);
-                var editBox = cc.EditBox.create(cc.size(boxW, 32), bg);
+                var labelW = 32;
+                var label = cc.LabelTTF.create(labelText, "Arial", 12);
+                label.setPosition(cc.p(label.getContentSize().width/2, posY));
+                label.setColor(new cc.Color(0,0,0,255));
+                layout.addChild(label, 2);
+
+                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
+                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
                 editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2, posY));
+                editBox.setPosition(cc.p(boxW/2+labelW, posY));
                 editBox.setDelegate(self);
                 layout.addChild(editBox);
-                posY -= 32;
+                posY -= 28+marginY;
                 return editBox;
             };
-            var askEd = makeEditBox();
-            var ans0Ed = makeEditBox();
-            var ans1Ed = makeEditBox();
+            var askEd  = makeEditBox("質問",4);
+            var ans0Ed = makeEditBox("こたえ１",0);
+            var ans0GotoEd = makeEditBox("進む先",4);
+            var ans1Ed = makeEditBox("こたえ２",0);
+            var ans1GotoEd = makeEditBox("進む先",4);
             layout.setVisible(false);
 
             self.shouninCoreUpdate = function()
@@ -2469,6 +2487,8 @@ var TabletLayer = cc.Layer.extend({
                     askEd.string  = askEditData.ask;
                     ans0Ed.string = askEditData.ans0;
                     ans1Ed.string = askEditData.ans1;
+                    ans0GotoEd.string = askEditData.ans0GotoLabel;
+                    ans1GotoEd.string = askEditData.ans1GotoLabel;
                     layout.setVisible(true);
                 }
                 else{
@@ -2486,6 +2506,8 @@ var TabletLayer = cc.Layer.extend({
                         ask: askEd.string,
                         ans0:ans0Ed.string,
                         ans1:ans1Ed.string,
+                        ans0GotoLabel:ans0GotoEd.string,
+                        ans1GotoLabel:ans1GotoEd.string,
                     };
                     ShouninCoreIns.setAskEditData(askEditData);
                     layout.setVisible(true);
@@ -2500,6 +2522,8 @@ var TabletLayer = cc.Layer.extend({
                         ask: askEd.string,
                         ans0:ans0Ed.string,
                         ans1:ans1Ed.string,
+                        ans0GotoLabel:ans0GotoEd.string,
+                        ans0GotoLabel:ans1GotoEd.string,
                     };
                     ShouninCoreIns.setAskEditData(askEditData);
                     layout.setVisible(true);
@@ -2677,12 +2701,17 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           blockContents:[
               {expressions:[
                   {input_text:{default:{string:"2taku"}},dataName:'askType'},
-                  {input_text:{default:{string:"しつもん"}},dataName:'ask'},
+                  {input_text:{default:{string:"しつもん文"}},dataName:'ask'},
                   {input_text:{default:{string:"こたえ１"}},dataName:'ans0'},
                   {input_text:{default:{string:"こたえ２"}},dataName:'ans1'},
-                  {input_text:{default:{string:""}},dataName:'ans2'},
-                  {input_text:{default:{string:""}},dataName:'ans3'},
-                  {input_text:{default:{string:""}},dataName:'ans4'},
+                  {input_text:{default:{string:"こたえ３"}},dataName:'ans2'},
+                  {input_text:{default:{string:"こたえ４"}},dataName:'ans3'},
+                  {input_text:{default:{string:"こたえ５"}},dataName:'ans4'},
+                  {input_text:{default:{string:""}},dataName:'ans0GotoLabel'},
+                  {input_text:{default:{string:""}},dataName:'ans1GotoLabel'},
+                  {input_text:{default:{string:""}},dataName:'ans2GotoLabel'},
+                  {input_text:{default:{string:""}},dataName:'ans3GotoLabel'},
+                  {input_text:{default:{string:""}},dataName:'ans4GotoLabel'},
               ]},
           ],
           blockVisual:{
@@ -2716,21 +2745,25 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                 });
                 lo.addChild(btn);
           };
+          var makeSelectEndCb_ = function(ansName){
+              return function(){
+                  var gotoLabel = valueDataTbl[ansName+'GotoLabel'].string;
+                  if(gotoLabel && gotoLabel.length>0){
+                      ctx.playCtx.nextGotoLabel = gotoLabel;
+                      ctx.playCtx.needStopFlag  = true;
+                  }
+                  tabletLayer.setVisible(false);
+                  dfd.resolve();
+              };
+          };
           if("2taku" == valueDataTbl['askType'].string)
           {
               var label = cc.LabelTTF.create(valueDataTbl['ask'].string, "Arial", 40);
               label.setPosition(300, 300);
               label.setColor(new cc.Color(0,0,0,255));
               lo.addChild(label, 2);
-
-              addBtn_(valueDataTbl['ans0'].string,90+    256/2,128,256,128,function(){
-                  dfd.resolve();
-                  tabletLayer.setVisible(false);
-              });
-              addBtn_(valueDataTbl['ans1'].string,90+300+256/2,128,256,128,function(){
-                  dfd.resolve();
-                  tabletLayer.setVisible(false);
-              });
+              addBtn_(valueDataTbl['ans0'].string,90+    256/2,128,256,128,makeSelectEndCb_("ans0"));
+              addBtn_(valueDataTbl['ans1'].string,90+300+256/2,128,256,128,makeSelectEndCb_("ans1"));
           }
 
           tabletLayer.setVisible(true);
