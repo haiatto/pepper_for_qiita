@@ -914,6 +914,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                         var gotoCmdBlk = self.findGotoLabelCmdBlk( self.playCtx.nextGotoLabel );
                         if(gotoCmdBlk)
                         {
+                            self.playCtx.nextGotoLabel = ""; 
                             // スタックをネストしないため＆無限ループ時に停止しない為
                             // setTimeoutでGotoします(リターン後にシステムが呼びます)
                             setTimeout(function(){
@@ -1812,7 +1813,7 @@ var MainLayer = cc.Layer.extend({
                         ans0:ans0Ed.string,
                         ans1:ans1Ed.string,
                         ans0GotoLabel:ans0GotoEd.string,
-                        ans0GotoLabel:ans1GotoEd.string,
+                        ans1GotoLabel:ans1GotoEd.string,
                     };
                     ShouninCoreIns.setAskEditData(askEditData);
                     layout.setVisible(true);
@@ -1893,6 +1894,79 @@ var MainLayer = cc.Layer.extend({
             };
         };
         self.labelBox = new LabelBox(self);
+
+        var GotoLabelBox = function(parentUI)
+        {
+            var self = this;
+
+            var layout = ccui.Layout.create();
+
+            var boxW = 240;
+            var boxH = 320;
+
+            layout.setPosition(560, 100);
+            layout.setContentSize(boxW, boxH);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            parentUI.addChild(layout);
+
+            var posY = boxH-32;
+            var makeEditBox = function(labelText,marginY)
+            {
+                var labelW = 32;
+                var label = cc.LabelTTF.create(labelText, "Arial", 12);
+                label.setPosition(cc.p(label.getContentSize().width/2, posY));
+                label.setColor(new cc.Color(0,0,0,255));
+                layout.addChild(label, 2);
+
+                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
+                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
+                editBox.fontColor = new cc.Color(0,0,0,255);
+                editBox.setPosition(cc.p(boxW/2+labelW, posY));
+                editBox.setDelegate(self);
+                layout.addChild(editBox);
+                posY -= 28+marginY;
+                return editBox;
+            };
+            var labelNameEd  = makeEditBox("Goto行き先ラベル名",4);
+            layout.setVisible(false);
+
+            self.shouninCoreUpdate = function()
+            {
+                if(ShouninCoreIns.isGotoLabelEdit())
+                {
+                    // エディット中
+                    var labelEditData = ShouninCoreIns.getGotoLabelEditData();
+                    labelNameEd.string = labelEditData;
+                    layout.setVisible(true);
+                }
+                else{
+                    layout.setVisible(false);
+                }
+            };
+            ShouninCoreIns.addListener(self);
+
+            self.editBoxTextChanged = function(sender,text)
+            {
+                if(ShouninCoreIns.isGotoLabelEdit())
+                {
+                    // エディット中
+                    ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
+                    layout.setVisible(true);
+                }
+            };
+            self.editBoxReturn = function(sender)
+            {
+                if(ShouninCoreIns.isGotoLabelEdit())
+                {
+                    // エディット中
+                    ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
+                    layout.setVisible(true);
+                }
+            };
+        };
+        self.gotoLabelBox = new GotoLabelBox(self);
 
         //bg.setScale(2.8);
 //        bg.setAnchorPoint(0.0,0.0);
@@ -2965,8 +3039,8 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
       },
       function(ctx,valueDataTbl){
           var dfd = $.Deferred();
-          ctx.playCtx.nextGotoLabel = gotoLabel;
-          ctx.playCtx.needStopFlag  = valueDataTbl['labelName'].string;          
+          ctx.playCtx.nextGotoLabel = valueDataTbl['labelName'].string;
+          ctx.playCtx.needStopFlag  = true;
           dfd.resolve();
           return dfd.promise();
       }

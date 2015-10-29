@@ -781,6 +781,7 @@ function Block(blockManager, blockTemplate, callback) {
                         // out部分のみここで繋ぎます(スコープ以下はコールバック内で処理するルールです)
                         return self.out.block.deferred(playCtx);
                     }
+                    playCtx.needStopFlag = false;
                     playCtx.nowPlayFlag = false;
                     return $.Deferred().resolve(value);
                 },
