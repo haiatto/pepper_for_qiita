@@ -39,6 +39,7 @@ var res = {
 
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
     cmdblock_frame_select01_png : "cocos_res/cmdblock_frame_select01.png",
+    cmdblock_frame_execute01_png : "cocos_res/cmdblock_frame_execute01.png",
 
     icon_dustbox_png: "cocos_res/icon_dustbox.png",
 
@@ -641,6 +642,7 @@ var CommandBlock = function(blkIns)
     };
     var bgFrame    = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
     var bgFrameSel = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
+    var bgFrameExec = createSpriteFrameByFilePath_( res.cmdblock_frame_execute01_png );
 
     self.bg       = cc.Scale9Sprite.create(bgFrame);
     self.label    = cc.LabelTTF.create("", "Arial", 20);
@@ -751,11 +753,16 @@ var CommandBlock = function(blkIns)
         self.bg.setSpriteFrame(bgFrameSel);
         self.bg.setContentSize(size);
     };
-    self.resetCurrentVisial = function(){
+    self.setDefaultVisial = function(){
         var size = self.bg.getContentSize();
         self.bg.setSpriteFrame(bgFrame);
         self.bg.setContentSize(size);
     };
+    self.setExecuteVisial = function(){
+        var size = self.bg.getContentSize();
+        self.bg.setSpriteFrame(bgFrameExec);
+        self.bg.setContentSize(size);
+    };    
 
     self.setLabel( visualTempl.disp_name );
     self.setPosition(0,0);
@@ -772,6 +779,16 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
 
     self.cmdBlkMan = commandBlockManager;
     self.cmdBlockLumpList = [];
+
+    //
+    var layout = ccui.ScrollView.create();
+    layout.setBackGroundImage(res.workspace_frame_png);
+    layout.setBackGroundImageScale9Enabled(true);
+    layout.setClippingEnabled(true);
+    layout.setDirection(ccui.ScrollView.DIR_VERTICAL);
+    layout.setTouchEnabled(true);
+    layout.setBounceEnabled(true);
+    layer.addChild(layout);
 
     //ワークスペース内を全部走査します
     var traverseAllCmdBlock_ = function(callbackBlk)
@@ -810,6 +827,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         return isProcOk;
     };
 
+    // ロードセーブ
     self.saveToJsonTable = function()
     {
         var jsonTbl={
@@ -837,6 +855,59 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         });
 
         return true;
+    };
+
+    // 再生制御
+    self.playCtx = {};
+    self.execStart = function(startCmdBlk)
+    {
+        if ( startCmdBlk && startCmdBlk.getParentUI() != layout ){
+            console.warn("other workspace command block");
+            return;
+        }
+        self.playCtx = {
+            preExecCallback : function(blk){
+                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blk);
+                cmdBlk.setExecuteVisial();
+            },
+            postExecCallback : function(blk){
+                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blk);
+                var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+                if(cmdBlk == curCmdBlk){
+                    cmdBlk.setCurrentVisial();
+                }else{
+                    cmdBlk.setDefaultVisial();
+                }
+            },
+            errorExecCallback: function(blk){
+                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blk);
+                var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+                if(cmdBlk == curCmdBlk){
+                    cmdBlk.setCurrentVisial();
+                }else{
+                    cmdBlk.setDefaultVisial();
+                }
+            },
+        };
+        var blkIns = null;
+        if(!startCmdBlk)
+        {
+            startCmdBlk = self.cmdBlockLumpList[0];
+        }
+        if(startCmdBlk)
+        {
+            startCmdBlk.blkIns
+            .deferred(self.playCtx)
+            .then(function(){
+                //終了時
+                //self.playCtx.gotoLabel? ここに実装を。
+                console.log("play end");
+            });
+        }
+    };
+    self.execStop = function()
+    {
+        self.playCtx.needStopFlag = true;
     };
 
 
@@ -945,15 +1016,6 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
 
     //
-    var layout = ccui.ScrollView.create();
-    layout.setBackGroundImage(res.workspace_frame_png);
-    layout.setBackGroundImageScale9Enabled(true);
-    layout.setClippingEnabled(true);
-    layout.setDirection(ccui.ScrollView.DIR_VERTICAL);
-    layout.setTouchEnabled(true);
-    layout.setBounceEnabled(true);
-    layer.addChild(layout);
-
     self.setPosition = function(x,y)
     {
         layout.setPosition(x,y);
@@ -1116,28 +1178,29 @@ var ShouninCore = function(){
         var jsonTbl = {
             version:"shouninCore@ver0.01",
         };
-        jsonTbl.wsMainTbl = ShouninCoreIns.workSpaceMain.saveToJsonTable();
+        jsonTbl.wsMainTbl = self.workSpaceMain.saveToJsonTable();
 
         return jsonTbl;
     };
     self.loadFromJsonTable = function(jsonTbl)
     {
-        if(!ShouninCoreIns.workSpaceMain.loadFromJsonTable(jsonTbl.wsMainTbl))
+        if(!self.workSpaceMain.loadFromJsonTable(jsonTbl.wsMainTbl))
         {
             return false;
         }  
-        ShouninCoreIns.workSpaceMain.updateLayout();
+        self.workSpaceMain.updateLayout();
         return true;
     };
 
     // 再生
-
-    self.playStartCurCmdBlk = function()
+    self.playCtx = {};
+    self.execStartCurCmdBlk = function()
     {
-        if(self.curCmdBlk)
-        {
-            self.curCmdBlk.blkIns.deferred();
-        }
+        self.workSpaceMain.execStart( self.curCmdBlk );
+    };
+    self.execStop = function()
+    {
+        self.workSpaceMain.execStop();
     };
 
     //
@@ -1168,7 +1231,7 @@ var ShouninCore = function(){
     {
         if(self.curCmdBlk)
         {
-            self.curCmdBlk.resetCurrentVisial();
+            self.curCmdBlk.setDefaultVisial();
             self.curCmdBlk = null;
         }
         if(!cmdBlk){
@@ -1461,7 +1524,10 @@ var MainLayer = cc.Layer.extend({
                 ShouninCoreIns.mainScene.shouninCampoLayer.setVisible(true);
             });
             addBtn_("プレイ",function(){
-               ShouninCoreIns.playStartCurCmdBlk();
+               ShouninCoreIns.execStartCurCmdBlk();
+            });
+            addBtn_("停止",function(){
+               ShouninCoreIns.execStop();
             });
             //Test
             addBtn_("Tablet",function(){

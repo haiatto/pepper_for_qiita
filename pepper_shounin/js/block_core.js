@@ -160,13 +160,19 @@ pepperBlock.runRegisterBlock = function(blockManager, materialBoxWsList)
 //   ★注意★ 他の解説読む場合、JQueryのバージョン古いものの説明を読むと混乱するので注意。thenの仕様が結構何度も変わってます
 //
 // 簡単な例:
-//  function blcokCallback(execContext, valueDataTbl, scopeOutTbl){
+//  function blcokCallback(ctx, valueDataTbl, scopeOutTbl){
 //      var dfd = $.Deferred();
 //      dfd.resolve(v < LIMIT);
 //      return dfd.promise();
 //   }
 // 引数の説明:
-//   execContext    グローバル環境なテーブル(汎用なのでシステムによって中身は自由)
+//   ctx.playCtx  再生中のコンテキスト
+//                決まりに従ったフラグやコールバック群と、
+//                それ以外なら自由に、１回の再生の間、終了後に受け渡したいものが有れば追加できます。
+//                それを使えば、ラベルでジャンプさせるような再生制御するシステムなどが実装できます。
+//   ctx.envCtx   グローバル環境なテーブル
+//                中身は完全に自由。マネージャー初期化時に渡したものがセットされてます。
+//
 //   valueDataTbl   値入りテーブル
 //       valueDataTbl["でーためい"].タイプ名
 //       複数受け入れの際の初期値は最初に書かれたタイプ名のものになります
@@ -654,8 +660,20 @@ function Block(blockManager, blockTemplate, callback) {
     // ■実行関連の処理
     
     // Deferred の promise作って返します
-    self.deferred = function(option)
+    self.deferred = function(playCtx,option)
     {
+        playCtx = playCtx || {};
+        playCtx.nowPlayFlag   = true;
+        playCtx.needStopFlag  = playCtx.needStopFlag || false; 
+        playCtx.needPauseFlag = playCtx.needPauseFlag || false;
+        //playCtx.preExecCallback = function(blk)
+        //playCtx.postExecCallback = function(blk)
+        //playCtx.errorExecCallback= function(blk)
+
+        var ctx={
+            playCtx:playCtx,
+            envCtx: self.blockManager.envContext,
+        };
         option = option || {};
         var makeScopeBlockTbl_ = function(){
             var scopeBlkTbl = {};
@@ -680,7 +698,7 @@ function Block(blockManager, blockTemplate, callback) {
                         //(Deferredはエラーチェック用に必須ですが、それ以外の用途では利用しなくても別にOKです。そちらはあくまで利便性のため)
                         startPolling:function(pollingValueEndCheckCallback)
                         {
-                            return valueIn.block.deferredForPolling(pollingValueEndCheckCallback);
+                            return valueIn.block.deferredForPolling(playCtx, pollingValueEndCheckCallback);
                         },
                     };
                 }else{
@@ -695,7 +713,7 @@ function Block(blockManager, blockTemplate, callback) {
                 //       たとえばマッチングした型の最初のモノを要求するみたいな形で…
                 valueEvalPromiseList.push(
                     $.Deferred(function(dfd) {
-                        valueIn.block.deferred().then(function(valueData){
+                        valueIn.block.deferred(playCtx).then(function(valueData){
                             // 値入力枠に代入しておきます(値ブロックを枠から外した時に最後の評価結果が残る挙動になります)
                             valueIn.value = valueData;
                             // 受け渡し用のテーブルを構築します
@@ -728,13 +746,13 @@ function Block(blockManager, blockTemplate, callback) {
         // 入力する値ブロックを評価するpromiseが全部完了したら自身のコールバックを実行します
         return $.when.apply($,valueEvalPromiseList).then(function(){
             // 自身の処理の前の処理
-            $(self.element).removeClass("executeError"); 
-            $(self.element).addClass("executeNow");
-
+            if(playCtx.preExecCallback){
+                playCtx.preExecCallback(self);
+            }
             // 自身の処理を実行します
             var scopeBlkTbl = makeScopeBlockTbl_();            
             var dfdMain = self.callback(
-                self.blockManager.execContext, 
+                ctx,
                 argValueDataTbl, 
                 scopeBlkTbl,
                 option.pollingValueEndCheckCallback
@@ -755,23 +773,30 @@ function Block(blockManager, blockTemplate, callback) {
             return dfdMain.then(
                 function(value){
                     // 自身の処理が成功時
-                    $(self.element).removeClass("executeNow"); 
-                    if(self.out && self.out.block)
+                    if(playCtx.postExecCallback){
+                        playCtx.postExecCallback(self);
+                    }
+                    if(self.out && self.out.block && !playCtx.needStopFlag)
                     {
                         // out部分のみここで繋ぎます(スコープ以下はコールバック内で処理するルールです)
-                        return self.out.block.deferred();
+                        return self.out.block.deferred(playCtx);
                     }
+                    playCtx.nowPlayFlag = false;
                     return $.Deferred().resolve(value);
                 },
                 function(){
                     // 自身の処理が失敗時
-                    $(self.element).removeClass("executeNow"); 
-                    $(self.element).addClass("executeError");
+                    if(playCtx.postExecCallback){
+                        playCtx.postExecCallback(self);
+                    }
+                    if(playCtx.errorExecCallback){
+                        playCtx.errorExecCallback(self);
+                    }
                 }
             );
         });
     };
-    self.deferredForPolling = function(pollingValueEndCheckCallback)
+    self.deferredForPolling = function(playCtx,pollingValueEndCheckCallback)
     {
         $(self.element).removeClass("executeError"); 
         $(self.element).addClass("executeNow");
@@ -780,7 +805,7 @@ function Block(blockManager, blockTemplate, callback) {
         if(self.supportPolling){
             //値ブロックが値更新ポーリング処理を提供している場合は
             //オプション付きでdeferredを呼びます
-            dfd = self.deferred({
+            dfd = self.deferred(playCtx,{
                 pollingValueEndCheckCallback : pollingValueEndCheckCallback,
             });
         }
@@ -788,7 +813,7 @@ function Block(blockManager, blockTemplate, callback) {
             //値更新ポーリング処理を提供してない場合は
             //setTimeoutで繰り返します
             var pooling = function(){
-                self.deferred().then(
+                self.deferred(playCtx).then(
                   function(value){                                    
                     if(!pollingValueEndCheckCallback(value)){
                         setTimeout(pooling,0);
@@ -889,11 +914,11 @@ var BlockWorkSpace = function (blockManager, workspaceName){
 // 管理エリア毎にリストを作ってそこに格納するだけ。
 
 // ■ブロック管理
-function BlockManager(execContext){
+function BlockManager(envContext){
     var self = this;
 
     // 
-    self.execContext  = execContext;//実行環境(各種グローバルな要素を入れるテーブル)
+    self.envContext  = envContext;//実行環境(各種グローバルな要素を入れるテーブル)
 
     // ブロックのリストなど
     self.blockList = [];
