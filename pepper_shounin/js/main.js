@@ -283,7 +283,8 @@ function NaoQiCore()
             console.log("nao qi connect..");
             if(self.lunchPepper){
                  self.qim = new QiSession("198.18.0.1");
-            }else{
+            }
+            else{
                  self.qim = new QiSession(self.ipAddr);
             }
             self.qim.socket()
@@ -291,19 +292,20 @@ function NaoQiCore()
                 console.log("nao qi connect!");
 
                 self.nowState = "接続中";
-                self.service("ALTextToSpeech")
-                .done(function (tts) {
+                self.cleanupReady().then(function(){
+                    return self.service("ALTextToSpeech");
+                })
+                .then(function (tts) {
                     tts.say("せつぞく、しょうにん");
                     dfd.resolve();
                 });
-                //execContext.setupExecContextFromQim(self.qim);
             })
             .on('disconnect', function () {
                 console.log("nao qi disconnect!");
                 self.nowState = "切断";
             })
             .on('error', function (err) {
-                console.log("nao qi error!:"+err);
+                console.log("nao qi error!:" + err.result);
                 self.nowState = "エラー";
                 dfd.reject(err);
             });
@@ -320,6 +322,87 @@ function NaoQiCore()
     }
     
     // ■その他便利処理
+
+    // 色々状態持っていそうな処理をリセットして綺麗な体で開始準備します。
+    self.cleanupReady = function()
+    {
+        var alAutonomousLife;
+        var alTextToSpeech;
+        return self.service("ALAutonomousLife")
+        .then(
+            function(ins){
+                alAutonomousLife = ins;
+                return alAutonomousLife.getState();
+            }
+        ).then(
+            function(state){
+                if(state!="disabled"){
+                    alAutonomousLife.setState("disabled");
+                }
+                return self.service("ALTextToSpeech");
+            }
+        ).then(
+            function(ins){
+                alTextToSpeech = ins;
+                alTextToSpeech.setParameter("speed",2.0);
+                alTextToSpeech.setParameter("pitch",1.0);
+                //emph	[0.0 - 2.0]
+                //pauseMiddle	[80.0 and 300.0]
+                //pauseLong	[300.0 - 2000.0]
+                //pauseSentence	[80.0 and 10000.0]
+            }
+        );
+        /*
+            exeContext.qims.service("ALAudioDevice").done(function(ins){
+              exeContext.alIns.alAudioDevice = ins;
+            });
+            exeContext.qims.service("ALMotion").done(function(ins){
+              exeContext.alIns.alMotion = ins;
+            });
+            exeContext.qims.service("ALRobotPosture").done(function(ins){
+              exeContext.alIns.alRobotPosture = ins;
+            });
+            exeContext.qims.service("ALVideoDevice").done(function(ins){
+              exeContext.alIns.alVideoDevice = ins;
+              exeContext.pepperCameraTopIns    = new PepperCamera(ins,{name:"pepper_block_top_cam"   +exeContext.sandBoxID,cam:0});
+              exeContext.pepperCameraBottomIns = new PepperCamera(ins,{name:"pepper_block_bottom_cam"+exeContext.sandBoxID,cam:1});
+              exeContext.pepperCameraDepthIns  = new PepperCamera(ins,{name:"pepper_block_depth_cam"+exeContext.sandBoxID,cam:2});
+            });
+            exeContext.qims.service('ALMemory').then(function(ins){
+              exeContext.alIns.alMemory = ins;
+            });
+            exeContext.qims.service('ALPeoplePerception').then(function(ins){
+              exeContext.alIns.alPeoplePerception = ins;
+              exeContext.alIns.alPeoplePerception.subscribe("PepperBlock");
+            });
+            exeContext.qims.service('ALMovementDetection').then(function(ins){
+              exeContext.alIns.alMovementDetection = ins;
+              exeContext.alIns.alMovementDetection.subscribe("PepperBlock");
+              //TEST
+              exeContext.alIns.alMovementDetection.getColorSensitivity().done(function(v){console.log("getColorSensitivity "+v);});
+              exeContext.alIns.alMovementDetection.getDepthSensitivity().done(function(v){console.log("getDepthSensitivity "+v);});
+              exeContext.alIns.alMovementDetection.getCurrentPrecision().done(function(v){console.log("getCurrentPrecision "+v);});
+              exeContext.alIns.alMovementDetection.getCurrentPeriod().done(function(v){console.log("getCurrentPeriod "+v);});
+              
+              //exeContext.alIns.alMovementDetection.setColorSensitivity(0.001);
+              //exeContext.alIns.alMovementDetection.setDepthSensitivity(0.005);
+              exeContext.alIns.alMovementDetection.setColorSensitivity(0.005);
+              exeContext.alIns.alMovementDetection.setDepthSensitivity(0.008);
+            });
+            exeContext.qims.service('ALEngagementZones').then(function(ins){
+              exeContext.alIns.alEngagementZones = ins;
+              exeContext.alIns.alEngagementZones.subscribe("PepperBlock");
+
+              exeContext.alIns.alEngagementZones.setFirstLimitDistance(3.0);
+              exeContext.alIns.alEngagementZones.setSecondLimitDistance(5.5);
+              exeContext.alIns.alEngagementZones.setLimitAngle(180);
+            });
+            exeContext.qims.service('ALVisualSpaceHistory').then(function(ins){
+              exeContext.alIns.alVisualSpaceHistory = ins;
+              exeContext.alIns.alVisualSpaceHistory.subscribe("PepperBlock");
+            });
+        */
+    };
 
     // タブレットをリセットします
     // (2.05だと切断されるので再接続したい…けど現在未完成)
@@ -874,7 +957,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
 
     // 再生制御
     self.playCtx = {};
-    self.execStart = function(startCmdBlk)
+    self.execStart = function(startCmdBlk,endCb)
     {
         if ( startCmdBlk && startCmdBlk.getParentUI() != layout ){
             console.warn("other workspace command block");
@@ -938,6 +1021,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                             alert("行き先ラベルブロックが無いようです！:" + self.playCtx.nextGotoLabel);
                         }
                     }
+                    if(endCb)endCb();
                     console.log("play end");
                 });
             };
@@ -1337,9 +1421,9 @@ var ShouninCore = function(){
 
     // 再生
     self.playCtx = {};
-    self.execStartCurCmdBlk = function()
+    self.execStartCurCmdBlk = function(endCb)
     {
-        self.workSpaceMain.execStart( self.curCmdBlk );
+        self.workSpaceMain.execStart( self.curCmdBlk, endCb );
     };
     self.execStop = function()
     {
@@ -1622,6 +1706,44 @@ var ShouninCoreIns = null;
 */
 
 //
+var BtnBarMenu = function(leftX,topY)
+{
+    var self = this;
+
+    var layout = ccui.Layout.create();
+    layout.setPosition(leftX, topY-48);
+    layout.setContentSize(64 * 0 + 8*2, 48);
+    layout.setBackGroundImage(res.frame02_png);
+    layout.setBackGroundImageScale9Enabled(true);
+    layout.setClippingEnabled(true);
+    self.layout = layout;
+
+    var btnNum=0;
+    var posX = 8;
+    self.addBtn = function(label,cb){
+        btnNum += 1;
+        layout.setContentSize(64 * btnNum + 8*2, 48);
+
+        var btn = ccui.Button.create();
+        btn.setTouchEnabled(true);
+        btn.setScale9Enabled(true);
+        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.setTitleText(label);
+        btn.setPosition(cc.p(posX+64/2,24));
+        btn.setSize(cc.size(64, 32));
+        posX += 64;
+        btn.addTouchEventListener(function(button,type)
+        {
+            if(0==type)
+            {
+                if(cb)cb(button,type);
+            }
+        });
+        layout.addChild(btn);
+    };
+};
+
+//
 var MainLayer = cc.Layer.extend({
     ctor:function () {
         this._super();
@@ -1630,43 +1752,6 @@ var MainLayer = cc.Layer.extend({
 
         var widgetSize = size;
 
-        //
-        var BtnBarMenu = function(leftX,topY)
-        {
-            var self = this;
-
-            var layout = ccui.Layout.create();
-            layout.setPosition(leftX, topY-48);
-            layout.setContentSize(64 * 0 + 8*2, 48);
-            layout.setBackGroundImage(res.frame02_png);
-            layout.setBackGroundImageScale9Enabled(true);
-            layout.setClippingEnabled(true);
-            self.layout = layout;
-
-            var btnNum=0;
-            var posX = 8;
-            self.addBtn = function(label,cb){
-                btnNum += 1;
-                layout.setContentSize(64 * btnNum + 8*2, 48);
-
-                var btn = ccui.Button.create();
-                btn.setTouchEnabled(true);
-                btn.setScale9Enabled(true);
-                btn.loadTextures(res.cmdblock_frame01_png, null, null);
-                btn.setTitleText(label);
-                btn.setPosition(cc.p(posX+64/2,24));
-                btn.setSize(cc.size(64, 32));
-                posX += 64;
-                btn.addTouchEventListener(function(button,type)
-                {
-                    if(0==type)
-                    {
-                        if(cb)cb(button,type);
-                    }
-                });
-                layout.addChild(btn);
-            };
-        };
         self.fileMenu = new BtnBarMenu(0, size.height);
         self.addChild(self.fileMenu.layout);
         self.fileMenu.addBtn("Load",function(button,type)
@@ -1787,7 +1872,7 @@ var MainLayer = cc.Layer.extend({
                     //http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true 
                 },
                 function(err){
-                    console.log("err:"+err);
+                    console.log("err:"+err.result);
                 }
             );
         });
@@ -1801,22 +1886,6 @@ var MainLayer = cc.Layer.extend({
             );
         });
 
-/*
-        var textButton = ccui.Button.create()
-        textButton.setTouchEnabled(true)
-    //  textButton.loadTextures("cocosui/backtotopnormal.png", "cocosui/backtotoppressed.png", "")
-        textButton.setTitleText("Text Button")
-        textButton.setPosition(cc.p(widgetSize.width / 2.0, widgetSize.height / 2.0))
-        textButton.addTouchEventListener(function(){
-        })        
-        self.addChild(textButton);
-
-        var bg = cc.Scale9Sprite.create(res.HelloWorld_png);
-        var editBox = cc.EditBox.create(cc.size(size.width, 80), bg);
-        editBox.setPosition(cc.p(size.width/2, 80/2));
-        editBox.setDelegate(this);
-        this.addChild(editBox);
-*/
         var ToolBox = function(parentUI,x,y,w,h)
         {
             var self = this;
@@ -2104,6 +2173,7 @@ var BlockLayer = cc.Layer.extend({
     ctor:function () {
         this._super();
         var self = this;
+        var lunchPepper = NaoQiCoreIns.lunchPepper;
 
         var size = cc.director.getWinSize();
 
@@ -2113,21 +2183,23 @@ var BlockLayer = cc.Layer.extend({
         ShouninCoreIns.workSpaceMain.setSize    (200,260);
 
         // ゴミ箱ボタン
-        var dustboxBtn = ccui.Button.create();
-        dustboxBtn.setTouchEnabled(true);
-        dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
-        dustboxBtn.setPosition(cc.p(220,120+32));
-        dustboxBtn.addTouchEventListener(function(button,type)
-        {
-            var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
-            if(curCmdBlk)
+        if(!lunchPepper){
+            var dustboxBtn = ccui.Button.create();
+            dustboxBtn.setTouchEnabled(true);
+            dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
+            dustboxBtn.setPosition(cc.p(220,120+32));
+            dustboxBtn.addTouchEventListener(function(button,type)
             {
-                ShouninCoreIns.removeCmdBlk(curCmdBlk);
-            }
-            //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
-            ShouninCoreIns.workSpaceMain.updateLayout();
-        });        
-        self.addChild(dustboxBtn,1);
+                var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+                if(curCmdBlk)
+                {
+                    ShouninCoreIns.removeCmdBlk(curCmdBlk);
+                }
+                //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
+                ShouninCoreIns.workSpaceMain.updateLayout();
+            });        
+            self.addChild(dustboxBtn,1);
+        }
 
         // ブロック追加ボタン
         var BlockBox = function(parentUI,x,y,w,h)
@@ -2183,13 +2255,15 @@ var BlockLayer = cc.Layer.extend({
                 btnLst.push(btn);
             };
         };
-        self.blockBox = new BlockBox(self,4, 4, 250, 110);
+        if(!lunchPepper){
+            self.blockBox = new BlockBox(self,4, 4, 250, 110);
 
-        self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
-        self.blockBox.makeAddCommandBlockBtn("行き先ラベル","label@shonin");
-        self.blockBox.makeAddCommandBlockBtn("質問","ask@shonin");
-        self.blockBox.makeAddCommandBlockBtn("ポーズ","pose@shonin");
-        self.blockBox.makeAddCommandBlockBtn("会話","talk@shonin");
+            self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
+            self.blockBox.makeAddCommandBlockBtn("行き先ラベル","label@shonin");
+            self.blockBox.makeAddCommandBlockBtn("質問","ask@shonin");
+            self.blockBox.makeAddCommandBlockBtn("ポーズ","pose@shonin");
+            self.blockBox.makeAddCommandBlockBtn("会話","talk@shonin");
+        }
         return true;
     },
 });
@@ -2773,6 +2847,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         baseLayout.setClippingEnabled(true);
         self.addChild(baseLayout);
 
+        // 閉じるボタン
         var btn = ccui.Button.create();
         btn.setName("CloseBtn");
         btn.setTouchEnabled(true);
@@ -2810,6 +2885,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         itemLo.setBackGroundImageScale9Enabled(true);
         itemLo.setClippingEnabled(true);
 
+        // 呼ぶボタンのテンプレ
         var btn = ccui.Button.create();
         btn.setName("callBtn");
         btn.setTouchEnabled(true);
@@ -2835,7 +2911,16 @@ var ShouninCampoLayer = cc.Layer.extend({
                         {
                             if(0==type)
                             {
-                                ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl);
+                                // 閉じて再生開始します
+                                self.closeCampo();
+                                ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl)
+                                ShouninCoreIns.setCurCmdBlk(null);
+                                ShouninCoreIns.execStartCurCmdBlk(function(){
+                                    //再生終了
+                                    if(NaoQiCoreIns.lunchPepper){
+                                        self.openCampo();
+                                    }
+                                });
                             }
                         });
                         var label = cc.LabelTTF.create(shouninItem.id, "Arial", 16);
@@ -2850,11 +2935,12 @@ var ShouninCampoLayer = cc.Layer.extend({
         console.log("ShouninCampoLayer ctor..finish!");
 
         self.openCampo = function(){
-            self.updateShouninList();
-            self.setVisible(true);
             if(!NaoQiCoreIns.lunchPepper){
                 ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
             }
+            ShouninCoreIns.setCurCmdBlk(null);
+            self.updateShouninList();
+            self.setVisible(true);
         };
         self.closeCampo = function(){
             self.setVisible(false);
@@ -2902,6 +2988,19 @@ var TabletLayer = cc.Layer.extend({
             baseLayout.removeAllChildren(true);
         };
 
+        self.showTablet = function(){
+            if(ShouninCoreIns.mainScene.pepperLayer){
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
+            }
+            self.setVisible(true);
+        };
+        self.hideTablet = function(){
+            if(ShouninCoreIns.mainScene.pepperLayer){
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
+            }
+            self.setVisible(false);
+        };
+
         return true;
     },
 });
@@ -2915,25 +3014,55 @@ var MainScene = cc.Scene.extend({
   onEnter:function () {
       this._super();
       var self = this;
+      
+      var lunchPepper = NaoQiCoreIns.lunchPepper;
 
       console.log("mainScene onEnter!");
       
-      self.mainLayer = new MainLayer();
-      this.addChild(self.mainLayer);
-        
-      if(!NaoQiCoreIns.lunchPepper){
+      if(!lunchPepper){
+          self.mainLayer = new MainLayer();
+          this.addChild(self.mainLayer);
+
           self.pepperLayer = new PepperLayer();
           this.addChild(self.pepperLayer);
+
+          self.blockLayer = new BlockLayer();
+          this.addChild(self.blockLayer);
+
+          self.tabletLayer = new TabletLayer();
+          this.addChild(self.tabletLayer);
+
+          self.shouninCampoLayer = new ShouninCampoLayer();
+          this.addChild(self.shouninCampoLayer);
       }
+      else {
+          self.blockLayer = new BlockLayer();
+          self.addChild(self.blockLayer);
 
-      self.blockLayer = new BlockLayer();
-      this.addChild(self.blockLayer);
+          self.tabletLayer = new TabletLayer();
+          self.addChild(self.tabletLayer);
 
-      self.tabletLayer = new TabletLayer();
-      this.addChild(self.tabletLayer);
+          self.shouninCampoLayer = new ShouninCampoLayer();
+          self.addChild(self.shouninCampoLayer);
 
-      self.shouninCampoLayer = new ShouninCampoLayer();
-      this.addChild(self.shouninCampoLayer);
+          ShouninCoreIns.mainScene.shouninCampoLayer.openCampo();
+
+        　// 
+        　var makeShouinCampoBtn = function()
+        　{
+              var size = cc.director.getWinSize();
+              self.sideMenu = new BtnBarMenu(0, size.height);
+              self.addChild(self.sideMenu.layout);
+              self.sideMenu.addBtn("商人広場",function(button,type)
+              {
+                  ShouninCoreIns.mainScene.shouninCampoLayer.openCampo();
+              });
+              var p = self.sideMenu.layout.getPosition()
+              var s = self.sideMenu.layout.getContentSize();
+              self.sideMenu.layout.setPosition(cc.p(size.width-s.width,p.y));
+        　};
+        　makeShouinCampoBtn();
+      }
   }
 });
 
@@ -3124,7 +3253,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                       ctx.playCtx.nextGotoLabel = gotoLabel;
                       ctx.playCtx.needStopFlag  = true;
                   }
-                  tabletLayer.setVisible(false);
+                  tabletLayer.hideTablet();
                   dfd.resolve();
               };
           };
@@ -3138,7 +3267,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               addBtn_(valueDataTbl['ans1'].string,90+300+256/2,128,256,128,makeSelectEndCb_("ans1"));
           }
 
-          tabletLayer.setVisible(true);
+          tabletLayer.showTablet();
           return dfd.promise();
       }
     );
