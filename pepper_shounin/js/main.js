@@ -2282,9 +2282,21 @@ var PepperLayer = cc.Layer.extend({
                         loader.load( './PepperResource/pepper_meshes/meshes/1.0/'+name, function ( collada ) {
                             dae = collada.scene;
                             dae.traverse( function ( child ) {
-                                if ( child instanceof THREE.SkinnedMesh ) {
-                                    var animation = new THREE.Animation( child, child.geometry.animation );
-                                    animation.play();
+                                if ( child instanceof THREE.Mesh ) {
+                                    if(child.material instanceof THREE.MultiMaterial) {
+                                        $.each(child.material.materials,function(k,mate){
+                                            //自己発光をカットします
+                                            if(mate.emissive){
+                                                mate.emissive.r=0;
+                                                mate.emissive.g=0;
+                                                mate.emissive.b=0;
+                                            }
+                                            if(mate.reflectivity){
+                                                mate.reflectivity = 0;
+                                                mate.refractionRatio = 0;
+                                            }
+                                        });
+                                    }
                                 }
                             } );
                             dae.scale.x = dae.scale.y = dae.scale.z = 1.000;
@@ -2471,11 +2483,16 @@ var PepperLayer = cc.Layer.extend({
             var containerElm = $("#threejsCanvas");
             containerElm.css("position","absolute");
             containerElm.css("zIndex","998");
-            containerElm.css("marginLeft","250px");
-            containerElm.css("marginTop", "50px");
             container = containerElm[0];
-
+            
             var width=300, height=320;
+            var resize = function(){
+                var posx = ($(window).width()-width)/2;
+                containerElm.css("marginLeft",""+posx+"px");
+                containerElm.css("marginTop", "50px");
+            };
+            $(window).on('load resize', resize);
+            resize();
 
             camera = new THREE.PerspectiveCamera( 25, width / height, 0.1, 2000 );
             camera.position.set( 2, 0.0, 0 );
@@ -2490,12 +2507,12 @@ var PepperLayer = cc.Layer.extend({
 
             // Lights
 
-            scene.add( new THREE.AmbientLight( 0x101010 ) );
+            scene.add( new THREE.AmbientLight( 0xa0a0a0 ) );
 
-            var directionalLight = new THREE.DirectionalLight( 0x404040 );
-            directionalLight.position.x = 0.0;
-            directionalLight.position.y = -0.5;
-            directionalLight.position.z = -0.5;
+            var directionalLight = new THREE.DirectionalLight( 0xa0a0a0 );
+            directionalLight.position.x =  0.5;
+            directionalLight.position.y =  0.0;
+            directionalLight.position.z =  -0.5;
             directionalLight.position.normalize();
             scene.add( directionalLight );
 
@@ -2868,8 +2885,8 @@ var MainScene = cc.Scene.extend({
       self.mainLayer = new MainLayer();
       this.addChild(self.mainLayer);
 
-//      self.pepperLayer = new PepperLayer();
-//      this.addChild(self.pepperLayer);
+      self.pepperLayer = new PepperLayer();
+      this.addChild(self.pepperLayer);
 
       self.blockLayer = new BlockLayer();
       this.addChild(self.blockLayer);

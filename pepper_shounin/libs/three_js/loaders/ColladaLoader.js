@@ -2908,6 +2908,7 @@
 			case 'blinn':
 
 				if ( props.diffuse != undefined ) props.color = props.diffuse;
+				delete props.diffuse;
 				this.material = new THREE.MeshPhongMaterial( props );
 				break;
 
@@ -2915,6 +2916,8 @@
 			default:
 
 				if ( props.diffuse != undefined ) props.color = props.diffuse;
+				delete props.diffuse;
+				delete props.shading;
 				this.material = new THREE.MeshLambertMaterial( props );
 				break;
 
