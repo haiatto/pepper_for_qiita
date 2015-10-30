@@ -1807,17 +1807,19 @@ var MainLayer = cc.Layer.extend({
         editBox.setDelegate(this);
         this.addChild(editBox);
 */
-        var ToolBox = function(parentUI)
+        var ToolBox = function(parentUI,x,y,w,h)
         {
             var self = this;
 
             var layout = ccui.Layout.create();
             self.layout = layout;
 
-            var boxW = 240;
-            var boxH = 320;
+            var boxW = w||240;
+            var boxH = h||320;
+            var posX = x||560;
+            var posY = y||((size.height-boxH)-48);
 
-            layout.setPosition(560, (size.height-boxH)-48);
+            layout.setPosition(posX, posY);
             layout.setContentSize(boxW, boxH);
             layout.setBackGroundImage(res.frame02_png);
             layout.setBackGroundImageScale9Enabled(true);
@@ -1889,10 +1891,12 @@ var MainLayer = cc.Layer.extend({
         function TalkTextBox(layer){
             var self = this;
 
-            var boxW = 320;
+            var posX = 260;
+            var posY = 0;
+            var boxW = 540;
             var boxH = 120;
             var layout = ccui.Layout.create();
-            layout.setPosition(cc.p((size.width-boxW)/2, 0));
+            layout.setPosition(cc.p(posX, posY));
             layout.setContentSize(boxW, boxH);
             layout.setBackGroundImage(res.frame01_png);
             layout.setBackGroundImageScale9Enabled(true);
@@ -1911,6 +1915,7 @@ var MainLayer = cc.Layer.extend({
             self.setTalkText = function(text)
             {
                 editBox.string = text;
+                editBox.setFontSize(32);
             },
             self.getTalkText = function()
             {
@@ -1951,7 +1956,7 @@ var MainLayer = cc.Layer.extend({
         
         function TalkTextPadBox(parentUI){
             var self = this;
-            var toolbox = new ToolBox(parentUI);
+            var toolbox = new ToolBox(parentUI,null,null,null,280);
             toolbox.isNowEditCb = function(){
                 return ShouninCoreIns.isTalkTextEdit();
             };
@@ -2017,7 +2022,6 @@ var MainLayer = cc.Layer.extend({
             };
             toolbox.storeToShouninDataCb  = function(){
                 ShouninCoreIns.setLabelEditData(labelNameEd.string);
-                layout.setVisible(true);
             };
         };
         self.labelBox = new LabelBox(self);
@@ -2038,7 +2042,6 @@ var MainLayer = cc.Layer.extend({
             };
             toolbox.storeToShouninDataCb  = function(){
                 ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
-                layout.setVisible(true);
             };
         };
         self.gotoLabelBox = new GotoLabelBox(self);
@@ -2156,8 +2159,8 @@ var BlockLayer = cc.Layer.extend({
                 });        
                 layout.addChild(btn);
                 if(nowXIdx % 2==1){
-                    nowY += 32;
-                    nowH += 32;
+                    nowY += 32+4;
+                    nowH += 32+4;
                 }
                 nowXIdx = (nowXIdx+1) % 2;
                 layout.setInnerContainerSize(cc.size(w,nowH));
@@ -2958,7 +2961,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           },
           blockContents:[
               {expressions:[
-                  {input_text:{default:{string:""}},dataName:'talkLabel0'},
+                  {input_text:{default:{string:"ここににゅうりょく"}},dataName:'talkLabel0'},
               ]},
           ],
           blockVisual:{
