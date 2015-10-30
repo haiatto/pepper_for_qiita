@@ -28,8 +28,9 @@ $(function(){
 
 // Cocosのリソース定義
 var res = {
-    HelloWorld_png : "cocos_res/HelloWorld.png",
     frame01_png : "cocos_res/frame01.png",
+    frame02_png : "cocos_res/frame02.png",
+
     workspace_frame_png : "cocos_res/workspace_frame.png",
     workspace_linehead_png : "cocos_res/workspace_linehead.png",
     workspace_separate_bar_png : "cocos_res/workspace_separate_bar.png",
@@ -1443,6 +1444,14 @@ var ShouninCore = function(){
     };
 
     //
+    self.isTalkTextEdit = function()
+    {
+        var blkWId = getCurCmdBlkWorldId_();
+        if("talk@shonin" == blkWId) {
+            return true;
+        }
+        return false;
+    };
     self.getTalkText = function(text)
     {
         var blkWId = getCurCmdBlkWorldId_();
@@ -1451,7 +1460,7 @@ var ShouninCore = function(){
         }
         return "";
     };
-    self.updateTalkText = function(text)
+    self.setTalkText = function(text)
     {
         var blkWId = getCurCmdBlkWorldId_();
         if("talk@shonin" == blkWId) {
@@ -1591,12 +1600,6 @@ var ShouninCore = function(){
 };
 var ShouninCoreIns = null;
 
-//
-var MainLayer = cc.Layer.extend({
-    ctor:function () {
-        this._super();
-        var self = this;
-        var size = cc.director.getWinSize();
 /*
         var sprite = cc.Sprite.create(res.HelloWorld_png);
         sprite.setPosition(size.width / 2, size.height / 2);
@@ -1607,26 +1610,41 @@ var MainLayer = cc.Layer.extend({
         label.setPosition(size.width / 2, size.height / 2);
         self.addChild(label, 1);
 */
+
+//
+var MainLayer = cc.Layer.extend({
+    ctor:function () {
+        this._super();
+        var self = this;
+        var size = cc.director.getWinSize();
+
         var widgetSize = size;
 
         //
-        var makeFileMenu_ = function()
+        var BtnBarMenu = function(leftX,topY)
         {
+            var self = this;
+
             var layout = ccui.Layout.create();
-            layout.setPosition(0, size.height-64);
-            layout.setContentSize(64*8 + 8*2,64);
-            layout.setBackGroundImage(res.frame01_png);
+            layout.setPosition(leftX, topY-48);
+            layout.setContentSize(64 * 0 + 8*2, 48);
+            layout.setBackGroundImage(res.frame02_png);
             layout.setBackGroundImageScale9Enabled(true);
             layout.setClippingEnabled(true);
+            self.layout = layout;
 
+            var btnNum=0;
             var posX = 8;
-            var addBtn_ = function(label,cb){
+            self.addBtn = function(label,cb){
+                btnNum += 1;
+                layout.setContentSize(64 * btnNum + 8*2, 48);
+
                 var btn = ccui.Button.create();
                 btn.setTouchEnabled(true);
                 btn.setScale9Enabled(true);
                 btn.loadTextures(res.cmdblock_frame01_png, null, null);
                 btn.setTitleText(label);
-                btn.setPosition(cc.p(posX+64/2,32));
+                btn.setPosition(cc.p(posX+64/2,24));
                 btn.setSize(cc.size(64, 32));
                 posX += 64;
                 btn.addTouchEventListener(function(button,type)
@@ -1638,131 +1656,140 @@ var MainLayer = cc.Layer.extend({
                 });
                 layout.addChild(btn);
             };
-            addBtn_("Load",function(button,type)
-            {
-                if(0==type){
-                    if($("#input_dummy")[0])
-                    {
-                        document.body.removeChild($("#input_dummy")[0]);
-                    }
-                    var input = document.createElement( 'input' );
-                    $(input).attr({id:"input_dummy",type:"file"});
-                    $(input).css({display:"none"});
-                    input.addEventListener( 'change', function ( event ) {
-                        if(event.target.files[ 0 ]){
-                            var fr = new FileReader();
-                            fr.onload = function(e)
-                            {
-                                try{
-                                    var jsonTbl = JSON.parse(e.target.result);
-                                    var bOk = ShouninCoreIns.loadFromJsonTable(jsonTbl);
-                                    if(bOk){
-                                        alert("ロード完了です！");
-                                    }else{
-                                        alert("申し訳ありませぬ。ロードできませんでした。データの内容がおかしいようです。");
-                                    }
-                                }
-                                catch(e){
-                                    alert("申し訳ありませぬ。ロードできませんでした。ファイルが違うものかもしれません。:\n"+e.name + "\n" + e.message);
-                                }
-                            };
-                            fr.readAsText(event.target.files[ 0 ]);
-                        }
-                    } );
-                    document.body.appendChild(input);
-                    $(input).click();
-                }
-            });
-            addBtn_("Save",function(button,type)
-            {
-                if(0==type)
-                {
-                    //Three.jsよりコピペ。後で整理する
-                    var link = document.createElement( 'a' );
-                    link.style.display = 'none';
-                    document.body.appendChild( link );
-                    var exportString = function ( output, filename ) {
-                        var blob = new Blob( [ output ], { type: 'text/plain' } );
-                        var objectURL = URL.createObjectURL( blob );
-
-                        link.href = objectURL;
-                        link.download = filename || 'data.json';
-                        link.target = '_blank';
-
-                        var event = document.createEvent("MouseEvents");
-                        event.initMouseEvent(
-                            "click", true, false, window, 0, 0, 0, 0, 0
-                            , false, false, false, false, 0, null
-                        );
-                        link.dispatchEvent(event);
-                    };
-                    var jsonTbl = ShouninCoreIns.saveToJsonTable();
-                    exportString(JSON.stringify(jsonTbl),"shoukonScript.json");
-                }
-            });
-            addBtn_("公開",function(button,type)
-            {
-                if(0==type)
-                {
-                    var jsonTbl = ShouninCoreIns.saveToJsonTable();
-                    KiiShouninCoreIns.publishShounin(jsonTbl)
-                    .then(function(){
-                        alert("公開しました！");
-                    });
-                }
-            });
-            addBtn_("商人広場",function(button,type)
-            {
-                ShouninCoreIns.mainScene.shouninCampoLayer.updateShouninList();
-                ShouninCoreIns.mainScene.shouninCampoLayer.setVisible(true);
-            });
-            addBtn_("プレイ",function(){
-               ShouninCoreIns.execStartCurCmdBlk();
-            });
-            addBtn_("停止",function(){
-               ShouninCoreIns.execStop();
-            });
-            //Test
-            addBtn_("Tablet",function(){
-                NaoQiCoreIns.setIpAddress("192.168.3.42");
-                NaoQiCoreIns.connect()
-                .then(
-                    function(){
-                        NaoQiCoreIns.showTabletUrl(
-                            //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
-                            //"http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
-                            "http://192.168.3.168:8080/pepper_shounin/?lunchPepper=true"
-                            //"http://google.co.jp/"
-                        ).then(function(){
-                            //NaoQiCoreIns.showTabletUrl(
-                            //    "http://google.co.jp/"
-                            //);
-                        });
-                        //消えなくなるのは抜けられないようにしてあるからかも…要検証…
-                        //return alTb.loadUrl("http://haiatto.github.io/pepper_for_qiita/pepper_shounin/");
-                        //return alTb.loadUrl("http://www.yahoo.co.jp/");
-                        //"http://google.co.jp/"
-                        //http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true 
-                    },
-                    function(err){
-                        console.log("err:"+err);
-                    }
-                );
-            });
-            addBtn_("KillTable",function(){
-                NaoQiCoreIns.setIpAddress("192.168.11.19");
-                NaoQiCoreIns.connect()
-                .then(
-                    function(){
-                        NaoQiCoreIns.resetTabletSystem()
-                    }
-                );
-            });
-
-            self.addChild(layout);
-            return layout;
         };
-        makeFileMenu_();
+        self.fileMenu = new BtnBarMenu(0, size.height);
+        self.addChild(self.fileMenu.layout);
+        self.fileMenu.addBtn("Load",function(button,type)
+        {
+            if($("#input_dummy")[0])
+            {
+                document.body.removeChild($("#input_dummy")[0]);
+            }
+            var input = document.createElement( 'input' );
+            $(input).attr({id:"input_dummy",type:"file"});
+            $(input).css({display:"none"});
+            input.addEventListener( 'change', function ( event ) {
+                if(event.target.files[ 0 ]){
+                    var fr = new FileReader();
+                    fr.onload = function(e)
+                    {
+                        try{
+                            var jsonTbl = JSON.parse(e.target.result);
+                            var bOk = ShouninCoreIns.loadFromJsonTable(jsonTbl);
+                            if(bOk){
+                                alert("ロード完了です！");
+                            }else{
+                                alert("申し訳ありませぬ。ロードできませんでした。データの内容がおかしいようです。");
+                            }
+                        }
+                        catch(e){
+                            alert("申し訳ありませぬ。ロードできませんでした。ファイルが違うものかもしれません。:\n"+e.name + "\n" + e.message);
+                        }
+                    };
+                    fr.readAsText(event.target.files[ 0 ]);
+                }
+            } );
+            document.body.appendChild(input);
+            $(input).click();
+        });
+        self.fileMenu.addBtn("Save",function(button,type)
+        {
+            if(0==type)
+            {
+                //Three.jsよりコピペ。後で整理する
+                var link = document.createElement( 'a' );
+                link.style.display = 'none';
+                document.body.appendChild( link );
+                var exportString = function ( output, filename ) {
+                    var blob = new Blob( [ output ], { type: 'text/plain' } );
+                    var objectURL = URL.createObjectURL( blob );
+
+                    link.href = objectURL;
+                    link.download = filename || 'data.json';
+                    link.target = '_blank';
+
+                    var event = document.createEvent("MouseEvents");
+                    event.initMouseEvent(
+                        "click", true, false, window, 0, 0, 0, 0, 0
+                        , false, false, false, false, 0, null
+                    );
+                    link.dispatchEvent(event);
+                };
+                var jsonTbl = ShouninCoreIns.saveToJsonTable();
+                exportString(JSON.stringify(jsonTbl),"shoukonScript.json");
+            }
+        });
+        self.fileMenu.addBtn("公開",function(button,type)
+        {
+            if(0==type)
+            {
+                var jsonTbl = ShouninCoreIns.saveToJsonTable();
+                KiiShouninCoreIns.publishShounin(jsonTbl)
+                .then(function(){
+                    alert("公開しました！");
+                });
+            }
+        });
+        // 
+        var x = self.fileMenu.layout.getPosition().x + self.fileMenu.layout.getContentSize().width;
+        self.playMenu = new BtnBarMenu(x, size.height);
+        self.addChild(self.playMenu.layout);
+        self.playMenu.addBtn("プレイ",function(){
+           ShouninCoreIns.execStartCurCmdBlk();
+        });
+        self.playMenu.addBtn("停止",function(){
+           ShouninCoreIns.execStop();
+        });
+        // 
+        self.sideMenu = new BtnBarMenu(0, size.height);
+        self.addChild(self.sideMenu.layout);
+        self.sideMenu.addBtn("商人広場",function(button,type)
+        {
+            ShouninCoreIns.mainScene.shouninCampoLayer.openCampo();
+        });
+        var p = self.sideMenu.layout.getPosition()
+        var s = self.sideMenu.layout.getContentSize();
+        self.sideMenu.layout.setPosition(cc.p(size.width-s.width,p.y));
+
+        var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
+        //Test
+        self.testMenu = new BtnBarMenu(x, size.height);
+        self.addChild(self.testMenu.layout);
+        self.testMenu.addBtn("Tablet",function(){
+            NaoQiCoreIns.setIpAddress("192.168.3.42");
+            NaoQiCoreIns.connect()
+            .then(
+                function(){
+                    NaoQiCoreIns.showTabletUrl(
+                        //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
+                        //"http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
+                        "http://192.168.3.168:8080/pepper_shounin/?lunchPepper=true"
+                        //"http://google.co.jp/"
+                    ).then(function(){
+                        //NaoQiCoreIns.showTabletUrl(
+                        //    "http://google.co.jp/"
+                        //);
+                    });
+                    //消えなくなるのは抜けられないようにしてあるからかも…要検証…
+                    //return alTb.loadUrl("http://haiatto.github.io/pepper_for_qiita/pepper_shounin/");
+                    //return alTb.loadUrl("http://www.yahoo.co.jp/");
+                    //"http://google.co.jp/"
+                    //http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true 
+                },
+                function(err){
+                    console.log("err:"+err);
+                }
+            );
+        });
+        self.testMenu.addBtn("KillTable",function(){
+            NaoQiCoreIns.setIpAddress("192.168.11.19");
+            NaoQiCoreIns.connect()
+            .then(
+                function(){
+                    NaoQiCoreIns.resetTabletSystem()
+                }
+            );
+        });
 
 /*
         var textButton = ccui.Button.create()
@@ -1780,16 +1807,106 @@ var MainLayer = cc.Layer.extend({
         editBox.setDelegate(this);
         this.addChild(editBox);
 */
+        var ToolBox = function(parentUI)
+        {
+            var self = this;
+
+            var layout = ccui.Layout.create();
+            self.layout = layout;
+
+            var boxW = 240;
+            var boxH = 320;
+
+            layout.setPosition(560, (size.height-boxH)-48);
+            layout.setContentSize(boxW, boxH);
+            layout.setBackGroundImage(res.frame02_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            parentUI.addChild(layout);
+
+            layout.setVisible(false);
+
+            var posY = boxH-32;
+            self.makeEditBox = function(labelText,marginY)
+            {
+                var labelW = 32;
+                var label = cc.LabelTTF.create(labelText, "Arial", 12);
+                label.setPosition(cc.p(label.getContentSize().width/2, posY));
+                label.setColor(new cc.Color(0,0,0,255));
+                layout.addChild(label, 2);
+
+                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
+                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
+                editBox.fontColor = new cc.Color(0,0,0,255);
+                editBox.setPosition(cc.p(boxW/2+labelW, posY));
+                editBox.setDelegate(self);
+                layout.addChild(editBox);
+                posY -= 28+marginY;
+                return editBox;
+            };
+            ShouninCoreIns.addListener(self);
+            self.shouninCoreUpdate = function(){  
+            };
+
+            self.setVisible = function(flag){
+                layout.setVisible(flag);
+            };
+
+            self.isNowEditCb = function(){return false;};
+            self.loadFromShouninDataCb = function(){};
+            self.storeToShouninDataCb  = function(){};
+
+            self.shouninCoreUpdate = function()
+            {
+                if(self.isNowEditCb())
+                {
+                    self.loadFromShouninDataCb();
+                    layout.setVisible(true);
+                }
+                else{
+                    layout.setVisible(false);
+                }
+            };
+            self.editBoxTextChanged = function(sender,text)
+            {
+                if(self.isNowEditCb())
+                {
+                    self.storeToShouninDataCb();
+                    layout.setVisible(true);
+                }
+            };
+            self.editBoxReturn = function(sender)
+            {
+                if(self.isNowEditCb())
+                {
+                    self.storeToShouninDataCb();
+                    layout.setVisible(true);
+                }
+            };
+        };
 
         // ShouninCoreと連動するエディター
         function TalkTextBox(layer){
             var self = this;
-            var bg = cc.Scale9Sprite.create(res.frame01_png);
-            var editBox = cc.EditBox.create(cc.size(size.width, 80), bg);
+
+            var boxW = 320;
+            var boxH = 120;
+            var layout = ccui.Layout.create();
+            layout.setPosition(cc.p((size.width-boxW)/2, 0));
+            layout.setContentSize(boxW, boxH);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            layout.setVisible(false);
+            layer.addChild(layout);
+
+            var bg = cc.Scale9Sprite.create(res.frame02_png);
+            var editBox = cc.EditBox.create(cc.size(boxW-18, boxH-18), bg);
             editBox.fontColor = new cc.Color(0,0,0,255);
-            editBox.setPosition(cc.p(size.width/2, 80/2));
+            editBox.setFontSize(32);
+            editBox.setPosition(cc.p(boxW/2, boxH/2));
             editBox.setDelegate(self);
-            layer.addChild(editBox);
+            layout.addChild(editBox);
             //
             self.setTalkText = function(text)
             {
@@ -1802,112 +1919,84 @@ var MainLayer = cc.Layer.extend({
             //
             self.shouninCoreUpdate = function()
             {
-                self.setTalkText( ShouninCoreIns.getTalkText() );
+                var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
+                if(ShouninCoreIns.isTalkTextEdit()){
+                    self.setTalkText( ShouninCoreIns.getTalkText() );
+                    layout.setVisible(true);
+                    //
+                    pepperLayer.setCanvasMiniSize();
+                }
+                else{
+                    layout.setVisible(false);
+                    //
+                    pepperLayer.setCanvasFullSize();
+                }
             };
             self.editBoxTextChanged = function(sender,text)
             {
-                ShouninCoreIns.updateTalkText(sender.string);
+                if(ShouninCoreIns.isTalkTextEdit()){
+                    ShouninCoreIns.setTalkText(sender.string);
+                }
             };
             self.editBoxReturn = function(sender)
             {
-                ShouninCoreIns.updateTalkText(sender.string);
+                if(ShouninCoreIns.isTalkTextEdit()){
+                    ShouninCoreIns.setTalkText(sender.string);
+                }
             };
             // 
             ShouninCoreIns.addListener(self);
         };
         self.talkTextBox = new TalkTextBox(self);
+        
+        function TalkTextPadBox(parentUI){
+            var self = this;
+            var toolbox = new ToolBox(parentUI);
+            toolbox.isNowEditCb = function(){
+                return ShouninCoreIns.isTalkTextEdit();
+            };
+            toolbox.loadFromShouninDataCb = function(){
+                // エディット中
+                var talkTextData = ShouninCoreIns.getTalkText();
+            };
+            toolbox.storeToShouninDataCb  = function(){
+                //ShouninCoreIns.setTalkText(talkTextData);
+            };
+        };
+        self.talkTextPadBox = new TalkTextPadBox(self);
 
         var AskBox = function(parentUI)
         {
             var self = this;
+            var toolbox = new ToolBox(parentUI);
 
-            var layout = ccui.Layout.create();
+            var askEd      = toolbox.makeEditBox("質問",4);
+            var ans0Ed     = toolbox.makeEditBox("こたえ１",0);
+            var ans0GotoEd = toolbox.makeEditBox("進む先",4);
+            var ans1Ed     = toolbox.makeEditBox("こたえ２",0);
+            var ans1GotoEd = toolbox.makeEditBox("進む先",4);
 
-            var boxW = 240;
-            var boxH = 320;
-
-            layout.setPosition(560, 100);
-            layout.setContentSize(boxW, boxH);
-            layout.setBackGroundImage(res.frame01_png);
-            layout.setBackGroundImageScale9Enabled(true);
-            layout.setClippingEnabled(true);
-            parentUI.addChild(layout);
-
-            var posY = boxH-32;
-            var makeEditBox = function(labelText,marginY)
-            {
-                var labelW = 32;
-                var label = cc.LabelTTF.create(labelText, "Arial", 12);
-                label.setPosition(cc.p(label.getContentSize().width/2, posY));
-                label.setColor(new cc.Color(0,0,0,255));
-                layout.addChild(label, 2);
-
-                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
-                editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2+labelW, posY));
-                editBox.setDelegate(self);
-                layout.addChild(editBox);
-                posY -= 28+marginY;
-                return editBox;
+            toolbox.isNowEditCb = function(){
+                return ShouninCoreIns.isAskEdit();
             };
-            var askEd  = makeEditBox("質問",4);
-            var ans0Ed = makeEditBox("こたえ１",0);
-            var ans0GotoEd = makeEditBox("進む先",4);
-            var ans1Ed = makeEditBox("こたえ２",0);
-            var ans1GotoEd = makeEditBox("進む先",4);
-            layout.setVisible(false);
-
-            self.shouninCoreUpdate = function()
-            {
-                if(ShouninCoreIns.isAskEdit())
-                {
-                    // エディット中
-                    var askEditData = ShouninCoreIns.getAskEditData();
-                    askEd.string  = askEditData.ask;
-                    ans0Ed.string = askEditData.ans0;
-                    ans1Ed.string = askEditData.ans1;
-                    ans0GotoEd.string = askEditData.ans0GotoLabel;
-                    ans1GotoEd.string = askEditData.ans1GotoLabel;
-                    layout.setVisible(true);
-                }
-                else{
-                    layout.setVisible(false);
-                }
+            toolbox.loadFromShouninDataCb = function(){
+                // エディット中
+                var askEditData = ShouninCoreIns.getAskEditData();
+                askEd.string      = askEditData.ask;
+                ans0Ed.string     = askEditData.ans0;
+                ans1Ed.string     = askEditData.ans1;
+                ans0GotoEd.string = askEditData.ans0GotoLabel;
+                ans1GotoEd.string = askEditData.ans1GotoLabel;
             };
-            ShouninCoreIns.addListener(self);
-
-            self.editBoxTextChanged = function(sender,text)
-            {
-                if(ShouninCoreIns.isAskEdit())
-                {
-                    // エディット中
-                    var askEditData = {
-                        ask: askEd.string,
-                        ans0:ans0Ed.string,
-                        ans1:ans1Ed.string,
-                        ans0GotoLabel:ans0GotoEd.string,
-                        ans1GotoLabel:ans1GotoEd.string,
-                    };
-                    ShouninCoreIns.setAskEditData(askEditData);
-                    layout.setVisible(true);
-                }
-            };
-            self.editBoxReturn = function(sender)
-            {
-                if(ShouninCoreIns.isAskEdit())
-                {
-                    // エディット中
-                    var askEditData = {
-                        ask: askEd.string,
-                        ans0:ans0Ed.string,
-                        ans1:ans1Ed.string,
-                        ans0GotoLabel:ans0GotoEd.string,
-                        ans1GotoLabel:ans1GotoEd.string,
-                    };
-                    ShouninCoreIns.setAskEditData(askEditData);
-                    layout.setVisible(true);
-                }
+            toolbox.storeToShouninDataCb  = function(){
+                var askEditData = {
+                    ask: askEd.string,
+                    ans0:ans0Ed.string,
+                    ans1:ans1Ed.string,
+                    ans0GotoLabel:ans0GotoEd.string,
+                    ans1GotoLabel:ans1GotoEd.string,
+                };
+                ShouninCoreIns.setAskEditData(askEditData);
             };
         };
         self.askBox = new AskBox(self);
@@ -1915,72 +2004,20 @@ var MainLayer = cc.Layer.extend({
         var LabelBox = function(parentUI)
         {
             var self = this;
+            var toolbox = new ToolBox(parentUI);
 
-            var layout = ccui.Layout.create();
+            var labelNameEd  = toolbox.makeEditBox("行き先ラベル名",4);
 
-            var boxW = 240;
-            var boxH = 320;
-
-            layout.setPosition(560, 100);
-            layout.setContentSize(boxW, boxH);
-            layout.setBackGroundImage(res.frame01_png);
-            layout.setBackGroundImageScale9Enabled(true);
-            layout.setClippingEnabled(true);
-            parentUI.addChild(layout);
-
-            var posY = boxH-32;
-            var makeEditBox = function(labelText,marginY)
-            {
-                var labelW = 32;
-                var label = cc.LabelTTF.create(labelText, "Arial", 12);
-                label.setPosition(cc.p(label.getContentSize().width/2, posY));
-                label.setColor(new cc.Color(0,0,0,255));
-                layout.addChild(label, 2);
-
-                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
-                editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2+labelW, posY));
-                editBox.setDelegate(self);
-                layout.addChild(editBox);
-                posY -= 28+marginY;
-                return editBox;
+            toolbox.isNowEditCb = function(){
+                return ShouninCoreIns.isLabelEdit();
             };
-            var labelNameEd  = makeEditBox("行き先ラベル名",4);
-            layout.setVisible(false);
-
-            self.shouninCoreUpdate = function()
-            {
-                if(ShouninCoreIns.isLabelEdit())
-                {
-                    // エディット中
-                    var labelEditData = ShouninCoreIns.getLabelEditData();
-                    labelNameEd.string = labelEditData;
-                    layout.setVisible(true);
-                }
-                else{
-                    layout.setVisible(false);
-                }
+            toolbox.loadFromShouninDataCb = function(){
+                var labelEditData = ShouninCoreIns.getLabelEditData();
+                labelNameEd.string = labelEditData;
             };
-            ShouninCoreIns.addListener(self);
-
-            self.editBoxTextChanged = function(sender,text)
-            {
-                if(ShouninCoreIns.isLabelEdit())
-                {
-                    // エディット中
-                    ShouninCoreIns.setLabelEditData(labelNameEd.string);
-                    layout.setVisible(true);
-                }
-            };
-            self.editBoxReturn = function(sender)
-            {
-                if(ShouninCoreIns.isLabelEdit())
-                {
-                    // エディット中
-                    ShouninCoreIns.setLabelEditData(labelNameEd.string);
-                    layout.setVisible(true);
-                }
+            toolbox.storeToShouninDataCb  = function(){
+                ShouninCoreIns.setLabelEditData(labelNameEd.string);
+                layout.setVisible(true);
             };
         };
         self.labelBox = new LabelBox(self);
@@ -1988,72 +2025,20 @@ var MainLayer = cc.Layer.extend({
         var GotoLabelBox = function(parentUI)
         {
             var self = this;
+            var toolbox = new ToolBox(parentUI);
 
-            var layout = ccui.Layout.create();
+            var labelNameEd  = toolbox.makeEditBox("Goto行き先ラベル名",4);
 
-            var boxW = 240;
-            var boxH = 320;
-
-            layout.setPosition(560, 100);
-            layout.setContentSize(boxW, boxH);
-            layout.setBackGroundImage(res.frame01_png);
-            layout.setBackGroundImageScale9Enabled(true);
-            layout.setClippingEnabled(true);
-            parentUI.addChild(layout);
-
-            var posY = boxH-32;
-            var makeEditBox = function(labelText,marginY)
-            {
-                var labelW = 32;
-                var label = cc.LabelTTF.create(labelText, "Arial", 12);
-                label.setPosition(cc.p(label.getContentSize().width/2, posY));
-                label.setColor(new cc.Color(0,0,0,255));
-                layout.addChild(label, 2);
-
-                var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
-                editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2+labelW, posY));
-                editBox.setDelegate(self);
-                layout.addChild(editBox);
-                posY -= 28+marginY;
-                return editBox;
+            toolbox.isNowEditCb = function(){
+                return ShouninCoreIns.isGotoLabelEdit();
             };
-            var labelNameEd  = makeEditBox("Goto行き先ラベル名",4);
-            layout.setVisible(false);
-
-            self.shouninCoreUpdate = function()
-            {
-                if(ShouninCoreIns.isGotoLabelEdit())
-                {
-                    // エディット中
-                    var labelEditData = ShouninCoreIns.getGotoLabelEditData();
-                    labelNameEd.string = labelEditData;
-                    layout.setVisible(true);
-                }
-                else{
-                    layout.setVisible(false);
-                }
+            toolbox.loadFromShouninDataCb = function(){
+                var labelEditData = ShouninCoreIns.getGotoLabelEditData();
+                labelNameEd.string = labelEditData;
             };
-            ShouninCoreIns.addListener(self);
-
-            self.editBoxTextChanged = function(sender,text)
-            {
-                if(ShouninCoreIns.isGotoLabelEdit())
-                {
-                    // エディット中
-                    ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
-                    layout.setVisible(true);
-                }
-            };
-            self.editBoxReturn = function(sender)
-            {
-                if(ShouninCoreIns.isGotoLabelEdit())
-                {
-                    // エディット中
-                    ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
-                    layout.setVisible(true);
-                }
+            toolbox.storeToShouninDataCb  = function(){
+                ShouninCoreIns.setGotoLabelEditData(labelNameEd.string);
+                layout.setVisible(true);
             };
         };
         self.gotoLabelBox = new GotoLabelBox(self);
@@ -2106,36 +2091,18 @@ var BlockLayer = cc.Layer.extend({
         this._super();
         var self = this;
 
-        
-        var workSpace = new CommandBlockWorkSpace(self, ShouninCoreIns.cmdBlkMan);
-        ShouninCoreIns.workSpaceMain = workSpace;
-
         var size = cc.director.getWinSize();
 
-        var frameX = 0;
-        var frameY = size.height/4;
-        var frameW = 160;
-        var frameH = size.height/2;
-        
-        workSpace.setPosition(frameX,frameY);
-        workSpace.setSize    (frameW,frameH);
-
-        /*
-        var layout = ccui.Layout.create();
-        layout.setPosition   (frameX,frameY);
-        layout.setContentSize(frameW,frameH);
-        //layout.setAnchorPoint(0.0,0.0);
-        layout.setBackGroundImage(res.frame01_png);
-        layout.setBackGroundImageScale9Enabled(true);
-        layout.setClippingEnabled(true);
-        this.addChild(layout);
-        */
+        // メインのワークスペース
+        ShouninCoreIns.workSpaceMain = new CommandBlockWorkSpace(self, ShouninCoreIns.cmdBlkMan);
+        ShouninCoreIns.workSpaceMain.setPosition(4,120);
+        ShouninCoreIns.workSpaceMain.setSize    (200,260);
 
         // ゴミ箱ボタン
         var dustboxBtn = ccui.Button.create();
         dustboxBtn.setTouchEnabled(true);
         dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
-        dustboxBtn.setPosition(cc.p(32,32+48));
+        dustboxBtn.setPosition(cc.p(220,120+32));
         dustboxBtn.addTouchEventListener(function(button,type)
         {
             var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
@@ -2144,66 +2111,71 @@ var BlockLayer = cc.Layer.extend({
                 ShouninCoreIns.removeCmdBlk(curCmdBlk);
             }
             //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
-            workSpace.updateLayout();
+            ShouninCoreIns.workSpaceMain.updateLayout();
         });        
-        self.addChild(dustboxBtn);
+        self.addChild(dustboxBtn,1);
 
-        //
-        var blockBtnLo = ccui.Layout.create();
-        blockBtnLo.setPosition   (160,180);
-        blockBtnLo.setContentSize(90+24,32*5);
-        blockBtnLo.setBackGroundImage(res.frame01_png);
-        blockBtnLo.setBackGroundImageScale9Enabled(true);
-        blockBtnLo.setClippingEnabled(true);
-        this.addChild(blockBtnLo);
-
-        var nowY = blockBtnLo.getContentSize().height-16;
-        var makeAddCommandBlockBtn = function(text,worldBlkId)
+        // ブロック追加ボタン
+        var BlockBox = function(parentUI,x,y,w,h)
         {
-            var btn = ccui.Button.create();
-            btn.setTouchEnabled(true);
-            btn.setScale9Enabled(true);
-            btn.loadTextures(res.cmdblock_frame01_png, null, null);
-            btn.setTitleText(text);
-            btn.setPosition(cc.p(90/2,nowY));
-            btn.setSize(cc.size(90, 32));
-            btn.addTouchEventListener(function(button,type){
-                if(type==0){
-                    var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock(worldBlkId);
-                    workSpace.addCommandLumpBlock( cmdBlk );
-                    workSpace.updateLayout();
+            var self = this;
+
+            var layout = ccui.ScrollView.create();
+            layout.setBackGroundImage(res.workspace_frame_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            layout.setDirection(ccui.ScrollView.DIR_VERTICAL);
+            layout.setTouchEnabled(true);
+            layout.setBounceEnabled(true);
+            layout.setPosition   (x,y);
+            layout.setContentSize(w,h);
+            parentUI.addChild(layout);
+
+            var nowY = 0;//layout.getContentSize().height-16;
+            var nowH = 0;
+            var btnLst=[];
+            var blkW = 90;
+            var blkH = 32;
+            var nowXIdx=0;
+
+            self.makeAddCommandBlockBtn = function(text,worldBlkId)
+            {
+                var btn = ccui.Button.create();
+                btn.setTouchEnabled(true);
+                btn.setScale9Enabled(true);
+                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.setTitleText(text);
+                btn.setPosition(cc.p(8+blkW/2 + nowXIdx*(blkW+4), nowY + blkH/2));
+                btn.setSize(cc.size(blkW, blkH));
+                btn.addTouchEventListener(function(button,type){
+                    if(type==0){
+                        var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock(worldBlkId);
+                        ShouninCoreIns.workSpaceMain.addCommandLumpBlock( cmdBlk );
+                        ShouninCoreIns.workSpaceMain.updateLayout();
+                    }
+                });        
+                layout.addChild(btn);
+                if(nowXIdx % 2==1){
+                    nowY += 32;
+                    nowH += 32;
                 }
-            });        
-            blockBtnLo.addChild(btn);
-            nowY -= 32;
+                nowXIdx = (nowXIdx+1) % 2;
+                layout.setInnerContainerSize(cc.size(w,nowH));
+                $.each(btnLst,function(k,btn){
+                    var p = btn.getPosition();
+                    //p.y -= 32;
+                    btn.setPosition(p);
+                });
+                btnLst.push(btn);
+            };
         };
-        makeAddCommandBlockBtn("会話","talk@shonin");
-        makeAddCommandBlockBtn("ポーズ","pose@shonin");
-        makeAddCommandBlockBtn("質問","ask@shonin");
-        makeAddCommandBlockBtn("行き先ラベル","label@shonin");
-        makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
+        self.blockBox = new BlockBox(self,4, 4, 250, 110);
 
-/*
-        makeAddCommandBlockBtn(128,size.height-96,"振り向き",function(button,type){
-            if(type==0)
-            {
-                var blk = new CommandBlock();
-                blk.setLabel("振り向き");            
-                workSpace.addCommandBlock(blk);
-                workSpace.updateLayout();
-            }
-        });
-        makeAddCommandBlockBtn(128,size.height-128,"Gotoラベル",function(button,type){
-            if(type==0)
-            {
-                var blk = new CommandBlock();
-                blk.setLabel("Gotoラベル");            
-                workSpace.addCommandBlock(blk);
-                workSpace.updateLayout();
-            }
-        });
-*/
-
+        self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
+        self.blockBox.makeAddCommandBlockBtn("行き先ラベル","label@shonin");
+        self.blockBox.makeAddCommandBlockBtn("質問","ask@shonin");
+        self.blockBox.makeAddCommandBlockBtn("ポーズ","pose@shonin");
+        self.blockBox.makeAddCommandBlockBtn("会話","talk@shonin");
         return true;
     },
 });
@@ -2467,6 +2439,8 @@ var PepperLayer = cc.Layer.extend({
                 return dfd;
             };
         };
+
+        // ロードと描画ループ
         self.pepperModel = new PepperModel();
         self.pepperModel.loadDfd()
         .then(function(){
@@ -2475,26 +2449,29 @@ var PepperLayer = cc.Layer.extend({
             layerSetup();
         });
 
+        // キャンバス周り
         var container, stats;
         var camera, scene, renderer, objects;
         var particleLight;
         var dae;
+        self.canvasW = 300;
+        self.canvasH = 320;
+        self.containerElm = null;
         function init() {
-            var containerElm = $("#threejsCanvas");
-            containerElm.css("position","absolute");
-            containerElm.css("zIndex","998");
-            container = containerElm[0];
+            self.containerElm = $("#threejsCanvas");
+            self.containerElm.css("position","absolute");
+            self.containerElm.css("zIndex","998");
+            container = self.containerElm[0];
             
-            var width=300, height=320;
             var resize = function(){
-                var posx = ($(window).width()-width)/2;
-                containerElm.css("marginLeft",""+posx+"px");
-                containerElm.css("marginTop", "50px");
+                var posx = ($(window).width()-self.canvasW)/2;
+                self.containerElm.css("marginLeft",""+posx+"px");
+                self.containerElm.css("marginTop", "50px");
             };
             $(window).on('load resize', resize);
             resize();
 
-            camera = new THREE.PerspectiveCamera( 25, width / height, 0.1, 2000 );
+            camera = new THREE.PerspectiveCamera( 25, self.canvasW / self.canvasH, 0.1, 2000 );
             camera.position.set( 2, 0.0, 0 );
 
             scene = new THREE.Scene();
@@ -2521,19 +2498,22 @@ var PepperLayer = cc.Layer.extend({
 
             //renderer = new THREE.CanvasRenderer();
             renderer = new THREE.WebGLRenderer({ alpha: true });
-            renderer.setSize(width, height);
-            renderer.setClearColor( 0x0000FF, 1 );
+            renderer.setClearColor( 0x401010, 1 );
 //			renderer.setClearColor( 0xFFFF00, 0.5  ); // the default
             renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize(self.canvasW, self.canvasH);
             container.appendChild( renderer.domElement );
 
+            //
             stats = new Stats();
             stats.domElement.style.position = 'absolute';
             stats.domElement.style.top = '0px';
             container.appendChild( stats.domElement );
 
-            camera.aspect = renderer.getSize().width / renderer.getSize().height;
-            camera.updateProjectionMatrix();
+            //camera.aspect = renderer.getSize().width / renderer.getSize().height;
+            //camera.updateProjectionMatrix();
+
+            self.setCanvasFullSize();
         }
         function animate() {
             requestAnimationFrame( animate );
@@ -2559,8 +2539,6 @@ var PepperLayer = cc.Layer.extend({
             //self.pepperModel.setJointAngle("LElbowRoll",Math.sin( timer )*100);
             //self.pepperModel.setJointAngle("LWristYaw",Math.sin( timer )*100);
 
-            camera.lookAt( scene.position );
-
             particleLight.position.x = Math.sin( timer * 4 ) * 3009;
             particleLight.position.y = Math.cos( timer * 5 ) * 4000;
             particleLight.position.z = Math.cos( timer * 4 ) * 3009;
@@ -2569,8 +2547,32 @@ var PepperLayer = cc.Layer.extend({
 
             renderer.render( scene, camera );
         }
+        //外部からのキャンバス操作
+        self.setCanvasSize = function(w,h){
+            self.canvasW = w;
+            self.canvasH = h;            
+            renderer.setSize(self.canvasW, self.canvasH);
+            camera.aspect = renderer.getSize().width / renderer.getSize().height;
+            camera.updateProjectionMatrix();
+        };
+        self.setCanvasFullSize = function(){
+            self.setCanvasSize(300,400);
+            camera.position.set( 2.5, -0.109, 0 );
+            camera.lookAt( new THREE.Vector3(0,-0.109,0) );
+        };
+        self.setCanvasMiniSize = function(){
+            self.setCanvasSize(300,280);
+            camera.position.set( 2, 0.0, 0 );
+            camera.lookAt( new THREE.Vector3(0,0,0) );
+        };
+        self.setCanvasVisible = function(flag)
+        {
+            self.containerElm.css("visibility",flag?"visible":"hidden");
+        };
+
         function layerSetup()
         {
+            // ポーズボックス
             var Slider = function(parentUI,sliderBoxW,sliderBoxH,listener)
             {
                 var self = this;
@@ -2646,9 +2648,9 @@ var PepperLayer = cc.Layer.extend({
                 var boxW = 240;
                 var boxH = 320;
 
-                layout.setPosition(560, 100);
+                layout.setPosition(560, 80);
                 layout.setContentSize(boxW, boxH);
-                layout.setBackGroundImage(res.frame01_png);
+                layout.setBackGroundImage(res.frame02_png);
                 layout.setBackGroundImageScale9Enabled(true);
                 layout.setClippingEnabled(true);
                 pepperLayer.addChild(layout);
@@ -2722,6 +2724,8 @@ var PepperLayer = cc.Layer.extend({
                 ShouninCoreIns.addListener(self);
             };
             self.poseBox = new PoseBox(self);
+
+            // 表示の
         }
         return true;
     },
@@ -2763,7 +2767,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         {
             if(0==type)
             {
-                self.setVisible(false);
+                self.closeCampo();
             }
         });
         baseLayout.addChild(btn,2);
@@ -2826,6 +2830,16 @@ var ShouninCampoLayer = cc.Layer.extend({
         };
         self.setVisible(false);
         console.log("ShouninCampoLayer ctor..finish!");
+
+        self.openCampo = function(){
+            self.updateShouninList();
+            self.setVisible(true);
+            ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
+        };
+        self.closeCampo = function(){
+            self.setVisible(false);
+            ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
+        };
 
         return true;
     },
