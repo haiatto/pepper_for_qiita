@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<package uuid="pepper_block_app-fccb10">
+<package version="0.0.0" uuid="pepper_shounin_app-90e4ae">
  <names>
-  <name lang="en_US">pepper_block_app</name>
+  <name lang="en_US">pepper_shounin_app</name>
  </names>
  <supportedLanguages>
   <language>en_US</language>
@@ -11,7 +11,11 @@
  </descriptionLanguages>
  <contents>
   <behaviorContent path="behavior_1">
+   <userRequestable/>
    <nature>interactive</nature>
+   <triggerSentences/>
+   <loadingResponses/>
+   <autonomous/>
    <permissions/>
   </behaviorContent>
  </contents>

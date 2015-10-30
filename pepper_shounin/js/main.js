@@ -17,7 +17,7 @@ function getUrlParameter(sParam)
     }
 }
 $(function(){
-    if(!getUrlParameter("lunchPepper"))
+    if(!getUrlParameter("lunchPepper") && !document.shouninConfig.lunchPepper)
     {
         $(window).on('beforeunload', function() {
             return 'このまま移動しますか？';
@@ -225,6 +225,10 @@ function NaoQiCore()
         console.log("lunchPepper mode on!");
         self.lunchPepper = true;
     }
+    if(document.shouninConfig.lunchPepper)
+    {
+        self.lunchPepper = true;
+    }
 
     self.serviceCache = {};
     
@@ -326,7 +330,9 @@ function NaoQiCore()
         .then(
             function(alTb)
             {
-                alTb.cleanWebview()
+                //alTb.cleanWebview()
+                alTb.resetTablet()
+                //alTb.wakeUp()
                 .then(
                     function(){
                     },
@@ -848,7 +854,11 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
     self.loadFromJsonTable = function(jsonTbl)
     {
+        var collectAllCmdBlks = [];
         traverseAllCmdBlock_(function(cmdBlk){
+            collectAllCmdBlks.push(cmdBlk);
+        });
+        $.each(collectAllCmdBlks,function(k,cmdBlk){
             self.cmdBlkMan.destryCommandBlock(cmdBlk);
         });
         self.cmdBlockLumpList = [];
@@ -1756,14 +1766,14 @@ var MainLayer = cc.Layer.extend({
         self.testMenu = new BtnBarMenu(x, size.height);
         self.addChild(self.testMenu.layout);
         self.testMenu.addBtn("Tablet",function(){
-            NaoQiCoreIns.setIpAddress("192.168.3.42");
+            NaoQiCoreIns.setIpAddress("192.168.3.37");
             NaoQiCoreIns.connect()
             .then(
                 function(){
                     NaoQiCoreIns.showTabletUrl(
                         //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
                         //"http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
-                        "http://192.168.3.168:8080/pepper_shounin/?lunchPepper=true"
+                        "http://192.168.3.127:8080/pepper_shounin/?lunchPepper=true"
                         //"http://google.co.jp/"
                     ).then(function(){
                         //NaoQiCoreIns.showTabletUrl(
@@ -1782,7 +1792,7 @@ var MainLayer = cc.Layer.extend({
             );
         });
         self.testMenu.addBtn("KillTable",function(){
-            NaoQiCoreIns.setIpAddress("192.168.11.19");
+            NaoQiCoreIns.setIpAddress("192.168.3.37");
             NaoQiCoreIns.connect()
             .then(
                 function(){
@@ -1925,16 +1935,17 @@ var MainLayer = cc.Layer.extend({
             self.shouninCoreUpdate = function()
             {
                 var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
+
                 if(ShouninCoreIns.isTalkTextEdit()){
                     self.setTalkText( ShouninCoreIns.getTalkText() );
                     layout.setVisible(true);
                     //
-                    pepperLayer.setCanvasMiniSize();
+                    if(pepperLayer)pepperLayer.setCanvasMiniSize();
                 }
                 else{
                     layout.setVisible(false);
                     //
-                    pepperLayer.setCanvasFullSize();
+                    if(pepperLayer)pepperLayer.setCanvasFullSize();
                 }
             };
             self.editBoxTextChanged = function(sender,text)
@@ -2552,6 +2563,7 @@ var PepperLayer = cc.Layer.extend({
         }
         //外部からのキャンバス操作
         self.setCanvasSize = function(w,h){
+            if(!renderer)return;
             self.canvasW = w;
             self.canvasH = h;            
             renderer.setSize(self.canvasW, self.canvasH);
@@ -2559,17 +2571,20 @@ var PepperLayer = cc.Layer.extend({
             camera.updateProjectionMatrix();
         };
         self.setCanvasFullSize = function(){
+            if(!renderer)return;
             self.setCanvasSize(300,400);
             camera.position.set( 2.5, -0.109, 0 );
             camera.lookAt( new THREE.Vector3(0,-0.109,0) );
         };
         self.setCanvasMiniSize = function(){
+            if(!renderer)return;
             self.setCanvasSize(300,280);
             camera.position.set( 2, 0.0, 0 );
             camera.lookAt( new THREE.Vector3(0,0,0) );
         };
         self.setCanvasVisible = function(flag)
         {
+            if(!renderer)return;
             self.containerElm.css("visibility",flag?"visible":"hidden");
         };
 
@@ -2837,11 +2852,15 @@ var ShouninCampoLayer = cc.Layer.extend({
         self.openCampo = function(){
             self.updateShouninList();
             self.setVisible(true);
-            ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
+            if(!NaoQiCoreIns.lunchPepper){
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
+            }
         };
         self.closeCampo = function(){
             self.setVisible(false);
-            ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
+            if(!NaoQiCoreIns.lunchPepper){
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
+            }
         };
 
         return true;
@@ -2901,9 +2920,11 @@ var MainScene = cc.Scene.extend({
       
       self.mainLayer = new MainLayer();
       this.addChild(self.mainLayer);
-
-      self.pepperLayer = new PepperLayer();
-      this.addChild(self.pepperLayer);
+        
+      if(!NaoQiCoreIns.lunchPepper){
+          self.pepperLayer = new PepperLayer();
+          this.addChild(self.pepperLayer);
+      }
 
       self.blockLayer = new BlockLayer();
       this.addChild(self.blockLayer);

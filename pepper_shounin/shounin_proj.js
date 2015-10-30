@@ -1,0 +1,4 @@
+ document.shouninConfig = 
+ {
+    lunchPepper: false,
+ };
