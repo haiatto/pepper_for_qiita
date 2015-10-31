@@ -30,6 +30,7 @@ $(function(){
 var res = {
     frame01_png : "cocos_res/frame01.png",
     frame02_png : "cocos_res/frame02.png",
+    frame03_png : "cocos_res/frame03.png",
 
     workspace_frame_png : "cocos_res/workspace_frame.png",
     workspace_linehead_png : "cocos_res/workspace_linehead.png",
@@ -41,6 +42,8 @@ var res = {
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
     cmdblock_frame_select01_png : "cocos_res/cmdblock_frame_select01.png",
     cmdblock_frame_execute01_png : "cocos_res/cmdblock_frame_execute01.png",
+
+    ShoukonIn_png: "cocos_res/ShoukonIn.png",
 
     icon_dustbox_png: "cocos_res/icon_dustbox.png",
 
@@ -597,6 +600,13 @@ function NaoQiCore()
             dfdItr.then(function(){
                 return alTb.showWebview();
             })
+//            .then(function(){
+//                self.isShowTablet = true;
+//                return alTb.reloadPage(false);
+//            })
+//            .then(function(){
+//                return alTb.setOnTouchWebviewScaleFactor(1.0);
+//            })
             .then(function(){
                 self.isShowTablet = true;
                 return alTb.loadUrl(url);
@@ -735,21 +745,22 @@ var CommandBlock = function(blkIns)
         var texSize = texture.getContentSize();
         return new cc.SpriteFrame(texture, cc.rect(0,0,texSize.width,texSize.height));
     };
-    var bgFrame    = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
-    var bgFrameSel = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
+    var bgFrame     = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
+    var bgFrameSel  = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
     var bgFrameExec = createSpriteFrameByFilePath_( res.cmdblock_frame_execute01_png );
 
     self.bg       = cc.Scale9Sprite.create(bgFrame);
     self.label    = cc.LabelTTF.create("", "Arial", 20);
     self.parentUI = null;
+    self.bg.addChild(self.label);
 
     self.destry = function()
     {
         self.blkIns   = null;
         self.setParentUI(null);
         //これでいいのか後で調べる…html5版だと破棄要らないとかあるけど…domだから？さらにテクスチャ等リソースは全部キャッシュ式だから？
-        self.bg.removeFromParentAndCleanup(true);
-        self.label.removeFromParentAndCleanup(true);
+        self.bg.   removeFromParentAndCleanup(true);
+        //self.label.removeFromParentAndCleanup(true);
     };
 
     var eventListener = null;
@@ -765,42 +776,7 @@ var CommandBlock = function(blkIns)
             cc.eventManager.removeListener(eventListener);
         }
     };
-/*
-ワークスペース側でやることにします
-
-    // イベントリスナー
-    var click = function()
-    {
-        //エディタ開くとかカレントにする
-        ShouninCoreIns.setCurCmdBlk(self); 
-        //self.blkIns.deferred();
-    }
-    cc.eventManager.addListener({
-        event: cc.EventListener.TOUCH_ONE_BY_ONE,
-        onTouchBegan: function(touch, event) {
-            if (cc.rectContainsPoint(self.bg.getBoundingBoxToWorld(), touch.getLocation())) {
-                click();
-                event.stopPropagation();
-                return true;
-            }
-            return false;
-        },
-        onTouchMoved: function(touch, event) {
-            var delta = touch.getDelta();
-            var pos = self.bg.getPosition();
-            pos.x += delta.x;
-            pos.y += delta.y;
-            self.setPosition(pos.x,pos.y);
-            event.stopPropagation();
-            return true;
-        },
-        onTouchEnded: function(touch, event) 
-        {
-        },
-    }, self.bg);
-*/
-
-    //
+    //※イベント周りは、ワークスペース側で一括管理にしました。ここにはないです。
     self.setParentUI = function(parentUI)
     {
         if(self.parentUI == parentUI){
@@ -808,12 +784,12 @@ var CommandBlock = function(blkIns)
         }
         if(self.parentUI){
             self.parentUI.removeChild(self.bg);
-            self.parentUI.removeChild(self.label, 1);
+            //self.parentUI.removeChild(self.label, 1);
         }
         self.parentUI = parentUI;
         if(self.parentUI){
             self.parentUI.addChild(self.bg);
-            self.parentUI.addChild(self.label, 1);
+            //self.parentUI.addChild(self.label, 1);
         }
     }
     self.getParentUI = function(){
@@ -823,45 +799,100 @@ var CommandBlock = function(blkIns)
 
     self.setPosition = function(x,y)
     {
-        self.bg   .setPosition   (x,y);
-        self.label.setPosition   (x,y);
+        var ofsX=0;
+        if(self.getBlockWorldId()=="label@shonin"){
+            ofsX = -6;
+        }
+        if(self.getBlockWorldId()=="gotoLabel@shonin"){
+            ofsX = +6;
+        }
+        self.bg.setPosition   (x+ofsX,y);
+        self.updateLabel();
     };
-
-    self.setSize = function(w,h)
+    self.getPosition = function()
     {
-        self.bg.setContentSize(cc.size(w,h));
+        var ofsX=0;
+        if(self.getBlockWorldId()=="label@shonin"){
+            ofsX = -6;
+        }
+        if(self.getBlockWorldId()=="gotoLabel@shonin"){
+            ofsX = +6;
+        }
+        var p = self.bg.getPosition();
+        p.x -= ofsX;
+        return p;
     };
 
+    // 外が操作
     self.getSize = function(){
         return self.bg.getContentSize();
-    };
-
-    self.setLabel = function(text){
-        self.label.setString(text);
-        var lblSize = self.label.getContentSize();
-        self.setSize(Math.max(lblSize.width, 64),
-                     Math.max(lblSize.height,32));
     };
 
     self.setCurrentVisial = function(){
         var size = self.bg.getContentSize();
         self.bg.setSpriteFrame(bgFrameSel);
         self.bg.setContentSize(size);
+        self.bg.addChild(self.label);
+        self.updateLabel();
     };
     self.setDefaultVisial = function(){
         var size = self.bg.getContentSize();
         self.bg.setSpriteFrame(bgFrame);
         self.bg.setContentSize(size);
+        self.bg.addChild(self.label);
+        self.updateLabel();
     };
     self.setExecuteVisial = function(){
         var size = self.bg.getContentSize();
         self.bg.setSpriteFrame(bgFrameExec);
         self.bg.setContentSize(size);
+        self.bg.addChild(self.label);
+        self.updateLabel();
     };    
 
-    self.setLabel( visualTempl.disp_name );
+    // 基本は中で操作
+    self.updateLabel = function(){
+        // 内容のテキスト
+        var text = visualTempl.disp_name;
+        if(self.getBlockWorldId()=="label@shonin"){
+            var data = self.getValueInData("labelName")||{string:""};
+            text = "ラベル:" + data.string;
+        }
+        if(self.getBlockWorldId()=="gotoLabel@shonin"){
+            var data = self.getValueInData("labelName")||{string:""};
+            text = "Goto:" + data.string;
+        }
+        if(self.getBlockWorldId()=="talk@shonin"){
+            var data = self.getValueInData("talkLabel0")||{string:""};
+            var previewText = data.string;
+            text = "会話:" + previewText.substring(0,5)+"…";
+        }
+        self.label.setString(text);
+        // サイズなどのレイアウト
+        var lblSize = self.label.getContentSize();
+        var minW=90;
+        var minH=32;
+        if(self.getBlockWorldId()=="label@shonin"){
+            minW = 150;
+        }
+        self.bg.setContentSize(cc.size(
+            Math.max(lblSize.width+6, minW),
+            Math.max(lblSize.height,minH))
+        );
+        //
+        var bgSize    = self.bg.getContentSize();
+        var labelSize = self.label.getContentSize();
+        var px = labelSize.width /2 + (bgSize.width-labelSize.width)/2;
+        var py = labelSize.height/2 + (bgSize.height-labelSize.height)/2;
+        if(self.getBlockWorldId()=="label@shonin"||
+           self.getBlockWorldId()=="gotoLabel@shonin"){
+            px=labelSize.width /2+6;//左寄せ
+        }
+        px=labelSize.width /2+6;//左寄せ
+        self.label.setPosition(cc.p(px,py));
+    };
     self.setPosition(0,0);
-    self.setSize(90,32);
+    self.updateLabel();
 };
 
 
@@ -1073,6 +1104,12 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     return true;
                 }
             });
+            if(!isOk){
+                if (cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())) 
+                {
+                    ShouninCoreIns.setCurCmdBlk(null); 
+                }
+            }
             return isOk;
         },
         onTouchMoved: function(touch, event) {
@@ -1080,14 +1117,14 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             {
                 //ブロックを移動します
                 var delta = touch.getDelta();
-                var pos = tgtCmdBlk_.bg.getPosition();
+                var pos = tgtCmdBlk_.getPosition();
                 pos.x += delta.x;
                 pos.y += delta.y;
                 tgtCmdBlk_.setPosition(pos.x,pos.y);
                 event.stopPropagation();
                 // 付加的な操作をします
                 if(overrapCmdBlk_){
-                    var p = overrapCmdBlk_.bg.getPosition();
+                    var p = overrapCmdBlk_.getPosition();
                     overrapCmdBlk_.setPosition(p.x+5, p.y - 5*overrapDir_);
                     overrapCmdBlk_ = null;
                     overrapDir_    = 0;
@@ -1112,7 +1149,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     }
                 });
                 if(overrapCmdBlk_){
-                    var p = overrapCmdBlk_.bg.getPosition();
+                    var p = overrapCmdBlk_.getPosition();
                     overrapCmdBlk_.setPosition(p.x-5, p.y + 5*overrapDir_);
                 }
                 return true;
@@ -1143,7 +1180,6 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     var idx = self.cmdBlockLumpList.indexOf(overrapCmdBlk_);
                     if(idx>=0){
                         self.cmdBlockLumpList[idx] = tgtCmdBlk_;
-                        return true;
                     }
                 }
             }
@@ -1520,14 +1556,12 @@ var ShouninCore = function(){
                 var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blockIns);
                 if(self.curCmdBlk == cmdBlk)
                 {
-                    isClearCurrent = true;
+                    self.setCurCmdBlk(null);
+                    //isClearCurrent = true;
                 }
                 self.cmdBlkMan.destryCommandBlock(cmdBlk);
             },
         });
-        if(isClearCurrent){
-            self.setCurCmdBlk(null);
-        }
         
         // ワークスペースの塊の先頭リスト内に居た場合はクリアします
         if(self.workSpaceMain.removeCommandLumpBlock(removeCmdBlkTop))
@@ -1958,10 +1992,16 @@ var MainLayer = cc.Layer.extend({
 
         var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
         //Test
+        var ip = "192.168.3.37";
         self.testMenu = new BtnBarMenu(x, size.height);
         self.addChild(self.testMenu.layout);
+        self.testMenu.addBtn("Connect",function(){
+            NaoQiCoreIns.setIpAddress(ip);
+            NaoQiCoreIns.connect();
+        });
+        self.addChild(self.testMenu.layout);
         self.testMenu.addBtn("Tablet",function(){
-            NaoQiCoreIns.setIpAddress("192.168.3.37");
+            NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
             .then(
                 function(){
@@ -1987,7 +2027,7 @@ var MainLayer = cc.Layer.extend({
             );
         });
         self.testMenu.addBtn("KillTable",function(){
-            NaoQiCoreIns.setIpAddress("192.168.3.37");
+            NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
             .then(
                 function(){
@@ -2020,16 +2060,21 @@ var MainLayer = cc.Layer.extend({
             var posY = boxH-32;
             self.makeEditBox = function(labelText,marginY)
             {
-                var labelW = 32;
-                var label = cc.LabelTTF.create(labelText, "Arial", 12);
-                label.setPosition(cc.p(label.getContentSize().width/2, posY));
+                var labelMinW = 32;
+                var label     = cc.LabelTTF.create(labelText, "Arial", 12);
+                var labelSize = label.getContentSize();
+                label.setPosition(cc.p(labelSize.width/2, posY));
                 label.setColor(new cc.Color(0,0,0,255));
                 layout.addChild(label, 2);
 
+                var labelNowW = Math.max(labelSize.width,labelMinW);
+                var marginW   = 4;
+                var editBoxW  = boxW - (labelNowW+marginW);
+
                 var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
+                var editBox = cc.EditBox.create(cc.size(editBoxW, 28), bg);
                 editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2+labelW, posY));
+                editBox.setPosition(cc.p(labelNowW + editBoxW/2, posY));
                 editBox.setDelegate(self);
                 layout.addChild(editBox);
                 posY -= 28+marginY;
@@ -2953,8 +2998,8 @@ var ShouninCampoLayer = cc.Layer.extend({
         var baseLayout = ccui.Layout.create();
         
         baseLayout.setPosition(cc.p(frameX,frameY));
-        baseLayout.setSize    (cc.size(frameW,frameH));
-        baseLayout.setBackGroundImage(res.frame01_png);
+        baseLayout.setSize    (cc.size(frameW,frameH+6));
+        baseLayout.setBackGroundImage(res.frame03_png);
         baseLayout.setBackGroundImageScale9Enabled(true);
         baseLayout.setClippingEnabled(true);
         self.addChild(baseLayout);
@@ -2966,7 +3011,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setScale9Enabled(true);
         btn.loadTextures(res.cmdblock_frame01_png, null, null);
         btn.setTitleText("閉じる");
-        btn.setPosition(cc.p(32,frameH-32));
+        btn.setPosition(cc.p(40,frameH-28));
         btn.setSize(cc.size(64,32));
         btn.addTouchEventListener(function(button,type)
         {
@@ -2982,10 +3027,10 @@ var ShouninCampoLayer = cc.Layer.extend({
         lv.setDirection(ccui.ScrollView.DIR_VERTICAL);
         lv.setTouchEnabled(true);
         lv.setBounceEnabled(true);
-        lv.setPosition(cc.p(0, 0));
-        lv.setContentSize(cc.size(frameW,frameH/6*5));
+        lv.setPosition(cc.p(8, 0));
+        lv.setContentSize(cc.size(frameW-16,frameH/6*5));
         lv.setInnerContainerSize(cc.size(frameW-16,frameH/6*5-16));
-        lv.setBackGroundImage(res.frame01_png);
+        lv.setBackGroundImage(res.frame02_png);
         lv.setBackGroundImageScale9Enabled(true);
         lv.setClippingEnabled(true);
         baseLayout.addChild(lv,0);
@@ -2993,7 +3038,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         var itemLo = ccui.Layout.create();
         itemLo.setPosition(cc.p(0, 0));
         itemLo.setContentSize(cc.size(frameW-16,64));
-        itemLo.setBackGroundImage(res.frame01_png);
+        itemLo.setBackGroundImage(res.frame02_png);
         itemLo.setBackGroundImageScale9Enabled(true);
         itemLo.setClippingEnabled(true);
 
@@ -3025,16 +3070,62 @@ var ShouninCampoLayer = cc.Layer.extend({
                         {
                             if(0==type)
                             {
-                                // 閉じて再生開始します
-                                self.closeCampo();
-                                ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl)
-                                ShouninCoreIns.setCurCmdBlk(null);
-                                ShouninCoreIns.execStartCurCmdBlk(function(){
-                                    //再生終了
-                                    if(NaoQiCoreIns.lunchPepper){
-                                        self.openCampo();
-                                    }
-                                });
+                                // 商魂注入アクション
+                                var sprite = cc.Sprite.create(res.ShoukonIn_png);
+                                sprite.setPosition(size.width / 2, size.height / 2);
+                                sprite.setScale(1.0);
+                                self.addChild(sprite, 10);
+
+                                sprite.setColor(cc.color(0,0,0));
+                                sprite.setScale(1.0);
+                                sprite.runAction(
+                                  cc.Sequence.create(
+                                    cc.TintTo.create(0.5, 255,255,255),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.05), 0.2),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.00), 0.2),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.05), 0.2)
+                                  )
+                                );
+                                var dfd = $.Deferred();
+                                if(NaoQiCoreIns.isConnected())
+                                {
+                                    var alRobotPosture;
+                                    NaoQiCoreIns.service("ALRobotPosture").then(function(ins){
+                                        alRobotPosture = ins;
+                                        return alRobotPosture.goToPosture("Crouch",1.0);
+                                    }).then(function(){
+                                        return NaoQiCoreIns.service("ALTextToSpeech");
+                                    }).then(function(tts){
+                                        tts.say("しょうーーーー　こんーーーー　ちゅうーーーーー　にゅー ー ーーーーーー　！");
+                                        return alRobotPosture.goToPosture("Stand",1.0);
+                                    }).then(function(){
+                                        dfd.resolve();
+                                    })
+                                    .fail(function(){
+                                        dfd.resolve();
+                                    })
+                                }else{
+                                    dfd.resolve();
+                                }
+                                setTimeout(function(){
+                                    dfd.then(function(){
+                                        self.removeChild(sprite, true);
+                                        // 閉じて再生開始します
+                                        self.closeCampo();
+                                        ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl)
+                                        ShouninCoreIns.setCurCmdBlk(null);
+                                        ShouninCoreIns.execStartCurCmdBlk(function(){
+                                            //再生終了
+                                            if(NaoQiCoreIns.lunchPepper){
+                                                self.openCampo();
+                                            }
+                                        });
+                                    });
+                                },7000);
+
                             }
                         });
                         var title = "" + no + ". ";
@@ -3138,8 +3229,7 @@ var MainScene = cc.Scene.extend({
   tabletLayer:null,
   onEnter:function () {
       this._super();
-      var self = this;
-      
+      var self = this;      
       var lunchPepper = NaoQiCoreIns.lunchPepper;
 
       console.log("mainScene onEnter!");
@@ -3218,6 +3308,12 @@ $(function(){
           ShouninCoreIns.mainScene = new MainScene();
           cc.director.runScene(ShouninCoreIns.mainScene);
       }, this);
+
+      if(NaoQiCoreIns.lunchPepper)
+      {
+          cc.view.resizeWithBrowserSize(true);
+          cc.view.setDesignResolutionSize(800, 450, cc.ResolutionPolicy.SHOW_ALL);
+      }
   };
   cc.game.run("gameCanvas");
 });
@@ -3303,7 +3399,37 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           
           if(NaoQiCoreIns.isConnected())
           {
-              dfd.resolve();
+              var names =[];
+              var angles=[];
+              var stiffness1=[];
+              var stiffness0=[];
+              $.each(valueDataTbl['poseData0'].poseData.jointAngles, function(name,angle){
+                  names. push(name);
+                  angles.push(THREE.Math.degToRad(angle));
+                  stiffness1.push(1.0);
+                  stiffness0.push(0.0);
+              });
+              var fractionMaxSpeed = 0.4;
+              var alMotion=null;
+              NaoQiCoreIns.service("ALMotion").then(function(ins){
+                  alMotion = ins;
+                  return alMotion.setStiffnesses(name, stiffness1);
+              }).then(function(){
+                  return alMotion.setAngles(names, angles, fractionMaxSpeed);
+              }).then(function(){
+                  var dfd = $.Deferred();
+                  setTimeout(function(){
+                      return  dfd.resolve();
+                  },1000);
+                  return dfd;
+              }).then(function(){
+                  return alMotion.setStiffnesses(name, stiffness0);
+              }).then(function(){
+                  dfd.resolve();
+              }).fail(function(err){
+                  console.log(err);
+                  dfd.reject();
+              });
           }
           else
           {

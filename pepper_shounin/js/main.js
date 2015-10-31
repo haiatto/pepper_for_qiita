@@ -30,6 +30,7 @@ $(function(){
 var res = {
     frame01_png : "cocos_res/frame01.png",
     frame02_png : "cocos_res/frame02.png",
+    frame03_png : "cocos_res/frame03.png",
 
     workspace_frame_png : "cocos_res/workspace_frame.png",
     workspace_linehead_png : "cocos_res/workspace_linehead.png",
@@ -41,6 +42,8 @@ var res = {
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
     cmdblock_frame_select01_png : "cocos_res/cmdblock_frame_select01.png",
     cmdblock_frame_execute01_png : "cocos_res/cmdblock_frame_execute01.png",
+
+    ShoukonIn_png: "cocos_res/ShoukonIn.png",
 
     icon_dustbox_png: "cocos_res/icon_dustbox.png",
 
@@ -597,6 +600,13 @@ function NaoQiCore()
             dfdItr.then(function(){
                 return alTb.showWebview();
             })
+//            .then(function(){
+//                self.isShowTablet = true;
+//                return alTb.reloadPage(false);
+//            })
+//            .then(function(){
+//                return alTb.setOnTouchWebviewScaleFactor(1.0);
+//            })
             .then(function(){
                 self.isShowTablet = true;
                 return alTb.loadUrl(url);
@@ -1982,10 +1992,16 @@ var MainLayer = cc.Layer.extend({
 
         var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
         //Test
+        var ip = "192.168.3.37";
         self.testMenu = new BtnBarMenu(x, size.height);
         self.addChild(self.testMenu.layout);
+        self.testMenu.addBtn("Connect",function(){
+            NaoQiCoreIns.setIpAddress(ip);
+            NaoQiCoreIns.connect();
+        });
+        self.addChild(self.testMenu.layout);
         self.testMenu.addBtn("Tablet",function(){
-            NaoQiCoreIns.setIpAddress("192.168.3.37");
+            NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
             .then(
                 function(){
@@ -2011,7 +2027,7 @@ var MainLayer = cc.Layer.extend({
             );
         });
         self.testMenu.addBtn("KillTable",function(){
-            NaoQiCoreIns.setIpAddress("192.168.3.37");
+            NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
             .then(
                 function(){
@@ -2982,8 +2998,8 @@ var ShouninCampoLayer = cc.Layer.extend({
         var baseLayout = ccui.Layout.create();
         
         baseLayout.setPosition(cc.p(frameX,frameY));
-        baseLayout.setSize    (cc.size(frameW,frameH));
-        baseLayout.setBackGroundImage(res.frame01_png);
+        baseLayout.setSize    (cc.size(frameW,frameH+6));
+        baseLayout.setBackGroundImage(res.frame03_png);
         baseLayout.setBackGroundImageScale9Enabled(true);
         baseLayout.setClippingEnabled(true);
         self.addChild(baseLayout);
@@ -2995,7 +3011,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setScale9Enabled(true);
         btn.loadTextures(res.cmdblock_frame01_png, null, null);
         btn.setTitleText("閉じる");
-        btn.setPosition(cc.p(32,frameH-32));
+        btn.setPosition(cc.p(40,frameH-28));
         btn.setSize(cc.size(64,32));
         btn.addTouchEventListener(function(button,type)
         {
@@ -3011,10 +3027,10 @@ var ShouninCampoLayer = cc.Layer.extend({
         lv.setDirection(ccui.ScrollView.DIR_VERTICAL);
         lv.setTouchEnabled(true);
         lv.setBounceEnabled(true);
-        lv.setPosition(cc.p(0, 0));
-        lv.setContentSize(cc.size(frameW,frameH/6*5));
+        lv.setPosition(cc.p(8, 0));
+        lv.setContentSize(cc.size(frameW-16,frameH/6*5));
         lv.setInnerContainerSize(cc.size(frameW-16,frameH/6*5-16));
-        lv.setBackGroundImage(res.frame01_png);
+        lv.setBackGroundImage(res.frame02_png);
         lv.setBackGroundImageScale9Enabled(true);
         lv.setClippingEnabled(true);
         baseLayout.addChild(lv,0);
@@ -3022,7 +3038,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         var itemLo = ccui.Layout.create();
         itemLo.setPosition(cc.p(0, 0));
         itemLo.setContentSize(cc.size(frameW-16,64));
-        itemLo.setBackGroundImage(res.frame01_png);
+        itemLo.setBackGroundImage(res.frame02_png);
         itemLo.setBackGroundImageScale9Enabled(true);
         itemLo.setClippingEnabled(true);
 
@@ -3054,16 +3070,62 @@ var ShouninCampoLayer = cc.Layer.extend({
                         {
                             if(0==type)
                             {
-                                // 閉じて再生開始します
-                                self.closeCampo();
-                                ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl)
-                                ShouninCoreIns.setCurCmdBlk(null);
-                                ShouninCoreIns.execStartCurCmdBlk(function(){
-                                    //再生終了
-                                    if(NaoQiCoreIns.lunchPepper){
-                                        self.openCampo();
-                                    }
-                                });
+                                // 商魂注入アクション
+                                var sprite = cc.Sprite.create(res.ShoukonIn_png);
+                                sprite.setPosition(size.width / 2, size.height / 2);
+                                sprite.setScale(1.0);
+                                self.addChild(sprite, 10);
+
+                                sprite.setColor(cc.color(0,0,0));
+                                sprite.setScale(1.0);
+                                sprite.runAction(
+                                  cc.Sequence.create(
+                                    cc.TintTo.create(0.5, 255,255,255),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.05), 0.2),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.00), 0.2),
+                                    cc.EaseElasticOut.create(
+                                      cc.ScaleTo.create(2, 1.05), 0.2)
+                                  )
+                                );
+                                var dfd = $.Deferred();
+                                if(NaoQiCoreIns.isConnected())
+                                {
+                                    var alRobotPosture;
+                                    NaoQiCoreIns.service("ALRobotPosture").then(function(ins){
+                                        alRobotPosture = ins;
+                                        return alRobotPosture.goToPosture("Crouch",1.0);
+                                    }).then(function(){
+                                        return NaoQiCoreIns.service("ALTextToSpeech");
+                                    }).then(function(tts){
+                                        tts.say("しょうーーーー　こんーーーー　ちゅうーーーーー　にゅー ー ーーーーーー　！");
+                                        return alRobotPosture.goToPosture("Stand",1.0);
+                                    }).then(function(){
+                                        dfd.resolve();
+                                    })
+                                    .fail(function(){
+                                        dfd.resolve();
+                                    })
+                                }else{
+                                    dfd.resolve();
+                                }
+                                setTimeout(function(){
+                                    dfd.then(function(){
+                                        self.removeChild(sprite, true);
+                                        // 閉じて再生開始します
+                                        self.closeCampo();
+                                        ShouninCoreIns.loadFromJsonTable(shouninItem.jsonTbl)
+                                        ShouninCoreIns.setCurCmdBlk(null);
+                                        ShouninCoreIns.execStartCurCmdBlk(function(){
+                                            //再生終了
+                                            if(NaoQiCoreIns.lunchPepper){
+                                                self.openCampo();
+                                            }
+                                        });
+                                    });
+                                },7000);
+
                             }
                         });
                         var title = "" + no + ". ";
@@ -3246,6 +3308,12 @@ $(function(){
           ShouninCoreIns.mainScene = new MainScene();
           cc.director.runScene(ShouninCoreIns.mainScene);
       }, this);
+
+      if(NaoQiCoreIns.lunchPepper)
+      {
+          cc.view.resizeWithBrowserSize(true);
+          cc.view.setDesignResolutionSize(800, 450, cc.ResolutionPolicy.SHOW_ALL);
+      }
   };
   cc.game.run("gameCanvas");
 });
@@ -3331,7 +3399,37 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           
           if(NaoQiCoreIns.isConnected())
           {
-              dfd.resolve();
+              var names =[];
+              var angles=[];
+              var stiffness1=[];
+              var stiffness0=[];
+              $.each(valueDataTbl['poseData0'].poseData.jointAngles, function(name,angle){
+                  names. push(name);
+                  angles.push(THREE.Math.degToRad(angle));
+                  stiffness1.push(1.0);
+                  stiffness0.push(0.0);
+              });
+              var fractionMaxSpeed = 0.4;
+              var alMotion=null;
+              NaoQiCoreIns.service("ALMotion").then(function(ins){
+                  alMotion = ins;
+                  return alMotion.setStiffnesses(name, stiffness1);
+              }).then(function(){
+                  return alMotion.setAngles(names, angles, fractionMaxSpeed);
+              }).then(function(){
+                  var dfd = $.Deferred();
+                  setTimeout(function(){
+                      return  dfd.resolve();
+                  },1000);
+                  return dfd;
+              }).then(function(){
+                  return alMotion.setStiffnesses(name, stiffness0);
+              }).then(function(){
+                  dfd.resolve();
+              }).fail(function(err){
+                  console.log(err);
+                  dfd.reject();
+              });
           }
           else
           {
