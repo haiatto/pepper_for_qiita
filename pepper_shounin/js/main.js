@@ -1999,7 +1999,6 @@ var MainLayer = cc.Layer.extend({
             NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect();
         });
-        self.addChild(self.testMenu.layout);
         self.testMenu.addBtn("Tablet",function(){
             NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
