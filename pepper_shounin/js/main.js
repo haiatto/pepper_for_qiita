@@ -845,6 +845,17 @@ var CommandBlock = function(blkIns)
         // 内容のテキスト
         var text = visualTempl.disp_name;
         if(self.getBlockWorldId()=="label@shonin"){
+            var data = self.getValueInData("labelName")||{string:""};
+            text = "ラベル:" + data.string;
+        }
+        if(self.getBlockWorldId()=="gotoLabel@shonin"){
+            var data = self.getValueInData("labelName")||{string:""};
+            text = "Goto:" + data.string;
+        }
+        if(self.getBlockWorldId()=="talk@shonin"){
+            var data = self.getValueInData("talkLabel0")||{string:""};
+            var previewText = data.string;
+            text = "会話:" + previewText.substring(0,5)+"…";
         }
         self.label.setString(text);
         // サイズなどのレイアウト
@@ -855,16 +866,20 @@ var CommandBlock = function(blkIns)
             minW = 150;
         }
         self.bg.setContentSize(cc.size(
-            Math.max(lblSize.width, minW),
+            Math.max(lblSize.width+6, minW),
             Math.max(lblSize.height,minH))
         );
         //
         var bgSize    = self.bg.getContentSize();
         var labelSize = self.label.getContentSize();
-        self.label.setPosition(cc.p(
-            labelSize.width /2 + (bgSize.width-labelSize.width)/2,
-            labelSize.height/2 + (bgSize.height-labelSize.height)/2
-        ));
+        var px = labelSize.width /2 + (bgSize.width-labelSize.width)/2;
+        var py = labelSize.height/2 + (bgSize.height-labelSize.height)/2;
+        if(self.getBlockWorldId()=="label@shonin"||
+           self.getBlockWorldId()=="gotoLabel@shonin"){
+            px=labelSize.width /2+6;//左寄せ
+        }
+        px=labelSize.width /2+6;//左寄せ
+        self.label.setPosition(cc.p(px,py));
     };
     self.setPosition(0,0);
     self.updateLabel();
@@ -1080,7 +1095,10 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 }
             });
             if(!isOk){
-                ShouninCoreIns.setCurCmdBlk(null); 
+                if (cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())) 
+                {
+                    ShouninCoreIns.setCurCmdBlk(null); 
+                }
             }
             return isOk;
         },
@@ -2026,16 +2044,21 @@ var MainLayer = cc.Layer.extend({
             var posY = boxH-32;
             self.makeEditBox = function(labelText,marginY)
             {
-                var labelW = 32;
-                var label = cc.LabelTTF.create(labelText, "Arial", 12);
-                label.setPosition(cc.p(label.getContentSize().width/2, posY));
+                var labelMinW = 32;
+                var label     = cc.LabelTTF.create(labelText, "Arial", 12);
+                var labelSize = label.getContentSize();
+                label.setPosition(cc.p(labelSize.width/2, posY));
                 label.setColor(new cc.Color(0,0,0,255));
                 layout.addChild(label, 2);
 
+                var labelNowW = Math.max(labelSize.width,labelMinW);
+                var marginW   = 4;
+                var editBoxW  = boxW - (labelNowW+marginW);
+
                 var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-                var editBox = cc.EditBox.create(cc.size(boxW-labelW, 28), bg);
+                var editBox = cc.EditBox.create(cc.size(editBoxW, 28), bg);
                 editBox.fontColor = new cc.Color(0,0,0,255);
-                editBox.setPosition(cc.p(boxW/2+labelW, posY));
+                editBox.setPosition(cc.p(labelNowW + editBoxW/2, posY));
                 editBox.setDelegate(self);
                 layout.addChild(editBox);
                 posY -= 28+marginY;
