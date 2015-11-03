@@ -232,6 +232,10 @@ function NaoQiCore()
     if(document.shouninConfig.lunchPepper)
     {
         self.lunchPepper = true;
+        // ここら辺は後でリファクタリング(NaoQiCoreは分離できた方がいいし)
+        if(ShouninCoreIns){
+            ShouninCoreIns.lunchPepper = true;
+        }
     }
 
     self.serviceCache = {};
@@ -1008,6 +1012,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 }else{
                     cmdBlk.setDefaultVisial();
                 }
+                self.playCtx.needStopCmdBlkCb = null;
             },
             errorExecCallback: function(blk){
                 var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blk);
@@ -1019,12 +1024,19 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 }
             },
         };
+        //self.playCtx.needStopCmdBlkCb = null;
+
         var blkIns = null;
         if(!startCmdBlk)
         {
             startCmdBlk = self.cmdBlockLumpList[0];
         }
-        if(startCmdBlk)
+        if(!startCmdBlk)
+        {
+            if(endCb)endCb();
+            return;
+        }
+        else if(startCmdBlk)
         {
             var execFunc = function(nextCmdBlk)
             {
@@ -1063,6 +1075,9 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.execStop = function()
     {
         self.playCtx.needStopFlag = true;
+        if(self.playCtx.needStopCmdBlkCb){
+            self.playCtx.needStopCmdBlkCb();
+        }
     };
     self.findGotoLabelCmdBlk = function(checkLabelName)
     {
@@ -1095,6 +1110,11 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     {
         event: cc.EventListener.TOUCH_ONE_BY_ONE,
         onTouchBegan: function(touch, event) {    
+            if (!cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())){
+                //枠外は無視します
+                // ShouninCoreIns.setCurCmdBlk(null); 
+                return;
+            }
             var isOk = traverseAllCmdBlock_(function(cmdBlk){
                 if (cc.rectContainsPoint(cmdBlk.bg.getBoundingBoxToWorld(), touch.getLocation())) 
                 {
@@ -1105,10 +1125,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 }
             });
             if(!isOk){
-                if (cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())) 
-                {
-                    ShouninCoreIns.setCurCmdBlk(null); 
-                }
+                ShouninCoreIns.setCurCmdBlk(null); 
             }
             return isOk;
         },
@@ -1423,6 +1440,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
 var ShouninCore = function(){
     var self = this;
     
+    self.lunchPepper = false;
     self.cmdBlkMan = new CommandBlockManager();
     self.workSpaceMain = null;
     self.mainScene = null;
@@ -1434,6 +1452,41 @@ var ShouninCore = function(){
             return self.curCmdBlk.getHeaderTemplate().blockWorldId;
         }
         return null;
+    };
+
+    // リスナー登録と通知
+    // (このコアの主要な機能です。UIなどはリスナーを登録して状態変化に備えます)
+    var listenerLst_ = [];
+    self.addListener = function(instance)
+    {
+        listenerLst_.push(instance);
+    };
+    self.removeListener = function(instance)
+    {
+        var idx = listenerLst_.indexOf(instance);
+        if(idx>=0){
+            listenerLst_.splice(idx,1);
+        }
+    };
+    // データの更新などがあった場合の通知。カレントの変更なども含みます
+    self.notifyUpdate = function()
+    {
+        $.each(listenerLst_,function(k,listener){
+            if(listener.shouninCoreUpdate)
+            {
+                listener.shouninCoreUpdate();
+            }
+        });
+    };
+    // 再生状態の変更があった場合の通知。
+    self.notifyPlayModeUpdate = function()
+    {
+        $.each(listenerLst_,function(k,listener){
+            if(listener.shouninCorePlayModeUpdate)
+            {
+                listener.shouninCorePlayModeUpdate();
+            }
+        });
     };
 
     // セーブ/ロード
@@ -1457,42 +1510,47 @@ var ShouninCore = function(){
     };
 
     // 再生
-    self.playCtx = {};
+    self.backupCurCmdBlk = null;
+    self.isNowPlaying    = false;
     self.execStartCurCmdBlk = function(endCb)
     {
-        self.workSpaceMain.execStart( self.curCmdBlk, endCb );
+        // カレントブロックをクリアしてから再生します(ブロック関連UI非表示を簡単にするためやっときます)
+        self.backupCurCmdBlk = self.curCmdBlk;
+        self.setCurCmdBlk(null);
+        
+        // 再生開始を通知します
+        self.isNowPlaying = true;
+        self.notifyPlayModeUpdate();
+
+        var innerEndCb = function(){
+            if(endCb)endCb();
+            
+            // 再生終了を通知します
+            self.isNowPlaying = false;
+            self.notifyPlayModeUpdate();
+
+            // 再生終了したらカレントブロックを元に戻します
+            self.setCurCmdBlk(self.backupCurCmdBlk);
+            self.backupCurCmdBlk = null;
+        };
+        // 再生開始です
+        self.workSpaceMain.execStart( self.backupCurCmdBlk, innerEndCb );
     };
     self.execStop = function()
     {
         self.workSpaceMain.execStop();
     };
-
-    //
-    var listenerLst_ = [];
-    self.notifyUpdate = function()
+    self.isNowPlay = function()
     {
-        $.each(listenerLst_,function(k,listener){
-            if(listener.shouninCoreUpdate)
-            {
-                listener.shouninCoreUpdate();
-            }
-        });
-    };
-    self.addListener = function(instance)
-    {
-        listenerLst_.push(instance);
-    };
-    self.removeListener = function(instance)
-    {
-        var idx = listenerLst_.indexOf(instance);
-        if(idx>=0){
-            listenerLst_.splice(idx,1);
-        }
+        return self.isNowPlaying;
     };
 
     //
     self.setCurCmdBlk = function(cmdBlk)
     {
+        if(self.isNowPlay()){
+            return;
+        }
         if(self.curCmdBlk)
         {
             self.curCmdBlk.setDefaultVisial();
@@ -1581,7 +1639,7 @@ var ShouninCore = function(){
         }
         return false;
     };
-    self.getTalkText = function(text)
+    self.getTalkText = function()
     {
         var blkWId = getCurCmdBlkWorldId_();
         if("talk@shonin" == blkWId) {
@@ -1596,6 +1654,28 @@ var ShouninCore = function(){
             return self.curCmdBlk.setValueInData("talkLabel0",{string:text});
         }
         self.notifyUpdate();
+    };
+
+    // 会話のプレビュー用(シミュモードで使用。もしかしたら字幕的に使うかのせいあるかも？)
+    self.isTalkPreviewFlag = false;
+    self.previewText = "";
+    self.isTalkPreview = function()
+    {
+        return self.isTalkPreviewFlag;
+    };
+    self.setTalkPreviewFlag = function(flg)
+    {
+        self.isTalkPreviewFlag = flg;
+        self.notifyUpdate();
+    };
+    self.setTalkPreviewText = function(text)
+    {
+        self.previewText = text;
+        self.notifyUpdate();
+    };
+    self.getTalkPreviewText = function()
+    {
+        return self.previewText;
     };
 
     // 
@@ -2155,6 +2235,7 @@ var MainLayer = cc.Layer.extend({
                 return editBox.string;
             };
             //
+            var isChangeCanvasSize_ = false;
             self.shouninCoreUpdate = function()
             {
                 var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
@@ -2163,12 +2244,20 @@ var MainLayer = cc.Layer.extend({
                     self.setTalkText( ShouninCoreIns.getTalkText() );
                     layout.setVisible(true);
                     //
-                    if(pepperLayer)pepperLayer.setCanvasMiniSize();
+                    if(pepperLayer){
+                        pepperLayer.setCanvasMiniSize();
+                        isChangeCanvasSize_=true;
+                    }
                 }
                 else{
                     layout.setVisible(false);
                     //
-                    if(pepperLayer)pepperLayer.setCanvasFullSize();
+                    if(pepperLayer){
+                        if(isChangeCanvasSize_){
+                            pepperLayer.setCanvasFullSize();
+                            isChangeCanvasSize_=false;
+                        }
+                    }
                 }
             };
             self.editBoxTextChanged = function(sender,text)
@@ -2187,6 +2276,61 @@ var MainLayer = cc.Layer.extend({
             ShouninCoreIns.addListener(self);
         };
         self.talkTextBox = new TalkTextBox(self);
+
+        function TalkPreviewBox(layer){
+            var self = this;
+
+            var posX = 260;
+            var posY = 0;
+            var boxW = 540;
+            var boxH = 120;
+            var layout = ccui.Layout.create();
+            layout.setPosition(cc.p(posX, posY));
+            layout.setContentSize(boxW, boxH);
+            layout.setBackGroundImage(res.frame01_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            layout.setVisible(false);
+            layer.addChild(layout);
+
+            var bg = cc.Scale9Sprite.create(res.frame02_png);
+            bg.setPosition(cc.p(boxW/2, boxH/2));
+            bg.setContentSize(cc.size(boxW-18, boxH-18));
+            layout.addChild(bg);
+
+            var labelText = cc.LabelTTF.create("");
+            labelText.setFontFillColor( new cc.Color(0,0,0,255) );
+            labelText.setFontSize(32);
+            labelText.setPosition(cc.p(boxW/2, boxH/2));
+            layout.addChild(labelText,1);
+            //
+            //
+            self.shouninCoreUpdate = function()
+            {
+                if(ShouninCoreIns.isTalkPreview()){
+                    labelText.setString( ShouninCoreIns.getTalkPreviewText() );
+                    layout.setVisible(true);
+                }
+                else{
+                    layout.setVisible(false);
+                }
+            };
+            self.shouninCorePlayModeUpdate = function()
+            {
+                var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
+                if(ShouninCoreIns.isNowPlay()){
+                    layout.setVisible(true);
+                    if(pepperLayer)pepperLayer.setCanvasMiniSize();
+                }
+                else{
+                    layout.setVisible(false);
+                    if(pepperLayer)pepperLayer.setCanvasFullSize();
+                }
+            };
+            ShouninCoreIns.addListener(self);
+        };
+        self.talkPreviewBox = new TalkPreviewBox(self);
+
         
         function TalkTextPadBox(parentUI){
             var self = this;
@@ -2336,7 +2480,21 @@ var BlockLayer = cc.Layer.extend({
         ShouninCoreIns.workSpaceMain.setPosition(4,120);
         ShouninCoreIns.workSpaceMain.setSize    (200,260);
 
+        ShouninCoreIns.addListener(self);
+        self.shouninCorePlayModeUpdate = function(){
+            if(ShouninCoreIns.isNowPlay()){
+                if(self.dustboxBtn){
+                    self.dustboxBtn.setVisible(false);
+                }
+            }else{                
+                if(self.dustboxBtn){
+                    self.dustboxBtn.setVisible(true);
+                }
+            }
+        };
+
         // ゴミ箱ボタン
+        self.dustboxBtn = null;
         if(!lunchPepper){
             var dustboxBtn = ccui.Button.create();
             dustboxBtn.setTouchEnabled(true);
@@ -2353,6 +2511,7 @@ var BlockLayer = cc.Layer.extend({
                 ShouninCoreIns.workSpaceMain.updateLayout();
             });        
             self.addChild(dustboxBtn,1);
+            self.dustboxBtn = dustboxBtn;
         }
 
         // ブロック追加ボタン
@@ -2408,6 +2567,16 @@ var BlockLayer = cc.Layer.extend({
                 });
                 btnLst.push(btn);
             };
+
+            self.shouninCorePlayModeUpdate = function()
+            {
+                if ( ShouninCoreIns.isNowPlay() ){
+                    layout.setVisible(false);
+                }else{
+                    layout.setVisible(true);
+                }
+            };
+            ShouninCoreIns.addListener(self);
         };
         if(!lunchPepper){
             self.blockBox = new BlockBox(self,4, 4, 250, 110);
@@ -2444,6 +2613,9 @@ var PepperLayer = cc.Layer.extend({
         });
 
         //外部からのキャンバス操作
+        self.setCanvasPos = function(x,y){
+            self.pepperModel.setCanvasPos(x,y);
+        };
         self.setCanvasSize = function(w,h){
             self.pepperModel.setCanvasSize(w,h);
         };
@@ -2844,18 +3016,29 @@ var TabletLayer = cc.Layer.extend({
         };
 
         self.showTablet = function(){
-            if(ShouninCoreIns.mainScene.pepperLayer){
-                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
-            }
             self.setVisible(true);
         };
         self.hideTablet = function(){
-            if(ShouninCoreIns.mainScene.pepperLayer){
-                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
-            }
             self.setVisible(false);
         };
 
+        ShouninCoreIns.addListener(self);
+        self.shouninCorePlayModeUpdate = function(){
+            if(ShouninCoreIns.isNowPlay()){
+                if(!ShouninCoreIns.lunchPepper){
+                    self.setScale(0.35);
+                    self.setPosition(cc.p(250,0));
+                    ShouninCoreIns.mainScene.pepperLayer.setCanvasPos(-50,0);
+                }
+            }
+            else{
+                if(!ShouninCoreIns.lunchPepper){
+                    self.setScale(1.9);
+                    self.setPosition(cc.p(0,0));
+                    ShouninCoreIns.mainScene.pepperLayer.setCanvasPos(0,0);
+                }
+            }
+        };
         return true;
     },
 });
@@ -2926,9 +3109,9 @@ $(function(){
 
     console.log("shounin start! v4");
 
+    ShouninCoreIns = new ShouninCore();
     KiiShouninCoreIns = new KiiShouninCore();
     NaoQiCoreIns   = new NaoQiCore();
-    ShouninCoreIns = new ShouninCore();
 
 //ブロック管理
 // スプライトとブロックを扱うクラス？
@@ -3006,9 +3189,14 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           {
               console.log("会話");
               console.log(valueDataTbl['talkLabel0'].string);
+              
+              ShouninCoreIns.setTalkPreviewFlag(true);
+              ShouninCoreIns.setTalkPreviewText(valueDataTbl['talkLabel0'].string);
               setTimeout(function(){
+
+                  ShouninCoreIns.setTalkPreviewFlag(false);
                   dfd.resolve();
-              },500);
+              },2000);
           }
 
           return dfd.promise();
@@ -3119,6 +3307,13 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           var lo = tabletLayer.getBaseLayout();
           tabletLayer.clearBaseLayout();
           
+          //中断時に呼ばれるコールバックを登録(再生終ったら自動的に解除されます)
+          ctx.playCtx.needStopCmdBlkCb = function(){
+              tabletLayer.hideTablet();
+              tabletLayer.clearBaseLayout();
+              dfd.resolve();
+          };
+
           var addBtn_ = function(text,x,y,w,h,cb){
                 var btn = ccui.Button.create();
                 btn.setTouchEnabled(true);
@@ -3144,6 +3339,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                       ctx.playCtx.needStopFlag  = true;
                   }
                   tabletLayer.hideTablet();
+                  tabletLayer.clearBaseLayout();
                   dfd.resolve();
               };
           };

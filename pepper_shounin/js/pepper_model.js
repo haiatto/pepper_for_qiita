@@ -295,9 +295,7 @@ var PepperModel = function(canvasElement){
             container = self.containerElm[0];
             
             var resize = function(){
-                var posx = ($(window).width()-self.canvasW)/2;
-                self.containerElm.css("marginLeft",""+posx+"px");
-                self.containerElm.css("marginTop", "50px");
+                self.setCanvasPos(0,0);
             };
             $(window).on('load resize', resize);
             resize();
@@ -385,6 +383,11 @@ var PepperModel = function(canvasElement){
         
 
     //外部からのキャンバス操作
+    self.setCanvasPos = function(x,y){
+        var posx = ($(window).width()-self.canvasW)/2;
+        self.containerElm.css("marginLeft",""+(posx+x)+"px");
+        self.containerElm.css("marginTop", ""+(50+y)+"px");
+    };
     self.setCanvasSize = function(w,h){
         self.canvasW = w;
         self.canvasH = h;            
