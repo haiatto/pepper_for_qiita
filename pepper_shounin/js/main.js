@@ -1501,6 +1501,10 @@ var ShouninCore = function(){
     };
     self.loadFromJsonTable = function(jsonTbl)
     {
+        self.curCmdBlk       = null;
+        self.backupCurCmdBlk = null;
+        self.isNowPlaying    = false;
+
         if(!self.workSpaceMain.loadFromJsonTable(jsonTbl.wsMainTbl))
         {
             return false;
@@ -1826,27 +1830,40 @@ var BtnBarMenu = function(leftX,topY)
     var self = this;
 
     var layout = ccui.Layout.create();
-    layout.setPosition(leftX, topY-48);
-    layout.setContentSize(64 * 0 + 8*2, 48);
+    var layer  = cc.Layer.create();
+
+    layout.setPosition(cc.p(leftX, topY-48));
+    layout.setContentSize(cc.size(64 * 0 + 8*2, 48));
     layout.setBackGroundImage(res.frame02_png);
     layout.setBackGroundImageScale9Enabled(true);
     layout.setClippingEnabled(true);
-    self.layout = layout;
 
-    var btnNum=0;
+    self.layout = layout;
+    self.layer  = layer;
+
+    self.setParentUI = function(parentUI)
+    {
+        parentUI.addChild(self.layout);
+        parentUI.addChild(self.layer);
+    };
+
     var posX = 8;
-    self.addBtn = function(label,cb){
-        btnNum += 1;
-        layout.setContentSize(64 * btnNum + 8*2, 48);
+    var boxW = 16;
+    var boxH = 48;
+    self.addBtn = function(label,btnW,cb){
+        //var btnW = 64;
+        boxW   += btnW;
+        layout.setContentSize(cc.size(boxW, boxH));
 
         var btn = ccui.Button.create();
         btn.setTouchEnabled(true);
         btn.setScale9Enabled(true);
         btn.loadTextures(res.cmdblock_frame01_png, null, null);
         btn.setTitleText(label);
-        btn.setPosition(cc.p(posX+64/2,24));
-        btn.setSize(cc.size(64, 32));
-        posX += 64;
+        btn.setPosition(cc.p(posX+btnW/2,24));
+        btn.setSize(cc.size(btnW, 32));
+        layout.addChild(btn);
+        posX += btnW;
         btn.addTouchEventListener(function(button,type)
         {
             if(0==type)
@@ -1854,7 +1871,20 @@ var BtnBarMenu = function(leftX,topY)
                 if(cb)cb(button,type);
             }
         });
-        layout.addChild(btn);
+    };
+    self.addWidget = function(widget){
+        var widgetSize = widget.getContentSize();
+        boxW += widgetSize.width;
+        layout.setContentSize(cc.size(boxW, boxH));
+
+        layer.addChild(widget);
+
+        var layoutPos = layout.getPosition();
+        
+        widget.setPosition(cc.p(
+           layoutPos.x + widgetSize.width/2 + posX, 
+           layoutPos.y + widgetSize.height/2 + (boxH - widgetSize.height)/2 ));
+        posX += widgetSize.width;
     };
 };
 
@@ -1867,9 +1897,10 @@ var MainLayer = cc.Layer.extend({
 
         var widgetSize = size;
 
+
         self.fileMenu = new BtnBarMenu(0, size.height);
-        self.addChild(self.fileMenu.layout);
-        self.fileMenu.addBtn("Load",function(button,type)
+        self.fileMenu.setParentUI(self);
+        self.fileMenu.addBtn("Load",48,function(button,type)
         {
             if($("#input_dummy")[0])
             {
@@ -1902,7 +1933,7 @@ var MainLayer = cc.Layer.extend({
             document.body.appendChild(input);
             $(input).click();
         });
-        self.fileMenu.addBtn("Save",function(button,type)
+        self.fileMenu.addBtn("Save",48,function(button,type)
         {
             if(0==type)
             {
@@ -1929,7 +1960,7 @@ var MainLayer = cc.Layer.extend({
                 exportString(JSON.stringify(jsonTbl),"shoukonScript.json");
             }
         });
-        self.fileMenu.addBtn("公開",function(button,type)
+        self.fileMenu.addBtn("公開",48,function(button,type)
         {
             if(0==type)
             {
@@ -1979,9 +2010,9 @@ var MainLayer = cc.Layer.extend({
                     var nameEd  = self.makeEditBox("商人の名前",            0);
                     var ownerEd = self.makeEditBox("作った人のニックネーム", 4);
                     var profEd  = self.makeEditBox("商人の自己紹介",        0);
-                    nameEd.string = "とおりすがりの商人";
-                    ownerEd.string = "ななしさん";
-                    profEd.string = "しょうこんちゅうにゅー";
+                    nameEd.setPlaceHolder ("とおりすがりの商人");
+                    ownerEd.setPlaceHolder("ななしさん");
+                    profEd.setPlaceHolder ("しょうこんちゅうにゅー");
 
                     var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
                     var blockLayer  = ShouninCoreIns.mainScene.blockLayer;
@@ -2025,6 +2056,21 @@ var MainLayer = cc.Layer.extend({
                     {
                         if(0==type)
                         {
+                            if(nameEd.string.length==0)
+                            {
+                                alert("名前が無いです！");
+                                return;
+                            }
+                            if(ownerName.string.length==0)
+                            {
+                                alert("作った人が無いです！");
+                                return;
+                            }
+                            if(note.string.length==0)
+                            {
+                                alert("説明がないです！");
+                                return;
+                            }
                             var jsonTbl = ShouninCoreIns.saveToJsonTable();
                             var profile = {
                                 shouninName:nameEd.string,
@@ -2049,20 +2095,22 @@ var MainLayer = cc.Layer.extend({
                 var publishBox = new PublishBox(self);
             }
         });
+
         // 
         var x = self.fileMenu.layout.getPosition().x + self.fileMenu.layout.getContentSize().width;
         self.playMenu = new BtnBarMenu(x, size.height);
-        self.addChild(self.playMenu.layout);
-        self.playMenu.addBtn("プレイ",function(){
+        self.playMenu.setParentUI(self);
+        self.playMenu.addBtn("プレイ",64,function(){
            ShouninCoreIns.execStartCurCmdBlk();
         });
-        self.playMenu.addBtn("停止",function(){
+        self.playMenu.addBtn("停止",64,function(){
            ShouninCoreIns.execStop();
         });
+
         // 
         self.sideMenu = new BtnBarMenu(0, size.height);
-        self.addChild(self.sideMenu.layout);
-        self.sideMenu.addBtn("商人広場",function(button,type)
+        self.sideMenu.setParentUI(self);
+        self.sideMenu.addBtn("商人広場",64,function(button,type)
         {
             ShouninCoreIns.mainScene.shouninCampoLayer.openCampo();
         });
@@ -2070,42 +2118,38 @@ var MainLayer = cc.Layer.extend({
         var s = self.sideMenu.layout.getContentSize();
         self.sideMenu.layout.setPosition(cc.p(size.width-s.width,p.y));
 
+        ShouninCoreIns.addListener(self);
+        self.shouninCorePlayModeUpdate = function(){
+            if(ShouninCoreIns.isNowPlay()){
+                self.fileMenu.layout.setVisible(false);
+                self.sideMenu.layout.setVisible(false);
+            }else{
+                self.fileMenu.layout.setVisible(true);
+                self.sideMenu.layout.setVisible(true);
+            }
+        };
+
+       
         var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
-        //Test
+        // NaoQi
         var ip = "192.168.3.37";
-        self.testMenu = new BtnBarMenu(x, size.height);
-        self.addChild(self.testMenu.layout);
-        self.testMenu.addBtn("Connect",function(){
+        self.naoQiMenu = new BtnBarMenu(x, size.height);
+        self.naoQiMenu.setParentUI(self);
+
+
+        var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
+        var editBox = cc.EditBox.create(cc.size(32*4, 32), bg);
+        editBox.fontColor = new cc.Color(0,0,0,255);
+        editBox.setPosition(cc.p(0, 0));
+        editBox.setPlaceHolder("pepper ip addr");
+        self.naoQiMenu.addWidget(editBox);
+
+        self.naoQiMenu.addBtn("接続",48,function(){
             NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect();
         });
-        self.testMenu.addBtn("Tablet",function(){
-            NaoQiCoreIns.setIpAddress(ip);
-            NaoQiCoreIns.connect()
-            .then(
-                function(){
-                    NaoQiCoreIns.showTabletUrl(
-                        //"http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true"
-                        //"http://192.168.11.11:8080/pepper_shounin/?lunchPepper=true"
-                        "http://192.168.3.127:8080/pepper_shounin/?lunchPepper=true"
-                        //"http://google.co.jp/"
-                    ).then(function(){
-                        //NaoQiCoreIns.showTabletUrl(
-                        //    "http://google.co.jp/"
-                        //);
-                    });
-                    //消えなくなるのは抜けられないようにしてあるからかも…要検証…
-                    //return alTb.loadUrl("http://haiatto.github.io/pepper_for_qiita/pepper_shounin/");
-                    //return alTb.loadUrl("http://www.yahoo.co.jp/");
-                    //"http://google.co.jp/"
-                    //http://haiatto.github.io/pepper_for_qiita/pepper_shounin/?lunchPepper=true 
-                },
-                function(err){
-                    console.log("err:"+err.result);
-                }
-            );
-        });
-        self.testMenu.addBtn("KillTable",function(){
+
+        self.naoQiMenu.addBtn("ResetTablet",90,function(){
             NaoQiCoreIns.setIpAddress(ip);
             NaoQiCoreIns.connect()
             .then(
@@ -2115,6 +2159,7 @@ var MainLayer = cc.Layer.extend({
             );
         });
 
+        //
         var ToolBox = function(parentUI,x,y,w,h)
         {
             var self = this;
@@ -3260,11 +3305,27 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
           }
           else
           {
+              var pepperLayer = ShouninCoreIns.mainScene.pepperLayer;
+
               console.log("ポーズ");
               console.log(valueDataTbl['poseData0'].poseData);
+
+              if(pepperLayer.pepperModel)
+              {
+                  // その後、データの内容をスライダーとモデルに反映します
+                  var poseData = valueDataTbl['poseData0'].poseData;
+                  if(poseData)
+                  {
+                      $.each(poseData.jointAngles,function(jointName,angle)
+                      {
+                          var jointObj = pepperLayer.pepperModel.jointObjTbl[jointName];
+                          jointObj.setJointAngle(angle);
+                      });
+                  }
+              }
               setTimeout(function(){
                   dfd.resolve();
-              },500);
+              },1000);
           }
           return dfd.promise();
       }

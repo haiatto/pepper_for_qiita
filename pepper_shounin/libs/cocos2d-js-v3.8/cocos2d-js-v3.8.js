@@ -18085,7 +18085,7 @@ cc.RemoveSelf = cc.ActionInstant.extend({
         this.target.removeFromParent(this._isNeedCleanUp);
     },
     /**
-     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it .
+     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it.
      * @param isNeedCleanUp
      * @returns {boolean}
      */
@@ -25495,7 +25495,7 @@ cc.LabelBMFont = cc.SpriteBatchNode.extend({
         this._renderCmd._changeTextureColor();
     },
     /**
-     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it .
+     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it.
      */
     init: function () {
         return this.initWithString(null, null, null, null, null);
@@ -27451,7 +27451,7 @@ cc.ClippingNode = cc.Node.extend({
         this._renderCmd.initStencilBits();
     },
     /**
-     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it .
+     * Initialization of the node, please do not call this function by yourself, you should pass the parameters to constructor to initialize it.
      * @function
      * @param {cc.Node} [stencil=null]
      */
@@ -45046,6 +45046,7 @@ cc.BuilderSoundEffect.create = function (file, pitch, pan, gain) {
     }
     return null;
 };
+//HACK: これ、バグってるので改造する(影響範囲はEDITBoxのみ？)
 cc.DOM = {};
 cc.DOM._addMethods = function (node) {
     for (var funcs in cc.DOM.methods) {
@@ -46374,7 +46375,7 @@ ccui.Widget = ccui.ProtectedNode.extend({
         this.init();
     },
     /**
-     * initializes state of widget. please do not call this function by yourself, you should pass the parameters to constructor to initialize it .
+     * initializes state of widget. please do not call this function by yourself, you should pass the parameters to constructor to initialize it.
      * @returns {boolean}
      */
     init: function () {
@@ -55617,7 +55618,7 @@ ccui.PageView = ccui.Layout.extend({
     _usingCustomScrollThreshold: false,
     /**
      * Allocates and initializes a UIPageView.
-     * Constructor of ccui.PageView. please do not call this function by yourself, you should pass the parameters to constructor to initialize it .
+     * Constructor of ccui.PageView. please do not call this function by yourself, you should pass the parameters to constructor to initialize it.
      * @example
      *
      * var uiPageView = new ccui.PageView();
