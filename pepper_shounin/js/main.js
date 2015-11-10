@@ -39,6 +39,8 @@ var res = {
     slider_frame_png : "cocos_res/slider_frame.png",
     slider_volume_png: "cocos_res/slider_volume.png",
 
+    btn_frame01_png : "cocos_res/btn_frame01.png",
+
     cmdblock_frame01_png : "cocos_res/cmdblock_frame01.png",
     cmdblock_frame_select01_png : "cocos_res/cmdblock_frame_select01.png",
     cmdblock_frame_execute01_png : "cocos_res/cmdblock_frame_execute01.png",
@@ -775,9 +777,9 @@ var CommandBlock = function(blkIns)
     };
     self.clearEventListener = function()
     {
-        if(!eventListener){
-            eventListener = null;
+        if(eventListener){
             cc.eventManager.removeListener(eventListener);
+            eventListener = null;
         }
     };
     //※イベント周りは、ワークスペース側で一括管理にしました。ここにはないです。
@@ -875,7 +877,7 @@ var CommandBlock = function(blkIns)
         // サイズなどのレイアウト
         var lblSize = self.label.getContentSize();
         var minW=90;
-        var minH=32;
+        var minH=26;
         if(self.getBlockWorldId()=="label@shonin"){
             minW = 150;
         }
@@ -1104,6 +1106,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         //cmdBlk.blkIns.deferred();
     }
     var tgtCmdBlk_ = null;
+    var tgtCmdBlkMoveOkTimer_ = 0;
     var overrapCmdBlk_ = null;
     var overrapDir_    = 0;
     var listenerParam = 
@@ -1119,7 +1122,8 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 if (cc.rectContainsPoint(cmdBlk.bg.getBoundingBoxToWorld(), touch.getLocation())) 
                 {
                     tgtCmdBlk_ = cmdBlk;
-                    event.stopPropagation();
+                    tgtCmdBlkMoveOkTimer_ = Date.now();
+                    //event.stopPropagation();
                     click(tgtCmdBlk_);
                     return true;
                 }
@@ -1130,8 +1134,15 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             return isOk;
         },
         onTouchMoved: function(touch, event) {
+            var deltaTime = Date.now() - tgtCmdBlkMoveOkTimer_;
+            if(deltaTime < 200)
+            {
+               tgtCmdBlk_ = null; 
+            }
             if(tgtCmdBlk_)
             {
+                //event.stopPropagation();
+                
                 //ブロックを移動します
                 var delta = touch.getDelta();
                 var pos = tgtCmdBlk_.getPosition();
@@ -1200,10 +1211,13 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     }
                 }
             }
-            self.updateLayout();
             tgtCmdBlk_ = null;
             overrapCmdBlk_ = null;
             overrapDir_ = 0;
+            //コールバック内でレイアウト変更は危険なのでシステムから呼び出しにします
+            setTimeout(function(){
+                self.updateLayout();
+            },0);
         },
     };
 
@@ -1218,7 +1232,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
 
     self.updateLayout = function()
-    {
+    {        
         var TAG_SPRITE = 100;
 
         var removeChildrenByTag = function(layout,tag,cleanup)
@@ -1230,6 +1244,9 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                 } 
             });
             $.each(removes,function(idx,child){
+                if(child.addTouchEventListener){
+                    child.addTouchEventListener(null);
+                }
                 layout.removeChild(child,cleanup);
             });
         };
@@ -1268,12 +1285,14 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             var recv = function(cmdBlk)
             {
                 cmdBlk.setParentUI(layout);
+
                 cmdBlk.setEventListener({
                     event:        listenerParam.event,
                     onTouchBegan: listenerParam.onTouchBegan,
                     onTouchMoved: listenerParam.onTouchMoved,
                     onTouchEnded: listenerParam.onTouchEnded,
                 });
+
                 var blkSize = cmdBlk.getSize();
                 cmdBlk.setPosition( 
                     x + blkSize.width /2, 
@@ -1290,6 +1309,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     btn.setTouchEnabled(true);
                     btn.loadTextures(res.workspace_linehead_png, null, null);
                     btn.setPosition(cc.p(16/2, y));
+
                     btn.addTouchEventListener(function(button,type)
                     {
                         if(0==type){
@@ -1298,6 +1318,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                             self.updateLayout();
                         }
                     });
+
                     layout.addChild(btn, 0, TAG_SPRITE);
                 }
                 firstFlg = false;
@@ -1858,7 +1879,7 @@ var BtnBarMenu = function(leftX,topY)
         var btn = ccui.Button.create();
         btn.setTouchEnabled(true);
         btn.setScale9Enabled(true);
-        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.loadTextures(res.btn_frame01_png, null, null);
         btn.setTitleText(label);
         btn.setPosition(cc.p(posX+btnW/2,24));
         btn.setSize(cc.size(btnW, 32));
@@ -2026,7 +2047,7 @@ var MainLayer = cc.Layer.extend({
                     var btn = ccui.Button.create();
                     btn.setTouchEnabled(true);
                     btn.setScale9Enabled(true);
-                    btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                    btn.loadTextures(res.btn_frame01_png, null, null);
                     btn.setTitleText("やめる");
                     btn.setPosition(cc.p(posX-64/2-8,24));
                     btn.setSize(cc.size(64, 32));
@@ -2048,7 +2069,7 @@ var MainLayer = cc.Layer.extend({
                     var btn = ccui.Button.create();
                     btn.setTouchEnabled(true);
                     btn.setScale9Enabled(true);
-                    btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                    btn.loadTextures(res.btn_frame01_png, null, null);
                     btn.setTitleText("公開する");
                     btn.setPosition(cc.p(posX+64/2,24));
                     btn.setSize(cc.size(64, 32));
@@ -2587,7 +2608,7 @@ var BlockLayer = cc.Layer.extend({
                 var btn = ccui.Button.create();
                 btn.setTouchEnabled(true);
                 btn.setScale9Enabled(true);
-                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.loadTextures(res.btn_frame01_png, null, null);
                 btn.setTitleText(text);
                 btn.setPosition(cc.p(8+blkW/2 + nowXIdx*(blkW+4), nowY + blkH/2));
                 btn.setSize(cc.size(blkW, blkH));
@@ -2865,7 +2886,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setName("CloseBtn");
         btn.setTouchEnabled(true);
         btn.setScale9Enabled(true);
-        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.loadTextures(res.btn_frame01_png, null, null);
         btn.setTitleText("閉じる");
         btn.setPosition(cc.p(40,frameH-28));
         btn.setSize(cc.size(64,32));
@@ -2903,7 +2924,7 @@ var ShouninCampoLayer = cc.Layer.extend({
         btn.setName("callBtn");
         btn.setTouchEnabled(true);
         btn.setScale9Enabled(true);
-        btn.loadTextures(res.cmdblock_frame01_png, null, null);
+        btn.loadTextures(res.btn_frame01_png, null, null);
         btn.setTitleText("呼ぶ");
         btn.setPosition(cc.p(frameW-16-40,32));
         btn.setSize(cc.size(64, 32));
@@ -3379,7 +3400,7 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
                 var btn = ccui.Button.create();
                 btn.setTouchEnabled(true);
                 btn.setScale9Enabled(true);
-                btn.loadTextures(res.cmdblock_frame01_png, null, null);
+                btn.loadTextures(res.btn_frame01_png, null, null);
                 btn.setTitleText(text);
                 btn.setPosition(cc.p(x,y));
                 btn.setSize(cc.size(w,h));
