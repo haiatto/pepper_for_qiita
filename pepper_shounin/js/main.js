@@ -257,7 +257,7 @@ function NaoQiCore()
     // ■ ipアドレス設定
     if(localStorage)
     {
-        var lastIpAddr = localStorage.getItem("pepper_ip");
+        var lastIpAddr = localStorage.getItem("pepper_ipAddr");
         if(lastIpAddr){
             self.ipAddr = lastIpAddr;
         }
@@ -292,7 +292,7 @@ function NaoQiCore()
         else{
             console.log("nao qi connect..");
             if(self.lunchPepper){
-                 self.qim = new QiSession("198.18.0.1");
+                 self.qim = new QiSession();
             }
             else{
                  self.qim = new QiSession(self.ipAddr);
@@ -315,7 +315,7 @@ function NaoQiCore()
                 self.nowState = "切断";
             })
             .on('error', function (err) {
-                console.log("nao qi error!:" + err.result);
+                console.log("nao qi error!:" + err.result||err);
                 self.nowState = "エラー";
                 dfd.reject(err);
             });
@@ -1918,7 +1918,7 @@ var MainLayer = cc.Layer.extend({
 
         var widgetSize = size;
 
-
+        // ファイルメニュー
         self.fileMenu = new BtnBarMenu(0, size.height);
         self.fileMenu.setParentUI(self);
         self.fileMenu.addBtn("Load",48,function(button,type)
@@ -2117,7 +2117,7 @@ var MainLayer = cc.Layer.extend({
             }
         });
 
-        // 
+        // プレイメニュー
         var x = self.fileMenu.layout.getPosition().x + self.fileMenu.layout.getContentSize().width;
         self.playMenu = new BtnBarMenu(x, size.height);
         self.playMenu.setParentUI(self);
@@ -2128,7 +2128,21 @@ var MainLayer = cc.Layer.extend({
            ShouninCoreIns.execStop();
         });
 
-        // 
+        // 商人プロフィールメニュー
+        var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
+        self.profMenu = new BtnBarMenu(x, size.height);
+        self.profMenu.setParentUI(self);
+
+        var nameEditBox = cc.EditBox.create(cc.size(26*4, 32), cc.Scale9Sprite.create(res.workspace_frame_png));
+        nameEditBox.fontColor = new cc.Color(0,0,0,255);
+        nameEditBox.setPosition(cc.p(0, 0));
+        nameEditBox.setPlaceHolder("商人名");
+        nameEditBox.string = "";
+        self.profMenu.addWidget(nameEditBox);
+        self.profMenu.addBtn("プロフィール",96,function(){
+        });
+
+        // サイドメニュー
         self.sideMenu = new BtnBarMenu(0, size.height);
         self.sideMenu.setParentUI(self);
         self.sideMenu.addBtn("商人広場",64,function(button,type)
@@ -2150,35 +2164,27 @@ var MainLayer = cc.Layer.extend({
             }
         };
 
-       
-        var x = self.playMenu.layout.getPosition().x + self.playMenu.layout.getContentSize().width;
-        // NaoQi
-        var ip = "192.168.3.37";
-        self.naoQiMenu = new BtnBarMenu(x, size.height);
-        self.naoQiMenu.setParentUI(self);
+        // NaoQiメニュー
+        var openNaoQiMenu = function(x,y){
+            self.naoQiMenu = new BtnBarMenu(x,y);
+            self.naoQiMenu.setParentUI(self);
 
-
-        var bg = cc.Scale9Sprite.create(res.workspace_frame_png);
-        var editBox = cc.EditBox.create(cc.size(32*4, 32), bg);
-        editBox.fontColor = new cc.Color(0,0,0,255);
-        editBox.setPosition(cc.p(0, 0));
-        editBox.setPlaceHolder("pepper ip addr");
-        self.naoQiMenu.addWidget(editBox);
-
-        self.naoQiMenu.addBtn("接続",48,function(){
-            NaoQiCoreIns.setIpAddress(ip);
-            NaoQiCoreIns.connect();
-        });
-
-        self.naoQiMenu.addBtn("ResetTablet",90,function(){
-            NaoQiCoreIns.setIpAddress(ip);
-            NaoQiCoreIns.connect()
-            .then(
-                function(){
-                    NaoQiCoreIns.resetTabletSystem()
-                }
-            );
-        });
+            var ipEditBox = cc.EditBox.create(cc.size(26*4, 32), cc.Scale9Sprite.create(res.workspace_frame_png));
+            ipEditBox.fontColor = new cc.Color(0,0,0,255);
+            ipEditBox.setPosition(cc.p(0, 0));
+            ipEditBox.setPlaceHolder("pepper ip addr");
+            ipEditBox.string = NaoQiCoreIns.getIpAddress();
+            self.naoQiMenu.addWidget(ipEditBox);
+            self.naoQiMenu.addBtn("接続",48,function(){
+                NaoQiCoreIns.setIpAddress(ipEditBox.string);
+                NaoQiCoreIns.connect();
+            });
+            self.naoQiMenu.addBtn("ResetTablet",90,function(){
+                NaoQiCoreIns.resetTabletSystem();
+            });
+        };
+        //TODO: ツールボックス＋開くボタンとステータスををメニューに出すだけにする感じで。
+        //openNaoQiMenu(560, size.height-48);
 
         //
         var ToolBox = function(parentUI,x,y,w,h)
