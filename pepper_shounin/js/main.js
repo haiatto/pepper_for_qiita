@@ -48,6 +48,7 @@ var res = {
     ShoukonIn_png: "cocos_res/ShoukonIn.png",
 
     icon_dustbox_png: "cocos_res/icon_dustbox.png",
+    icon_blockpanel_png: "cocos_res/icon_blockpanel.png",
 
     pepper_icone_png : "cocos_res/pepper-icone.png",
 };  
@@ -2585,6 +2586,24 @@ var BlockLayer = cc.Layer.extend({
             self.addChild(dustboxBtn,1);
             self.dustboxBtn = dustboxBtn;
         }
+        
+        // ボタンパネルボタン
+        self.buttonBoxBtn = null;
+        if(!lunchPepper){
+            var btnPanekBtn = ccui.Button.create();
+            btnPanekBtn.setTouchEnabled(true);
+            btnPanekBtn.loadTextures(res.icon_buttonpanel_png, null, null);
+            btnPanekBtn.setPosition(cc.p(180,120+32));
+            btnPanekBtn.addTouchEventListener(function(button,type)
+            {
+                ShouninCoreIns.workSpaceMain.
+                //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
+                ShouninCoreIns.workSpaceMain.updateLayout();
+            });        
+            self.addChild(btnPanekBtn,1);
+            self.buttonBoxBtn = btnPanekBtn;
+        }
+        alert("aaa")
 
         // ブロック追加ボタン
         var BlockBox = function(parentUI,x,y,w,h)
