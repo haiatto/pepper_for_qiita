@@ -2125,7 +2125,7 @@ var MainLayer = cc.Layer.extend({
         self.playMenu.addBtn("プレイ",64,function(){
            ShouninCoreIns.execStartCurCmdBlk();
         });
-        self.playMenu.addBtn("停止",64,function(){
+        self.playMenu.addBtn("@停止",64,function(){
            ShouninCoreIns.execStop();
         });
 
