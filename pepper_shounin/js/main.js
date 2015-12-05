@@ -1655,8 +1655,18 @@ var ShouninCore = function(){
             }
         }
     };
-
-    //
+    
+    // ブロック編集モード
+    self.isBlockEditModeFlag = false;
+    self.isBlockEditMode = function() {
+        return self.isBlockEditModeFlag;
+    };
+    self.setBlockEditMode = function (flg) {
+    	self.isBlockEditModeFlag = flg;
+    	self.notifyUpdate();
+    };
+    
+    // テキスト編集
     self.isTalkTextEdit = function()
     {
         var blkWId = getCurCmdBlkWorldId_();
@@ -2028,6 +2038,7 @@ var MainLayer = cc.Layer.extend({
                         posY -= 28+marginY;
                         return editBox;
                     };
+             
                     //layout.setContentSize(64 + 8*2, 48);
                     var nameEd  = self.makeEditBox("商人の名前",            0);
                     var ownerEd = self.makeEditBox("作った人のニックネーム", 4);
@@ -2125,7 +2136,7 @@ var MainLayer = cc.Layer.extend({
         self.playMenu.addBtn("プレイ",64,function(){
            ShouninCoreIns.execStartCurCmdBlk();
         });
-        self.playMenu.addBtn("@停止",64,function(){
+        self.playMenu.addBtn("停止",64,function(){
            ShouninCoreIns.execStop();
         });
 
@@ -2550,8 +2561,8 @@ var BlockLayer = cc.Layer.extend({
 
         // メインのワークスペース
         ShouninCoreIns.workSpaceMain = new CommandBlockWorkSpace(self, ShouninCoreIns.cmdBlkMan);
-        ShouninCoreIns.workSpaceMain.setPosition(4,120);
-        ShouninCoreIns.workSpaceMain.setSize    (200,260);
+        ShouninCoreIns.workSpaceMain.setPosition(4,4);
+        ShouninCoreIns.workSpaceMain.setSize    (200,360);
 
         ShouninCoreIns.addListener(self);
         self.shouninCorePlayModeUpdate = function(){
@@ -2572,9 +2583,12 @@ var BlockLayer = cc.Layer.extend({
             var dustboxBtn = ccui.Button.create();
             dustboxBtn.setTouchEnabled(true);
             dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
-            dustboxBtn.setPosition(cc.p(220,120+32));
+            dustboxBtn.setPosition(cc.p(68,0+32));
             dustboxBtn.addTouchEventListener(function(button,type)
             {
+                if (type!=0) {
+                    return;
+                }
                 var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
                 if(curCmdBlk)
                 {
@@ -2592,20 +2606,23 @@ var BlockLayer = cc.Layer.extend({
         if(!lunchPepper){
             var btnPanekBtn = ccui.Button.create();
             btnPanekBtn.setTouchEnabled(true);
-            btnPanekBtn.loadTextures(res.icon_buttonpanel_png, null, null);
-            btnPanekBtn.setPosition(cc.p(180,120+32));
+            btnPanekBtn.loadTextures(res.icon_blockpanel_png, null, null);
+            btnPanekBtn.setPosition(cc.p(132,0+32));
             btnPanekBtn.addTouchEventListener(function(button,type)
             {
-                ShouninCoreIns.workSpaceMain.
+                if (type!=0) {
+                    return;
+                }
+                ShouninCoreIns.setBlockEditMode(!ShouninCoreIns.isBlockEditMode());
+                
                 //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
                 ShouninCoreIns.workSpaceMain.updateLayout();
             });        
             self.addChild(btnPanekBtn,1);
             self.buttonBoxBtn = btnPanekBtn;
         }
-        alert("aaa")
 
-        // ブロック追加ボタン
+        // ブロック追加ボタンボックス
         var BlockBox = function(parentUI,x,y,w,h)
         {
             var self = this;
@@ -2619,6 +2636,7 @@ var BlockLayer = cc.Layer.extend({
             layout.setBounceEnabled(true);
             layout.setPosition   (x,y);
             layout.setContentSize(w,h);
+            layout.setVisible(false);
             parentUI.addChild(layout);
 
             var nowY = 0;//layout.getContentSize().height-16;
@@ -2658,7 +2676,15 @@ var BlockLayer = cc.Layer.extend({
                 });
                 btnLst.push(btn);
             };
-
+            
+            self.shouninCoreUpdate = function()
+            {
+            	if ( ShouninCoreIns.isBlockEditMode() ){           	    
+                    layout.setVisible(true);
+                }else{
+                    layout.setVisible(false);
+                }
+            };
             self.shouninCorePlayModeUpdate = function()
             {
                 if ( ShouninCoreIns.isNowPlay() ){
@@ -2670,7 +2696,7 @@ var BlockLayer = cc.Layer.extend({
             ShouninCoreIns.addListener(self);
         };
         if(!lunchPepper){
-            self.blockBox = new BlockBox(self,4, 4, 250, 110);
+            self.blockBox = new BlockBox(self,220, 4, 250, 380);
 
             self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
             self.blockBox.makeAddCommandBlockBtn("行き先ラベル","label@shonin");
@@ -2698,10 +2724,12 @@ var PepperLayer = cc.Layer.extend({
 
         // ロードと描画ループ
         self.pepperModel = new PepperModel("#threejsCanvas");
+        /*
         self.pepperModel.loadAndDrawStart()
         .then(function(){
             layerSetup();
         });
+        */
 
         //外部からのキャンバス操作
         self.setCanvasPos = function(x,y){
