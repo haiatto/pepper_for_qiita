@@ -24,6 +24,8 @@ var PepperModel = function(canvasElement){
     //
     var self = this;    
 
+    self.nowVisible = true;
+
     //
     self.setJointAngle = function(jointName,angleDeg)
     {
@@ -340,8 +342,11 @@ var PepperModel = function(canvasElement){
         }
         function animate() {
             requestAnimationFrame( animate );
-            render();
-            stats.update();
+            if(self.nowVisible)
+            {
+                render();
+                stats.update();
+            }
         }
         var clock = new THREE.Clock();
         function render() {
@@ -405,6 +410,7 @@ var PepperModel = function(canvasElement){
     {
         if(!renderer)return;
         self.containerElm.css("visibility",flag?"visible":"hidden");
+        self.nowVisible = flag;
     };
 
 };

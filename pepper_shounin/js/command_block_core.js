@@ -595,6 +595,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             cmdBlk.setParentUI(null);
         }
     };
+    // ブロックの塊の先頭を渡して追加します
     self.addCommandLumpBlock = function(cmdBlkLumpTop)
     {
         if(self.curCmdBlk){
@@ -607,6 +608,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         // それ以外は最後に追加します
         self.cmdBlockLumpList.push(cmdBlkLumpTop);
     };
+    // ブロックの塊の先頭を渡して削除します
     self.removeCommandLumpBlock = function(cmdBlkLumpTop)
     {
         var idx = self.cmdBlockLumpList.indexOf(cmdBlkLumpTop);
@@ -616,6 +618,55 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         }
         return false;
     };
+
+    // ブロックを指定して削除します(スコープ以下のものが接続されていれば合わせて削除されます)
+    self.removeCmdBlk = function(removeCmdBlkTop)
+    {
+        if ( !self.isContainCommandBlock(removeCmdBlkTop) ){
+            console.warn("other workspace command block");
+            return;
+        }
+        var removeBlkIns = removeCmdBlkTop.blkIns;        
+
+        // 削除後に塊の先頭リスト再接続が必要ならリンクを保存しておきます
+        var nextCmdLumpBlkTop = null;
+        if(!removeBlkIns.in || !removeBlkIns.in.block){    
+            if(removeBlkIns.out && removeBlkIns.out.block){
+                nextCmdLumpBlkTop = self.cmdBlkMan.lookupCommandBlock(removeBlkIns.out.block);
+            }
+        }
+        
+        // 対象をリンクからカット（前後を再接続）します
+        removeBlkIns.cutInOut();
+
+        // 自身とその接続先を再帰的に破棄してゆきます
+        var isClearCurrent = false;
+        self.cmdBlkMan.blockManager.traverseUnderBlock(removeBlkIns,{
+            blockCb:function(blockIns)
+            {
+                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blockIns);
+                if(self.curCmdBlk == cmdBlk)
+                {
+                    self.setCurCmdBlk(null);
+                    isClearCurrent = true;
+                }
+                self.cmdBlkMan.destryCommandBlock(cmdBlk);
+            },
+        });
+        
+        // ワークスペースの塊の先頭リスト内に居た場合はクリアします
+        if(self.removeCommandLumpBlock(removeCmdBlkTop))
+        {
+            if(nextCmdLumpBlkTop){
+                self.addCommandLumpBlock(nextCmdLumpBlkTop);
+            }
+        }
+        // カレントがクリアされたら通知します
+        if(isClearCurrent){
+            self.notify_workspaceCurCmdBlkUpdate();
+        }
+    };
+
 
     // エディットモードの設定です
     // (エディットモードはアプリケーション的な部分にのみ影響します。

@@ -211,43 +211,7 @@ var ShouninCore = function(){
 
     self.removeCmdBlk = function(removeCmdBlkTop)
     {
-        var removeBlkIns = removeCmdBlkTop.blkIns;        
-
-        //TODO:ここらへんリファクタリング
-
-        // 削除後に塊の先頭リスト再接続が必要ならリンクを保存しておきます
-        var nextCmdLumpBlkTop = null;
-        if(!removeBlkIns.in || !removeBlkIns.in.block){    
-            if(removeBlkIns.out && removeBlkIns.out.block){
-                nextCmdLumpBlkTop = self.cmdBlkMan.lookupCommandBlock(removeBlkIns.out.block);
-            }
-        }
-        
-        // 対象をリンクからカット（前後を再接続）します
-        removeBlkIns.cutInOut();
-
-        // 自身とその接続先を再帰的に破棄してゆきます
-        var isClearCurrent = false;
-        self.cmdBlkMan.blockManager.traverseUnderBlock(removeBlkIns,{
-            blockCb:function(blockIns)
-            {
-                var cmdBlk = self.cmdBlkMan.lookupCommandBlock(blockIns);
-                if(self.curCmdBlk == cmdBlk)
-                {
-                    self.setCurCmdBlk(null);
-                    //isClearCurrent = true;
-                }
-                self.cmdBlkMan.destryCommandBlock(cmdBlk);
-            },
-        });
-        
-        // ワークスペースの塊の先頭リスト内に居た場合はクリアします
-        if(self.workSpaceMain.removeCommandLumpBlock(removeCmdBlkTop))
-        {
-            if(nextCmdLumpBlkTop){
-                self.workSpaceMain.addCommandLumpBlock(nextCmdLumpBlkTop);
-            }
-        }
+        self.workSpaceMain.removeCmdBlk(removeCmdBlkTop);        
     };
     
     // ブロック編集モード
@@ -1158,17 +1122,26 @@ var BlockLayer = cc.Layer.extend({
                 ShouninCoreIns.setCurCmdBlk(cmdBlk);
             }
         };
+        if(lunchPepper){
+            return;
+        }
 
-        // 
+        self.dustboxBtn   = null;
+        self.buttonBoxBtn = null;
+        self.blockBox     = null;
+
+        // 商人コアのリスナー登録
         ShouninCoreIns.addListener(self);
         self.shouninCoreUpdate = function()
         {
             if(ShouninCoreIns.isBlockEditMode()){
                 ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
                 ShouninCoreIns.workSpaceMain.setEditMode(true);
+                self.dustboxBtn.setVisible(true);
             }else{
                 ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
                 ShouninCoreIns.workSpaceMain.setEditMode(false);
+                self.dustboxBtn.setVisible(false);
             }
         };
         self.shouninCorePlayModeUpdate = function(){
@@ -1184,36 +1157,36 @@ var BlockLayer = cc.Layer.extend({
         };
 
         // ゴミ箱ボタン
-        self.dustboxBtn = null;
-        if(!lunchPepper){
+        {
             var dustboxBtn = ccui.Button.create();
             dustboxBtn.setTouchEnabled(true);
             dustboxBtn.loadTextures(res.icon_dustbox_png, null, null);
-            dustboxBtn.setPosition(cc.p(68,0+32));
+            dustboxBtn.setPosition(cc.p(4+32+64,0+32));
             dustboxBtn.addTouchEventListener(function(button,type)
             {
                 if (type!=0) {
                     return;
                 }
-                var curCmdBlk = ShouninCoreIns.getCurCmdBlk();
+                var curCmdBlk = ShouninCoreIns.workSpaceMain.getCurCmdBlk();
                 if(curCmdBlk)
                 {
-                    ShouninCoreIns.removeCmdBlk(curCmdBlk);
+                    ShouninCoreIns.workSpaceMain.removeCmdBlk(curCmdBlk);
                 }
+
                 //TODO:商人コア経由でリスナーからアップデートする方がいいかも。
                 ShouninCoreIns.workSpaceMain.updateLayout();
             });        
             self.addChild(dustboxBtn,1);
             self.dustboxBtn = dustboxBtn;
+            self.dustboxBtn.setVisible(false);
         }
         
         // ボタンパネルボタン
-        self.buttonBoxBtn = null;
-        if(!lunchPepper){
+        {
             var btnPanekBtn = ccui.Button.create();
             btnPanekBtn.setTouchEnabled(true);
             btnPanekBtn.loadTextures(res.icon_blockpanel_png, null, null);
-            btnPanekBtn.setPosition(cc.p(132,0+32));
+            btnPanekBtn.setPosition(cc.p(4+32,0+32));
             btnPanekBtn.addTouchEventListener(function(button,type)
             {
                 if (type!=0) {
@@ -1266,6 +1239,7 @@ var BlockLayer = cc.Layer.extend({
                         var cmdBlk = ShouninCoreIns.cmdBlkMan.createCommandBlock(worldBlkId);
                         ShouninCoreIns.workSpaceMain.addCommandLumpBlock( cmdBlk );
                         ShouninCoreIns.workSpaceMain.updateLayout();
+                        ShouninCoreIns.workSpaceMain.setCurCmdBlk(cmdBlk);
                     }
                 });        
                 layout.addChild(btn);
@@ -1301,7 +1275,7 @@ var BlockLayer = cc.Layer.extend({
             };
             ShouninCoreIns.addListener(self);
         };
-        if(!lunchPepper){
+        {
             self.blockBox = new BlockBox(self,220, 4, 250, 380);
 
             self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
