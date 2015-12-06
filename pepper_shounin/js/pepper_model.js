@@ -294,12 +294,6 @@ var PepperModel = function(canvasElement){
             self.containerElm.css("zIndex","998");
             container = self.containerElm[0];
             
-            var resize = function(){
-                self.setCanvasPos(0,0);
-            };
-            $(window).on('load resize', resize);
-            resize();
-
             camera = new THREE.PerspectiveCamera( 25, self.canvasW / self.canvasH, 0.1, 2000 );
             camera.position.set( 2, 0.0, 0 );
 
@@ -384,9 +378,8 @@ var PepperModel = function(canvasElement){
 
     //外部からのキャンバス操作
     self.setCanvasPos = function(x,y){
-        var posx = ($(window).width()-self.canvasW)/2;
-        self.containerElm.css("marginLeft",""+(posx+x)+"px");
-        self.containerElm.css("marginTop", ""+(50+y)+"px");
+        self.containerElm.css("marginLeft",""+(x)+"px");
+        self.containerElm.css("marginTop", ""+(y)+"px");
     };
     self.setCanvasSize = function(w,h){
         self.canvasW = w;
