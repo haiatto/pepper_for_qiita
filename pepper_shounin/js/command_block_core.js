@@ -6,7 +6,7 @@
 // (表示は一切扱いません。それはブロック単体の管理とそれを扱う側が管理してます)
 // (ブロック間のリンクも管理しません。それはBlockManagerがやってます。)
 var CommandBlockManager = function()
-{
+{ 
     var self = this;
 
     // ブロックマネージャーの生成をします    
@@ -92,6 +92,7 @@ var CommandBlock = function(blkIns)
     var visualTempl = blkIns.blockTemplate.blockVisual;
 
     self.blkIns = blkIns;
+    self.parentWorkspaceId = -1;
     
     // 余り構造を隠しすぎる隠蔽は好きじゃないけど、不便なのでアクセサ系を定義します
     self.getHeaderTemplate = function(){
@@ -115,166 +116,224 @@ var CommandBlock = function(blkIns)
         return self.blkIns.getValueInData(key);
     };
 
-    // UIの見た目
-    var createSpriteFrameByFilePath_ = function(filePath){    
-        var texture = cc.textureCache.addImage(filePath);
-        var texSize = texture.getContentSize();
-        return new cc.SpriteFrame(texture, cc.rect(0,0,texSize.width,texSize.height));
-    };
-    var bgFrame     = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
-    var bgFrameSel  = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
-    var bgFrameExec = createSpriteFrameByFilePath_( res.cmdblock_frame_execute01_png );
-
-    self.bg       = cc.Scale9Sprite.create(bgFrame);
-    self.label    = cc.LabelTTF.create("", "Arial", 20);
-    self.parentUI = null;
-    self.bg.addChild(self.label);
-
     self.destry = function()
     {
         self.blkIns   = null;
-        self.setParentUI(null);
-        //これでいいのか後で調べる…html5版だと破棄要らないとかあるけど…domだから？さらにテクスチャ等リソースは全部キャッシュ式だから？
-        self.bg.   removeFromParentAndCleanup(true);
-        //self.label.removeFromParentAndCleanup(true);
+        $.each(self.lutViewTbl,function(k,v) {
+            v.destry();
+        });
+        self.lutViewTbl = {};
     };
-
-    var eventListener = null;
-    self.setEventListener = function(listenerParam)
-    {
-        self.clearEventListener();    
-        eventListener = cc.eventManager.addListener(listenerParam,self.bg);
-    };
-    self.clearEventListener = function()
-    {
-        if(eventListener){
-            cc.eventManager.removeListener(eventListener);
-            eventListener = null;
-        }
-    };
-    //※イベント周りは、ワークスペース側で一括管理にしました。ここにはないです。
-    self.setParentUI = function(parentUI)
-    {
-        if(self.parentUI == parentUI){
-            return;
-        }
-        if(self.parentUI){
-            self.parentUI.removeChild(self.bg);
-            //self.parentUI.removeChild(self.label, 1);
-        }
-        self.parentUI = parentUI;
-        if(self.parentUI){
-            self.parentUI.addChild(self.bg);
-            //self.parentUI.addChild(self.label, 1);
-        }
-    }
-    self.getParentUI = function(){
-        return self.parentUI;  
-    };
-
-
-    self.setPosition = function(x,y)
-    {
-        var ofsX=0;
-        if(self.getBlockWorldId()=="label@shonin"){
-            ofsX = -6;
-        }
-        if(self.getBlockWorldId()=="gotoLabel@shonin"){
-            ofsX = +6;
-        }
-        self.bg.setPosition   (x+ofsX,y);
-        self.updateLabel();
-    };
-    self.getPosition = function()
-    {
-        var ofsX=0;
-        if(self.getBlockWorldId()=="label@shonin"){
-            ofsX = -6;
-        }
-        if(self.getBlockWorldId()=="gotoLabel@shonin"){
-            ofsX = +6;
-        }
-        var p = self.bg.getPosition();
-        p.x -= ofsX;
-        return p;
-    };
-
-    // 外が操作
-    self.getSize = function(){
-        return self.bg.getContentSize();
-    };
-
+    
+    // view1のラッパ
+    次ここ実装
     self.setCurrentVisial = function(){
-        var size = self.bg.getContentSize();
-        self.bg.setSpriteFrame(bgFrameSel);
-        self.bg.setContentSize(size);
-        self.bg.addChild(self.label);
-        self.updateLabel();
     };
     self.setDefaultVisial = function(){
-        var size = self.bg.getContentSize();
-        self.bg.setSpriteFrame(bgFrame);
-        self.bg.setContentSize(size);
-        self.bg.addChild(self.label);
-        self.updateLabel();
     };
     self.setExecuteVisial = function(){
-        var size = self.bg.getContentSize();
-        self.bg.setSpriteFrame(bgFrameExec);
-        self.bg.setContentSize(size);
-        self.bg.addChild(self.label);
-        self.updateLabel();
     };    
-
-    // 基本は中で操作
-    self.updateLabel = function(){
-        // 内容のテキスト
-        var text = visualTempl.disp_name;
-        if(self.getBlockWorldId()=="label@shonin"){
-            var data = self.getValueInData("labelName")||{string:""};
-            text = "ラベル:" + data.string;
+    
+    // UIの見た目
+    self.lutViewTbl = {};
+    self.createOrGetView = function(workSpaceViewId) {
+        var View = function (cmdBkl) {
+            var self = this;
+                        
+            var createSpriteFrameByFilePath_ = function(filePath){    
+                var texture = cc.textureCache.addImage(filePath);
+                var texSize = texture.getContentSize();
+                return new cc.SpriteFrame(texture, cc.rect(0,0,texSize.width,texSize.height));
+            };
+            var bgFrame     = createSpriteFrameByFilePath_( res.cmdblock_frame01_png );
+            var bgFrameSel  = createSpriteFrameByFilePath_( res.cmdblock_frame_select01_png );
+            var bgFrameExec = createSpriteFrameByFilePath_( res.cmdblock_frame_execute01_png );
+        
+            self.bg       = cc.Scale9Sprite.create(bgFrame);
+            self.label    = cc.LabelTTF.create("", "Arial", 20);
+            self.parentUI = null;
+            self.bg.addChild(self.label);
+        
+            self.destry = function()
+            {
+                self.setParentUI(null);
+                //これでいいのか後で調べる…html5版だと破棄要らないとかあるけど…domだから？さらにテクスチャ等リソースは全部キャッシュ式だから？
+                self.bg.   removeFromParentAndCleanup(true);
+                //self.label.removeFromParentAndCleanup(true);
+            };
+        
+            var eventListener = null;
+            self.setEventListener = function(listenerParam)
+            {
+                self.clearEventListener();    
+                eventListener = cc.eventManager.addListener(listenerParam,self.bg);
+            };
+            self.clearEventListener = function()
+            {
+                if(eventListener){
+                    cc.eventManager.removeListener(eventListener);
+                    eventListener = null;
+                }
+            };
+            //※イベント周りは、ワークスペース側で一括管理にしました。ここにはないです。
+            self.setParentUI = function(parentUI)
+            {
+                if(self.parentUI == parentUI){
+                    return;
+                }
+                if(self.parentUI){
+                    self.parentUI.removeChild(self.bg);
+                    //self.parentUI.removeChild(self.label, 1);
+                }
+                self.parentUI = parentUI;
+                if(self.parentUI){
+                    self.parentUI.addChild(self.bg);
+                    //self.parentUI.addChild(self.label, 1);
+                }
+            }
+            self.getParentUI = function(){
+                return self.parentUI;  
+            };
+        
+        
+            self.setPosition = function(x,y)
+            {
+                var ofsX=0;
+                if(cmdBkl.getBlockWorldId()=="label@shonin"){
+                    ofsX = -6;
+                }
+                if(cmdBkl.getBlockWorldId()=="gotoLabel@shonin"){
+                    ofsX = +6;
+                }
+                self.bg.setPosition   (x+ofsX,y);
+                self.updateLabel();
+            };
+            self.getPosition = function()
+            {
+                var ofsX=0;
+                if(cmdBkl.getBlockWorldId()=="label@shonin"){
+                    ofsX = -6;
+                }
+                if(cmdBkl.getBlockWorldId()=="gotoLabel@shonin"){
+                    ofsX = +6;
+                }
+                var p = self.bg.getPosition();
+                p.x -= ofsX;
+                return p;
+            };
+        
+            // 外が操作
+            self.getSize = function(){
+                return self.bg.getContentSize();
+            };
+        
+            self.setCurrentVisial = function(){
+                var size = self.bg.getContentSize();
+                self.bg.setSpriteFrame(bgFrameSel);
+                self.bg.setContentSize(size);
+                self.bg.addChild(self.label);
+                self.updateLabel();
+            };
+            self.setDefaultVisial = function(){
+                var size = self.bg.getContentSize();
+                self.bg.setSpriteFrame(bgFrame);
+                self.bg.setContentSize(size);
+                self.bg.addChild(self.label);
+                self.updateLabel();
+            };
+            self.setExecuteVisial = function(){
+                var size = self.bg.getContentSize();
+                self.bg.setSpriteFrame(bgFrameExec);
+                self.bg.setContentSize(size);
+                self.bg.addChild(self.label);
+                self.updateLabel();
+            };    
+        
+            // 基本は中で操作
+            self.updateLabel = function(){
+                // 内容のテキスト
+                var text = visualTempl.disp_name;
+                if(cmdBkl.getBlockWorldId()=="label@shonin"){
+                    var data = cmdBkl.getValueInData("labelName")||{string:""};
+                    text = "ラベル:" + data.string;
+                }
+                if(cmdBkl.getBlockWorldId()=="gotoLabel@shonin"){
+                    var data = cmdBkl.getValueInData("labelName")||{string:""};
+                    text = "Goto:" + data.string;
+                }
+                if(cmdBkl.getBlockWorldId()=="talk@shonin"){
+                    var data = cmdBkl.getValueInData("talkLabel0")||{string:""};
+                    var previewText = data.string;
+                    text = "会話:" + previewText.substring(0,5)+"…";
+                }
+                self.label.setString(text);
+                // サイズなどのレイアウト
+                var lblSize = self.label.getContentSize();
+                var minW=90;
+                var minH=26;
+                if(cmdBkl.getBlockWorldId()=="label@shonin"){
+                    minW = 150;
+                }
+                self.bg.setContentSize(cc.size(
+                    Math.max(lblSize.width+6, minW),
+                    Math.max(lblSize.height,minH))
+                );
+                //
+                var bgSize    = self.bg.getContentSize();
+                var labelSize = self.label.getContentSize();
+                var px = labelSize.width /2 + (bgSize.width-labelSize.width)/2;
+                var py = labelSize.height/2 + (bgSize.height-labelSize.height)/2;
+                if(cmdBkl.getBlockWorldId()=="label@shonin"||
+                   cmdBkl.getBlockWorldId()=="gotoLabel@shonin"){
+                    px=labelSize.width /2+6;//左寄せ
+                }
+                px=labelSize.width /2+6;//左寄せ
+                self.label.setPosition(cc.p(px,py));
+            };
+            self.setPosition(0,0);
+            self.updateLabel();
+        };
+        if (!self.lutViewTbl[workSpaceViewId])
+        {
+            self.lutViewTbl[workSpaceViewId] = new View(self);
         }
-        if(self.getBlockWorldId()=="gotoLabel@shonin"){
-            var data = self.getValueInData("labelName")||{string:""};
-            text = "Goto:" + data.string;
-        }
-        if(self.getBlockWorldId()=="talk@shonin"){
-            var data = self.getValueInData("talkLabel0")||{string:""};
-            var previewText = data.string;
-            text = "会話:" + previewText.substring(0,5)+"…";
-        }
-        self.label.setString(text);
-        // サイズなどのレイアウト
-        var lblSize = self.label.getContentSize();
-        var minW=90;
-        var minH=26;
-        if(self.getBlockWorldId()=="label@shonin"){
-            minW = 150;
-        }
-        self.bg.setContentSize(cc.size(
-            Math.max(lblSize.width+6, minW),
-            Math.max(lblSize.height,minH))
-        );
-        //
-        var bgSize    = self.bg.getContentSize();
-        var labelSize = self.label.getContentSize();
-        var px = labelSize.width /2 + (bgSize.width-labelSize.width)/2;
-        var py = labelSize.height/2 + (bgSize.height-labelSize.height)/2;
-        if(self.getBlockWorldId()=="label@shonin"||
-           self.getBlockWorldId()=="gotoLabel@shonin"){
-            px=labelSize.width /2+6;//左寄せ
-        }
-        px=labelSize.width /2+6;//左寄せ
-        self.label.setPosition(cc.p(px,py));
+        return self.lutViewTbl[workSpaceViewId];
     };
-    self.setPosition(0,0);
-    self.updateLabel();
+    
+
 };
 
 
 // 複数のブロックを管理します。
 // レイアウトを整えたりするお仕事をやります。
 // また、実行の起点を扱ったりもします。
+//  self.getCurCmdBlk
+//  self.setCurCmdBlk
+//
+//  self.addListener
+//  self.removeListener
+//
+//  self.saveToJsonTable
+//  self.loadFromJsonTable
+//
+//  self.execStart
+//  self.execStop
+//
+//  self.findGotoLabelCmdBlk
+//  self.isContainCommandBlock
+//  self.splitCommandBlockLump
+//  self.concatCommandBlockLump
+//  self.cutCommandBlock
+//  self.addCommandLumpBlock
+//  self.removeCommandLumpBlock
+//  self.removeCmdBlk
+//todo;kokorahen viewに
+//  self.setPosition
+//  self.setSize
+//  self.updateLayout
+// 
+var workspaceIdSeed = 1;
+var workspaceViewIdSeed = 1;
 var CommandBlockWorkSpace = function(layer, commandBlockManager)
 {
     var self = this;
@@ -282,7 +341,9 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.cmdBlkMan = commandBlockManager;
     self.cmdBlockLumpList = [];
     self.curCmdBlk = null;
+    self.workSpaceId = workspaceIdSeed++;//not serialize
 
+    /*
     // レイアウト
     var layout = ccui.ScrollView.create();
     layout.setBackGroundImage(res.workspace_frame_png);
@@ -292,6 +353,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     layout.setTouchEnabled(true);
     layout.setBounceEnabled(true);
     layer.addChild(layout);
+    */
 
     //
     self.getCurCmdBlk = function()
@@ -299,12 +361,13 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         return self.curCmdBlk;  
     };
     self.setCurCmdBlk = function(curCmdBlk)
-    {     
+    {   
         if(self.curCmdBlk){
             self.curCmdBlk.setDefaultVisial();
             self.curCmdBlk = null;
         }
         if(curCmdBlk){
+        console.log("cmd blk gg");
             self.curCmdBlk = curCmdBlk;
             self.curCmdBlk.setCurrentVisial();
         }
@@ -509,7 +572,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     // 指定のコマンドブロックがこのワークスペースのものか調べます
     self.isContainCommandBlock = function(cmdBlk)
     {
-        return cmdBlk.getParentUI() == layout;
+        return cmdBlk.parentWorkspaceId == self.workspaceId;
     };
 
     // 指定ブロックのinの位置でLumpに分割します
@@ -599,7 +662,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.addCommandLumpBlock = function(cmdBlkLumpTop)
     {
         if(self.curCmdBlk){
-            if ( self.curCmdBlk.getParentUI() == layout ){
+            if ( self.isContainCommandBlock(self.curCmdBlk) ){
                 // カレントがワークスペース内ならその後ろにつなぎます
                 self.curCmdBlk.blkIns.connectOut(cmdBlkLumpTop.blkIns);
                 return;
@@ -804,144 +867,182 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
 
     // UI構築と描画部分です
-    self.setPosition = function(x,y)
-    {
-        layout.setPosition(x,y);
+    self.lutViewLst = [];
+    
+    self.updateLayout = function () {
+        $.each(self.lutViewLst,function (k,v) {
+            v.updateLayout();
+        });
     };
-    self.setSize = function(w,h)
-    {
-        layout.setContentSize(cc.size(w,h));    
-    };
+    
+    self.addView = function() {
+        // レイアウト
+        var View = function(workspace) {
+            var self = this;
+            self.workspaceViewId = workspace.workspaceViewIdSeed++;
 
-    self.updateLayout = function()
-    {        
-        var TAG_SPRITE = 100;
+            var layout = ccui.ScrollView.create();
+            layout.setBackGroundImage(res.workspace_frame_png);
+            layout.setBackGroundImageScale9Enabled(true);
+            layout.setClippingEnabled(true);
+            layout.setDirection(ccui.ScrollView.DIR_VERTICAL);
+            layout.setTouchEnabled(true);
+            layout.setBounceEnabled(true);
+            layer.addChild(layout);
 
-        var removeChildrenByTag = function(layout,tag,cleanup)
-        {
-            var removes=[];
-            $.each(layout.getChildren(),function(idx,child){
-                if(child.getTag() == TAG_SPRITE){
-                    removes.push(child);
-                } 
-            });
-            $.each(removes,function(idx,child){
-                if(child.addTouchEventListener){
-                    child.addTouchEventListener(null);
-                }
-                layout.removeChild(child,cleanup);
-            });
-        };
-        removeChildrenByTag(layout,TAG_SPRITE,true);
-
-        var size = layout.getContentSize();
-        var x = 32;
-        var y = size.height;
-        $.each(self.cmdBlockLumpList,function(idx, cmdBlkLump)
-        {
-            y -= 16;
+            self.setPosition = function(x,y)
+            {
+                layout.setPosition(x,y);
+            };
+            self.setSize = function(w,h)
+            {
+                layout.setContentSize(cc.size(w,h));    
+            };
             
-            var sepBarSprt = cc.Scale9Sprite.create(res.workspace_separate_bar_png);
-            sepBarSprt.setPosition(cc.p(size.width/2, y+8));
-            sepBarSprt.setContentSize(cc.size(size.width,16));
-            layout.addChild(sepBarSprt, 0, TAG_SPRITE);
-
-            if(idx>0)
-            {
-                if(editModeFlag_)
+            
+            self.updateLayout = function()
+            {        
+                var TAG_SPRITE = 100;
+        
+                var removeChildrenByTag = function(layout,tag,cleanup)
                 {
-                    var btn = ccui.Button.create();
-                    btn.setTouchEnabled(true);
-                    btn.loadTextures(res.workspace_linehead_png, null, null);
-                    btn.setPosition(cc.p(16/2, y+8));
-                    btn.addTouchEventListener(function(button,type)
-                    {
-                        if(0==type){
-                            // 結合
-                            self.concatCommandBlockLump(cmdBlkLump);
-                            self.updateLayout();
-                        }
+                    var removes=[];
+                    $.each(layout.getChildren(),function(idx,child){
+                        if(child.getTag() == TAG_SPRITE){
+                            removes.push(child);
+                        } 
                     });
-                    layout.addChild(btn, 0, TAG_SPRITE);
-                }
-            }
-
-            var firstFlg = true;
-            var recv = function(cmdBlk)
-            {
-                cmdBlk.setParentUI(layout);
-
-                cmdBlk.setEventListener({
-                    event:        listenerParam.event,
-                    onTouchBegan: listenerParam.onTouchBegan,
-                    onTouchMoved: listenerParam.onTouchMoved,
-                    onTouchEnded: listenerParam.onTouchEnded,
-                });
-
-                var blkSize = cmdBlk.getSize();
-                cmdBlk.setPosition( 
-                    x + blkSize.width /2, 
-                    y - blkSize.height/2 
-                );
-/*
-                var lineHeadSprt = cc.Sprite.create(res.workspace_linehead_png);
-                lineHeadSprt.setPosition(cc.p(32/2, y - 32/2));
-                layout.addChild(lineHeadSprt, 0, TAG_SPRITE);
-*/
-                if(!firstFlg)
+                    $.each(removes,function(idx,child){
+                        if(child.addTouchEventListener){
+                            child.addTouchEventListener(null);
+                        }
+                        layout.removeChild(child,cleanup);
+                    });
+                };
+                removeChildrenByTag(layout,TAG_SPRITE,true);
+        
+                var size = layout.getContentSize();
+                var x = 32;
+                var y = size.height;
+                $.each(workspace.cmdBlockLumpList,function(idx, cmdBlkLump)
                 {
-                    if(editModeFlag_)
+                    y -= 16;
+                    
+                    var sepBarSprt = cc.Scale9Sprite.create(res.workspace_separate_bar_png);
+                    sepBarSprt.setPosition(cc.p(size.width/2, y+8));
+                    sepBarSprt.setContentSize(cc.size(size.width,16));
+                    layout.addChild(sepBarSprt, 0, TAG_SPRITE);
+        
+                    if(idx>0)
                     {
-                        var btn = ccui.Button.create();
-                        btn.setTouchEnabled(true);
-                        btn.loadTextures(res.workspace_linehead_png, null, null);
-                        btn.setPosition(cc.p(16/2, y));
-
-                        btn.addTouchEventListener(function(button,type)
+                        if(editModeFlag_)
                         {
-                            if(0==type){
-                                // 分割
-                                self.splitCommandBlockLump(cmdBlk);
-                                self.updateLayout();
+                            var btn = ccui.Button.create();
+                            btn.setTouchEnabled(true);
+                            btn.loadTextures(res.workspace_linehead_png, null, null);
+                            btn.setPosition(cc.p(16/2, y+8));
+                            btn.addTouchEventListener(function(button,type)
+                            {
+                                if(0==type){
+                                    // 結合
+                                    workspace.concatCommandBlockLump(cmdBlkLump);
+                                    workspace.updateLayout();
+                                }
+                            });
+                            layout.addChild(btn, 0, TAG_SPRITE);
+                        }
+                    }
+
+                    var firstFlg = true;
+                    var recv = function(cmdBlk)
+                    {
+                        var cmdBlkView = cmdBlk.createOrGetView(self.workspaceViewId);
+                        
+                        cmdBlkView.setParentUI(layout);
+                        cmdBlkView.setEventListener({
+                            event:        listenerParam.event,
+                            onTouchBegan: listenerParam.onTouchBegan,
+                            onTouchMoved: listenerParam.onTouchMoved,
+                            onTouchEnded: listenerParam.onTouchEnded,
+                        });
+        
+                        var blkSize = cmdBlkView.getSize();
+                        cmdBlkView.setPosition( 
+                            x + blkSize.width /2, 
+                            y - blkSize.height/2 
+                        );
+        /*
+                        var lineHeadSprt = cc.Sprite.create(res.workspace_linehead_png);
+                        lineHeadSprt.setPosition(cc.p(32/2, y - 32/2));
+                        layout.addChild(lineHeadSprt, 0, TAG_SPRITE);
+        */
+                        if(!firstFlg)
+                        {
+                            if(editModeFlag_)
+                            {
+                                var btn = ccui.Button.create();
+                                btn.setTouchEnabled(true);
+                                btn.loadTextures(res.workspace_linehead_png, null, null);
+                                btn.setPosition(cc.p(16/2, y));
+        
+                                btn.addTouchEventListener(function(button,type)
+                                {
+                                    if(0==type){
+                                        // 分割
+                                        workspace.splitCommandBlockLump(cmdBlk);
+                                        workspace.updateLayout();
+                                    }
+                                });
+        
+                                layout.addChild(btn, 0, TAG_SPRITE);
+                            }
+                        }
+                        firstFlg = false;
+        
+                        y -= blkSize.height;
+        
+                        $.each(cmdBlk.blkIns.scopeOutTbl,function(idx2,scopeOut)
+                        {
+                            if(scopeOut.block)
+                            {
+                                recv( workspace.cmdBlkMan.lookupCommandBlock( scopeOut.block ) );
                             }
                         });
-
-                        layout.addChild(btn, 0, TAG_SPRITE);
-                    }
-                }
-                firstFlg = false;
-
-                y -= blkSize.height;
-
-                $.each(cmdBlk.blkIns.scopeOutTbl,function(idx2,scopeOut)
-                {
-                    if(scopeOut.block)
-                    {
-                        recv( self.cmdBlkMan.lookupCommandBlock( scopeOut.block ) );
-                    }
+                        if(cmdBlk.blkIns.out)
+                        { 
+                            if(cmdBlk.blkIns.out.block)
+                            {
+                                recv( workspace.cmdBlkMan.lookupCommandBlock( cmdBlk.blkIns.out.block ) );
+                            }
+                        }
+                    };
+                    recv(cmdBlkLump);
                 });
-                if(cmdBlk.blkIns.out)
-                { 
-                    if(cmdBlk.blkIns.out.block)
-                    {
-                        recv( self.cmdBlkMan.lookupCommandBlock( cmdBlk.blkIns.out.block ) );
-                    }
+                if(y<0)
+                {
+                    $.each(layout.getChildren(),function(idx,item){
+                        var p = item.getPosition();
+                        p.y += -y;
+                        item.setPosition(p);
+                    });
+                    layout.setInnerContainerSize(cc.size(size.width, -y + size.height));
                 }
-            };
-            recv(cmdBlkLump);
-        });
-        if(y<0)
-        {
-            $.each(layout.getChildren(),function(idx,item){
-                var p = item.getPosition();
-                p.y += -y;
-                item.setPosition(p);
-            });
-            layout.setInnerContainerSize(cc.size(size.width, -y + size.height));
-        }
-        else
-        {
-            layout.setInnerContainerSize(cc.size(size.width, size.height));
-        }
+                else
+                {
+                    layout.setInnerContainerSize(cc.size(size.width, size.height));
+                }
+            };            
+            
+        };
+        var view = new View(self);
+        self.lutViewLst.push(view);
+        return view;
     };
+    self.removeView = function (view) {        
+        var idx = self.lutViewLst.indexOf(view);
+        if(idx>=0){
+            self.lutViewLst.splice(idx,1);
+        };
+    };
+
 };

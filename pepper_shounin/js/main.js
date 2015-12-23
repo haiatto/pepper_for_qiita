@@ -1114,14 +1114,16 @@ var BlockLayer = cc.Layer.extend({
 
         // メインのワークスペース
         ShouninCoreIns.workSpaceMain = new CommandBlockWorkSpace(self, ShouninCoreIns.cmdBlkMan);
-        ShouninCoreIns.workSpaceMain.setPosition(4,4);
-        ShouninCoreIns.workSpaceMain.setSize    (200,360);
         ShouninCoreIns.workSpaceMain.addListener(self);
         self.workspaceCurCmdBlkUpdate = function(workspace,cmdBlk){
             if(!ShouninCoreIns.isBlockEditMode()){
                 ShouninCoreIns.setCurCmdBlk(cmdBlk);
             }
         };
+        ShouninCoreIns.workSpaceMainView = ShouninCoreIns.workSpaceMain.addView();         
+        ShouninCoreIns.workSpaceMainView.setPosition(4,4);
+        ShouninCoreIns.workSpaceMainView.setSize    (200,360);
+
         if(lunchPepper){
             return;
         }
@@ -2037,11 +2039,10 @@ pepperBlock.registBlockDef(function(blockManager,materialBoxWsList){
               addBtn_(valueDataTbl['ans0'].string,90+    256/2,128,256,128,makeSelectEndCb_("ans0"));
               addBtn_(valueDataTbl['ans1'].string,90+300+256/2,128,256,128,makeSelectEndCb_("ans1"));
           }
-
           tabletLayer.showTablet();
           return dfd.promise();
       }
-    );
+    );          
     // ジャンプ用ラベルブロック
     blockManager.registBlockDef(
       {
