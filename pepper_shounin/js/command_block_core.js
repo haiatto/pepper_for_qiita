@@ -126,7 +126,6 @@ var CommandBlock = function(blkIns)
     };
     
     // view1のラッパ
-    次ここ実装
     self.setCurrentVisial = function(){
     };
     self.setDefaultVisial = function(){
