@@ -78,9 +78,16 @@ var ShouninCore = function(){
     // リスナー登録と通知
     // (このコアの主要な機能です。UIなどはリスナーを登録して状態変化に備えます)
     var listenerLst_ = [];
+    var callCb = function(instance){
+        if(instance.shouninCoreUpdate)
+        {
+            instance.shouninCoreUpdate();
+        }
+    };
     self.addListener = function(instance)
     {
         listenerLst_.push(instance);
+        callCb(instance);
     };
     self.removeListener = function(instance)
     {
@@ -93,10 +100,7 @@ var ShouninCore = function(){
     self.notifyUpdate = function()
     {
         $.each(listenerLst_,function(k,listener){
-            if(listener.shouninCoreUpdate)
-            {
-                listener.shouninCoreUpdate();
-            }
+            callCb(listener);
         });
     };
     // 再生状態の変更があった場合の通知。
@@ -718,7 +722,6 @@ var MainLayer = cc.Layer.extend({
         var s = self.sideMenu.layout.getContentSize();
         self.sideMenu.layout.setPosition(cc.p(size.width-s.width,p.y));
 
-        ShouninCoreIns.addListener(self);
         self.shouninCorePlayModeUpdate = function(){
             if(ShouninCoreIns.isNowPlay()){
                 self.fileMenu.layout.setVisible(false);
@@ -728,6 +731,7 @@ var MainLayer = cc.Layer.extend({
                 self.sideMenu.layout.setVisible(true);
             }
         };
+        ShouninCoreIns.addListener(self);
 
         // NaoQiメニュー
         var openNaoQiMenu = function(x,y){
@@ -796,9 +800,9 @@ var MainLayer = cc.Layer.extend({
                 posY -= 28+marginY;
                 return editBox;
             };
-            ShouninCoreIns.addListener(self);
             self.shouninCoreUpdate = function(){  
             };
+            ShouninCoreIns.addListener(self);
 
             self.setVisible = function(flag){
                 layout.setVisible(flag);
@@ -1124,6 +1128,10 @@ var BlockLayer = cc.Layer.extend({
         ShouninCoreIns.workSpaceMainView.setPosition(4,4);
         ShouninCoreIns.workSpaceMainView.setSize    (200,360);
 
+        ShouninCoreIns.workSpaceSubView = ShouninCoreIns.workSpaceMain.addView();         
+        ShouninCoreIns.workSpaceSubView.setPosition(200+4 +80,4);
+        ShouninCoreIns.workSpaceSubView.setSize    (200,360);
+
         if(lunchPepper){
             return;
         }
@@ -1131,32 +1139,6 @@ var BlockLayer = cc.Layer.extend({
         self.dustboxBtn   = null;
         self.buttonBoxBtn = null;
         self.blockBox     = null;
-
-        // 商人コアのリスナー登録
-        ShouninCoreIns.addListener(self);
-        self.shouninCoreUpdate = function()
-        {
-            if(ShouninCoreIns.isBlockEditMode()){
-                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
-                ShouninCoreIns.workSpaceMain.setEditMode(true);
-                self.dustboxBtn.setVisible(true);
-            }else{
-                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
-                ShouninCoreIns.workSpaceMain.setEditMode(false);
-                self.dustboxBtn.setVisible(false);
-            }
-        };
-        self.shouninCorePlayModeUpdate = function(){
-            if(ShouninCoreIns.isNowPlay()){
-                if(self.dustboxBtn){
-                    self.dustboxBtn.setVisible(false);
-                }
-            }else{                
-                if(self.dustboxBtn){
-                    self.dustboxBtn.setVisible(true);
-                }
-            }
-        };
 
         // ゴミ箱ボタン
         {
@@ -1278,7 +1260,7 @@ var BlockLayer = cc.Layer.extend({
             ShouninCoreIns.addListener(self);
         };
         {
-            self.blockBox = new BlockBox(self,220, 4, 250, 380);
+            self.blockBox = new BlockBox(self,500, 4, 250, 380);
 
             self.blockBox.makeAddCommandBlockBtn("Goto行き先","gotoLabel@shonin");
             self.blockBox.makeAddCommandBlockBtn("行き先ラベル","label@shonin");
@@ -1286,6 +1268,35 @@ var BlockLayer = cc.Layer.extend({
             self.blockBox.makeAddCommandBlockBtn("ポーズ","pose@shonin");
             self.blockBox.makeAddCommandBlockBtn("会話","talk@shonin");
         }
+        // 商人コアのリスナー登録
+        self.shouninCoreUpdate = function()
+        {
+            if(ShouninCoreIns.isBlockEditMode()){
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(false);
+                ShouninCoreIns.workSpaceMain.setEditMode(true);
+                ShouninCoreIns.workSpaceMainView.setVisible(true);
+                ShouninCoreIns.workSpaceSubView .setVisible(true);
+                self.dustboxBtn.setVisible(true);
+            }else{
+                ShouninCoreIns.mainScene.pepperLayer.setCanvasVisible(true);
+                ShouninCoreIns.workSpaceMain.setEditMode(false);
+                ShouninCoreIns.workSpaceMainView.setVisible(true);
+                ShouninCoreIns.workSpaceSubView .setVisible(false);
+                self.dustboxBtn.setVisible(false);
+            }
+        };
+        self.shouninCorePlayModeUpdate = function(){
+            if(ShouninCoreIns.isNowPlay()){
+                if(self.dustboxBtn){
+                    self.dustboxBtn.setVisible(false);
+                }
+            }else{                
+                if(self.dustboxBtn){
+                    self.dustboxBtn.setVisible(true);
+                }
+            }
+        };
+        ShouninCoreIns.addListener(self);
         return true;
     },
 });
@@ -1730,7 +1741,6 @@ var TabletLayer = cc.Layer.extend({
             self.setVisible(false);
         };
 
-        ShouninCoreIns.addListener(self);
         self.shouninCorePlayModeUpdate = function(){
             if(ShouninCoreIns.isNowPlay()){
                 if(!ShouninCoreIns.lunchPepper){
@@ -1747,6 +1757,7 @@ var TabletLayer = cc.Layer.extend({
                 }
             }
         };
+        ShouninCoreIns.addListener(self);
         return true;
     },
 });

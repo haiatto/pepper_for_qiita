@@ -92,7 +92,6 @@ var CommandBlock = function(blkIns)
     var visualTempl = blkIns.blockTemplate.blockVisual;
 
     self.blkIns = blkIns;
-    self.parentWorkspaceId = -1;
     
     // 余り構造を隠しすぎる隠蔽は好きじゃないけど、不便なのでアクセサ系を定義します
     self.getHeaderTemplate = function(){
@@ -127,17 +126,17 @@ var CommandBlock = function(blkIns)
     
     // viewのラッパ
     self.setCurrentVisial = function(){
-        $.each(self.lutViewTbl,function(view){
+        $.each(self.lutViewTbl,function(k,view){
             view.setCurrentVisial();
         });
     };
     self.setDefaultVisial = function(){
-        $.each(self.lutViewTbl,function(view){
+        $.each(self.lutViewTbl,function(k,view){
             view.setDefaultVisial();
         });
     };
     self.setExecuteVisial = function(){
-        $.each(self.lutViewTbl,function(view){
+        $.each(self.lutViewTbl,function(k,view){
             view.setExecuteVisial();
         });
     };
@@ -349,7 +348,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     self.cmdBlkMan = commandBlockManager;
     self.cmdBlockLumpList = [];
     self.curCmdBlk = null;
-    self.workSpaceId = workspaceIdSeed++;//not serialize
+    self.workspaceId = workspaceIdSeed++;//not serialize
 
     /*
     // レイアウト
@@ -578,9 +577,16 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     };
 
     // 指定のコマンドブロックがこのワークスペースのものか調べます
-    self.isContainCommandBlock = function(cmdBlk)
+    self.isContainCommandBlock = function(checkCmdBlk)
     {
-        return cmdBlk.parentWorkspaceId == self.workspaceId;
+        var isFind = false;
+        traverseAllCmdBlock_(function(cmdBlk){
+            if(checkCmdBlk == cmdBlk){
+                isFind = true;
+                return true;
+            }
+        });
+        return isFind;
     };
 
     // 指定ブロックのinの位置でLumpに分割します
@@ -775,7 +781,8 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
         // レイアウト
         var View = function(workspace) {
             var self = this;
-            self.workspaceViewId = workspace.workspaceViewIdSeed++;
+            var selfView = self;
+            self.workspaceViewId = workspaceViewIdSeed++;
 
             var layout = ccui.ScrollView.create();
             layout.setBackGroundImage(res.workspace_frame_png);
@@ -797,7 +804,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                         return;
                     }
                     var isOk = traverseAllCmdBlock_(function(cmdBlk){
-                        var cmdBlkView = cmdBlk.createOrGetView(self.workspaceViewId);
+                        var cmdBlkView = cmdBlk.createOrGetView(selfView.workspaceViewId);
                         if (cc.rectContainsPoint(cmdBlkView.bg.getBoundingBoxToWorld(), touch.getLocation())) 
                         {
                             tgtCmdBlk_ = cmdBlk;
@@ -808,8 +815,8 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                         }
                     });
                     if(!isOk){
-                        self.setCurCmdBlk(null); 
-                        self.notify_workspaceCurCmdBlkUpdate();
+                        workspace.setCurCmdBlk(null); 
+                        workspace.notify_workspaceCurCmdBlkUpdate();
                     }
                     if(!editModeFlag_){
                         tgtCmdBlk_ = null;
@@ -820,7 +827,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     var deltaTime = Date.now() - tgtCmdBlkMoveOkTimer_;
                     if(tgtCmdBlk_)
                     {
-                        var tgtCmdBlkView = tgtCmdBlk_.createOrGetView(self.workspaceViewId);
+                        var tgtCmdBlkView = tgtCmdBlk_.createOrGetView(selfView.workspaceViewId);
                         //event.stopPropagation();
                         
                         //ブロックを移動します
@@ -832,14 +839,14 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                         event.stopPropagation();
                         // 付加的な操作をします
                         if(overrapCmdBlk_){
-                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(self.workspaceViewId);
+                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(selfView.workspaceViewId);
                             var p = overrapCmdBlkView.getPosition();
                             overrapCmdBlkView.setPosition(p.x+5, p.y - 5*overrapDir_);
                             overrapCmdBlk_ = null;
                             overrapDir_    = 0;
                         }
                         var isOk = traverseAllCmdBlock_(function(cmdBlk){
-                            var cmdBlkView = cmdBlk.createOrGetView(self.workspaceViewId);
+                            var cmdBlkView = cmdBlk.createOrGetView(selfView.workspaceViewId);
                             var rc = cmdBlkView.bg.getBoundingBoxToWorld();
                             var pt = touch.getLocation();
                             rc.x    = -9999;//横方向は無視します
@@ -859,7 +866,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                             }
                         });
                         if(overrapCmdBlk_){
-                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(self.workspaceViewId);
+                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(selfView.workspaceViewId);
                             var p = overrapCmdBlkView.getPosition();
                             overrapCmdBlkView.setPosition(p.x-5, p.y + 5*overrapDir_);
                         }
@@ -873,7 +880,7 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     if(tgtCmdBlk_ && overrapCmdBlk_)
                     {
                         // まずは対象のワークスペース内での接続を解除します
-                        self.cutCommandBlock(tgtCmdBlk_);
+                        workspace.cutCommandBlock(tgtCmdBlk_);
                         // 
                         if(overrapDir_>0){
                             //下(out)に接続します
@@ -888,9 +895,9 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                                 tgtCmdBlk_.blkIns.connectOut( overrapCmdBlk_.blkIns );
                             }
                             // 先頭リストのブロックだったなら入れ替えます
-                            var idx = self.cmdBlockLumpList.indexOf(overrapCmdBlk_);
+                            var idx = workspace.cmdBlockLumpList.indexOf(overrapCmdBlk_);
                             if(idx>=0){
-                                self.cmdBlockLumpList[idx] = tgtCmdBlk_;
+                                workspace.cmdBlockLumpList[idx] = tgtCmdBlk_;
                             }
                         }
                     }
@@ -899,11 +906,14 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
                     overrapDir_ = 0;
                     //コールバック内でレイアウト変更は危険なのでシステムから呼び出しにします
                     setTimeout(function(){
-                        self.updateLayout();
+                        workspace.updateLayout();
                     },0);
                 },
             };
-
+            self.setVisible = function(flag)
+            {
+                layout.setVisible(flag);  
+            };
             self.setPosition = function(x,y)
             {
                 layout.setPosition(x,y);
