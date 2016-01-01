@@ -125,13 +125,22 @@ var CommandBlock = function(blkIns)
         self.lutViewTbl = {};
     };
     
-    // view1のラッパ
+    // viewのラッパ
     self.setCurrentVisial = function(){
+        $.each(self.lutViewTbl,function(view){
+            view.setCurrentVisial();
+        });
     };
     self.setDefaultVisial = function(){
+        $.each(self.lutViewTbl,function(view){
+            view.setDefaultVisial();
+        });
     };
     self.setExecuteVisial = function(){
-    };    
+        $.each(self.lutViewTbl,function(view){
+            view.setExecuteVisial();
+        });
+    };
     
     // UIの見た目
     self.lutViewTbl = {};
@@ -752,118 +761,6 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
     var tgtCmdBlkMoveOkTimer_ = 0;
     var overrapCmdBlk_ = null;
     var overrapDir_    = 0;
-    var listenerParam = 
-    {
-        event: cc.EventListener.TOUCH_ONE_BY_ONE,
-        onTouchBegan: function(touch, event) {    
-            if (!cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())){
-                //枠外は無視します
-                // self.curCmdBlk = null; 
-                // self.notify_workspaceCurCmdBlkUpdate();
-                return;
-            }
-            var isOk = traverseAllCmdBlock_(function(cmdBlk){
-                if (cc.rectContainsPoint(cmdBlk.bg.getBoundingBoxToWorld(), touch.getLocation())) 
-                {
-                    tgtCmdBlk_ = cmdBlk;
-                    tgtCmdBlkMoveOkTimer_ = Date.now();
-                    click(tgtCmdBlk_);
-                    //event.stopPropagation();
-                    return true;
-                }
-            });
-            if(!isOk){
-                self.setCurCmdBlk(null); 
-                self.notify_workspaceCurCmdBlkUpdate();
-            }
-            if(!editModeFlag_){
-                tgtCmdBlk_ = null;
-            }
-            return isOk;
-        },
-        onTouchMoved: function(touch, event) {
-            var deltaTime = Date.now() - tgtCmdBlkMoveOkTimer_;
-            if(tgtCmdBlk_)
-            {
-                //event.stopPropagation();
-                
-                //ブロックを移動します
-                var delta = touch.getDelta();
-                var pos = tgtCmdBlk_.getPosition();
-                pos.x += delta.x;
-                pos.y += delta.y;
-                tgtCmdBlk_.setPosition(pos.x,pos.y);
-                event.stopPropagation();
-                // 付加的な操作をします
-                if(overrapCmdBlk_){
-                    var p = overrapCmdBlk_.getPosition();
-                    overrapCmdBlk_.setPosition(p.x+5, p.y - 5*overrapDir_);
-                    overrapCmdBlk_ = null;
-                    overrapDir_    = 0;
-                }
-                var isOk = traverseAllCmdBlock_(function(cmdBlk){
-                    var rc = cmdBlk.bg.getBoundingBoxToWorld();
-                    var pt = touch.getLocation();
-                    rc.x    = -9999;//横方向は無視します
-                    rc.width = 9999*2;
-                    if (cc.rectContainsPoint( rc, pt )) 
-                    {
-                        if(tgtCmdBlk_!=cmdBlk){
-                            overrapCmdBlk_ = cmdBlk;
-                            var dy = pt.y - rc.y;
-                            if(dy > rc.height/2){ 
-                                overrapDir_ = -1;
-                            }else{
-                                overrapDir_ = 1;
-                            }
-                            return true;
-                        }
-                    }
-                });
-                if(overrapCmdBlk_){
-                    var p = overrapCmdBlk_.getPosition();
-                    overrapCmdBlk_.setPosition(p.x-5, p.y + 5*overrapDir_);
-                }
-                return true;
-            }
-            return false;
-        },
-        onTouchEnded: function(touch, event) 
-        {
-            // 重なるブロックがあるなら接続を変更します
-            if(tgtCmdBlk_ && overrapCmdBlk_)
-            {
-                // まずは対象のワークスペース内での接続を解除します
-                self.cutCommandBlock(tgtCmdBlk_);
-                // 
-                if(overrapDir_>0){
-                    //下(out)に接続します
-                    overrapCmdBlk_.blkIns.connectOut(tgtCmdBlk_.blkIns);
-                }else{
-                    //上(in)に接続します
-                    if(overrapCmdBlk_.blkIns.in && overrapCmdBlk_.blkIns.in.block)
-                    {
-                        overrapCmdBlk_.blkIns.in.block.connectOut( tgtCmdBlk_.blkIns );
-                    }
-                    else{
-                        tgtCmdBlk_.blkIns.connectOut( overrapCmdBlk_.blkIns );
-                    }
-                    // 先頭リストのブロックだったなら入れ替えます
-                    var idx = self.cmdBlockLumpList.indexOf(overrapCmdBlk_);
-                    if(idx>=0){
-                        self.cmdBlockLumpList[idx] = tgtCmdBlk_;
-                    }
-                }
-            }
-            tgtCmdBlk_ = null;
-            overrapCmdBlk_ = null;
-            overrapDir_ = 0;
-            //コールバック内でレイアウト変更は危険なのでシステムから呼び出しにします
-            setTimeout(function(){
-                self.updateLayout();
-            },0);
-        },
-    };
 
     // UI構築と描画部分です
     self.lutViewLst = [];
@@ -888,6 +785,124 @@ var CommandBlockWorkSpace = function(layer, commandBlockManager)
             layout.setTouchEnabled(true);
             layout.setBounceEnabled(true);
             layer.addChild(layout);
+        
+            var listenerParam = 
+            {
+                event: cc.EventListener.TOUCH_ONE_BY_ONE,
+                onTouchBegan: function(touch, event) {    
+                    if (!cc.rectContainsPoint(layout.getBoundingBoxToWorld(), touch.getLocation())){
+                        //枠外は無視します
+                        // self.curCmdBlk = null; 
+                        // self.notify_workspaceCurCmdBlkUpdate();
+                        return;
+                    }
+                    var isOk = traverseAllCmdBlock_(function(cmdBlk){
+                        var cmdBlkView = cmdBlk.createOrGetView(self.workspaceViewId);
+                        if (cc.rectContainsPoint(cmdBlkView.bg.getBoundingBoxToWorld(), touch.getLocation())) 
+                        {
+                            tgtCmdBlk_ = cmdBlk;
+                            tgtCmdBlkMoveOkTimer_ = Date.now();
+                            click(tgtCmdBlk_);
+                            //event.stopPropagation();
+                            return true;
+                        }
+                    });
+                    if(!isOk){
+                        self.setCurCmdBlk(null); 
+                        self.notify_workspaceCurCmdBlkUpdate();
+                    }
+                    if(!editModeFlag_){
+                        tgtCmdBlk_ = null;
+                    }
+                    return isOk;
+                },
+                onTouchMoved: function(touch, event) {
+                    var deltaTime = Date.now() - tgtCmdBlkMoveOkTimer_;
+                    if(tgtCmdBlk_)
+                    {
+                        var tgtCmdBlkView = tgtCmdBlk_.createOrGetView(self.workspaceViewId);
+                        //event.stopPropagation();
+                        
+                        //ブロックを移動します
+                        var delta = touch.getDelta();
+                        var pos = tgtCmdBlkView.getPosition();
+                        pos.x += delta.x;
+                        pos.y += delta.y;
+                        tgtCmdBlkView.setPosition(pos.x,pos.y);
+                        event.stopPropagation();
+                        // 付加的な操作をします
+                        if(overrapCmdBlk_){
+                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(self.workspaceViewId);
+                            var p = overrapCmdBlkView.getPosition();
+                            overrapCmdBlkView.setPosition(p.x+5, p.y - 5*overrapDir_);
+                            overrapCmdBlk_ = null;
+                            overrapDir_    = 0;
+                        }
+                        var isOk = traverseAllCmdBlock_(function(cmdBlk){
+                            var cmdBlkView = cmdBlk.createOrGetView(self.workspaceViewId);
+                            var rc = cmdBlkView.bg.getBoundingBoxToWorld();
+                            var pt = touch.getLocation();
+                            rc.x    = -9999;//横方向は無視します
+                            rc.width = 9999*2;
+                            if (cc.rectContainsPoint( rc, pt )) 
+                            {
+                                if(tgtCmdBlk_!=cmdBlk){
+                                    overrapCmdBlk_ = cmdBlk;
+                                    var dy = pt.y - rc.y;
+                                    if(dy > rc.height/2){ 
+                                        overrapDir_ = -1;
+                                    }else{
+                                        overrapDir_ = 1;
+                                    }
+                                    return true;
+                                }
+                            }
+                        });
+                        if(overrapCmdBlk_){
+                            var overrapCmdBlkView = overrapCmdBlk_.createOrGetView(self.workspaceViewId);
+                            var p = overrapCmdBlkView.getPosition();
+                            overrapCmdBlkView.setPosition(p.x-5, p.y + 5*overrapDir_);
+                        }
+                        return true;
+                    }
+                    return false;
+                },
+                onTouchEnded: function(touch, event) 
+                {
+                    // 重なるブロックがあるなら接続を変更します
+                    if(tgtCmdBlk_ && overrapCmdBlk_)
+                    {
+                        // まずは対象のワークスペース内での接続を解除します
+                        self.cutCommandBlock(tgtCmdBlk_);
+                        // 
+                        if(overrapDir_>0){
+                            //下(out)に接続します
+                            overrapCmdBlk_.blkIns.connectOut(tgtCmdBlk_.blkIns);
+                        }else{
+                            //上(in)に接続します
+                            if(overrapCmdBlk_.blkIns.in && overrapCmdBlk_.blkIns.in.block)
+                            {
+                                overrapCmdBlk_.blkIns.in.block.connectOut( tgtCmdBlk_.blkIns );
+                            }
+                            else{
+                                tgtCmdBlk_.blkIns.connectOut( overrapCmdBlk_.blkIns );
+                            }
+                            // 先頭リストのブロックだったなら入れ替えます
+                            var idx = self.cmdBlockLumpList.indexOf(overrapCmdBlk_);
+                            if(idx>=0){
+                                self.cmdBlockLumpList[idx] = tgtCmdBlk_;
+                            }
+                        }
+                    }
+                    tgtCmdBlk_ = null;
+                    overrapCmdBlk_ = null;
+                    overrapDir_ = 0;
+                    //コールバック内でレイアウト変更は危険なのでシステムから呼び出しにします
+                    setTimeout(function(){
+                        self.updateLayout();
+                    },0);
+                },
+            };
 
             self.setPosition = function(x,y)
             {
